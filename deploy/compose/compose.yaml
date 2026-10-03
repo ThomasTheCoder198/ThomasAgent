@@ -1,0 +1,58 @@
+x-core-env: &core-env
+  CORE_ENV: dev
+  CORE_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+  CORE_REDIS_URL: redis://redis:6379/0
+  CORE_OTLP_ENDPOINT: http://otel-collector:4318
+
+services:
+  migrate:
+    build: ../../backend-core
+    env_file: [.env]
+    command: ["migrate", "up"]
+    environment: *core-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  core:
+    build: ../../backend-core
+    env_file: [.env]
+    command: ["serve"]
+    environment: *core-env
+    ports: ["8080:8080"]
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/core", "healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  relay:
+    build: ../../backend-core
+    env_file: [.env]
+    command: ["relay"]
+    environment: *core-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  ragx-bootstrap:
+    build: ../../ragx
+    command: ["bootstrap"]
+    environment: &rag-env
+      RAG_CORE_SERVICE_TOKEN: ${CORE_SERVICE_TOKEN}
+      RAG_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      RAG_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      RAG_OTLP_ENDPOINT: http://otel-collector:4318
+      RAG_BUCKETS: '["kb-raw","kb-preview","chat-attachments","langfuse"]'
+    depends_on:
+      minio: { condition: service_healthy }
+      qdrant: { condition: service_healthy }
+
+  ragx-api:
+    build: ../../ragx
+    command: ["serve"]
+    environment: *rag-env
+    ports: ["8090:8090"]
+    depends_on:
+      ragx-bootstrap: { condition: service_completed_successfully }

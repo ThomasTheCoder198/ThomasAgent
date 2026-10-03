@@ -1,0 +1,8 @@
+*.test
+coverage.out
+bin/
+**/testdata/
+.git
+.env
+.env.*
+.superpowers/

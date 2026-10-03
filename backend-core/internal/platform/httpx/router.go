@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apperr"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
 
 type requestIDKey struct{}
@@ -32,10 +32,10 @@ func NewRouter(logErr ErrorLogger, mw ...Middleware) chi.Router {
 	r.Use(mw...)
 	r.Use(errorLogging(logErr), recoverer)
 	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
-		WriteError(w, req, apperr.New(apperr.CodeNotFound))
+		WriteError(w, req, errors.ErrNotFound)
 	})
 	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
-		WriteError(w, req, apperr.New(apperr.CodeMethodNotAllowed))
+		WriteError(w, req, errors.ErrMethodNotAllowed)
 	})
 	return r
 }
@@ -66,7 +66,7 @@ func recoverer(next http.Handler) http.Handler {
 				if rec == http.ErrAbortHandler { //nolint:errorlint // sentinel compared as net/http documents
 					panic(rec)
 				}
-				WriteError(w, r, apperr.New(apperr.CodeInternalError, apperr.WithCause(fmt.Errorf(panicCauseFormat, rec))))
+				WriteError(w, r, errors.ErrInternalError.WithCause(fmt.Errorf(panicCauseFormat, rec)))
 			}
 		}()
 		next.ServeHTTP(w, r)

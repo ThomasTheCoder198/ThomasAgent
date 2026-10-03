@@ -1,8 +1,8 @@
 # apperr
 
 ## Purpose
-Owns catalog-backed application errors, localization and cause wrapping.
-HTTP serialization belongs to httpx.
+Preserves the original platform error API while delegating implementation to `internal/errors`.
+The canonical generated error definitions live in `internal/errors/errors.go`; HTTP serialization belongs to httpx.
 
 ## Entry points
 - `New` and options construct errors with catalog codes.
@@ -11,7 +11,7 @@ HTTP serialization belongs to httpx.
 - `LangFromHeader` selects English for an English prefix; Vietnamese is the default.
 
 ## Dependencies
-- Uses: `contracts/errors.yaml` through generated `codes_gen.go`, Go standard library.
+- Uses: `internal/errors`; generated `codes_gen.go` contains aliases only.
 - Used by: HTTP boundaries and future domain services.
 
 ## Run & test
@@ -23,6 +23,8 @@ go test ./internal/platform/apperr/... -count=1
 
 ## Conventions
 - Register codes in contracts and regenerate; never edit codes_gen.go.
+- New code uses `errors.ErrNotFound` or `errors.ErrNotFound.WithCause(err)` from `internal/errors`.
+- `Error`, `Code`, `Lang` and `Option` are aliases, so existing `errors.Is/As` and consumers remain compatible.
 - Unknown codes use INTERNAL_ERROR catalog status and messages.
 - Custom messages override localization; httpx sanitizes all server errors.
 - Keep causes for boundary logging and errors.Is/errors.As.

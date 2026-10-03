@@ -9,7 +9,7 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apperr"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
 
 func Tracing(serviceName string) func(http.Handler) http.Handler {
@@ -70,7 +70,7 @@ func AccessLog(l *slog.Logger) func(http.Handler) http.Handler {
 }
 
 func SlogErrorLogger(l *slog.Logger) ErrorLogger {
-	return func(ctx context.Context, err *apperr.Error) {
+	return func(ctx context.Context, err *errors.Error) {
 		l.ErrorContext(ctx, "request failed", "code", string(err.Code), "error", err.Error(), "details", err.Details, "request_id", RequestIDFrom(ctx))
 	}
 }

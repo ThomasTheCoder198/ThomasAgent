@@ -7,7 +7,7 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apperr"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
 
 const (
@@ -37,7 +37,7 @@ type errorEnvelope struct {
 	Error ErrorBody `json:"error"`
 }
 
-type ErrorLogger func(ctx context.Context, err *apperr.Error)
+type ErrorLogger func(ctx context.Context, err *errors.Error)
 
 type errorLoggerKey struct{}
 
@@ -50,19 +50,19 @@ func WriteData(w http.ResponseWriter, r *http.Request, status int, data any) {
 }
 
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
-	appErr := apperr.From(err)
+	appErr := errors.From(err)
 	status := appErr.Status()
 	body := ErrorBody{
 		Code:    string(appErr.Code),
-		Message: appErr.LocalizedMessage(apperr.LangFromHeader(r.Header.Get(headerAcceptLanguage))),
+		Message: appErr.LocalizedMessage(errors.LangFromHeader(r.Header.Get(headerAcceptLanguage))),
 		TraceID: traceIDFrom(r.Context()),
 	}
 	if status < http.StatusInternalServerError {
 		body.Details = appErr.Details
 	} else {
-		internal := apperr.New(apperr.CodeInternalError)
+		internal := errors.From(errors.ErrInternalError)
 		body.Code = string(internal.Code)
-		body.Message = internal.LocalizedMessage(apperr.LangFromHeader(r.Header.Get(headerAcceptLanguage)))
+		body.Message = internal.LocalizedMessage(errors.LangFromHeader(r.Header.Get(headerAcceptLanguage)))
 		if logErr, ok := r.Context().Value(errorLoggerKey{}).(ErrorLogger); ok && logErr != nil {
 			logErr(r.Context(), appErr)
 		}

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
@@ -50,6 +51,29 @@ func TestMigrateUpFailsOnBrokenMigration(t *testing.T) {
 	}
 	err := Migrate(context.Background(), url, broken, Up)
 	require.Error(t, err)
+}
+
+func TestStatusReturnsMigrationStates(t *testing.T) {
+	url := startPostgres(t)
+	ctx := context.Background()
+	statuses, err := Status(ctx, url, migrations.FS)
+	require.NoError(t, err)
+	require.Len(t, statuses, 1)
+	require.EqualValues(t, 20261003000001, statuses[0].Source.Version)
+	require.Equal(t, "20261003000001_platform.sql", statuses[0].Source.Path)
+	require.Equal(t, goose.StatePending, statuses[0].State)
+
+	require.NoError(t, Migrate(ctx, url, migrations.FS, Up))
+	statuses, err = Status(ctx, url, migrations.FS)
+	require.NoError(t, err)
+	require.Len(t, statuses, 1)
+	require.Equal(t, goose.StateApplied, statuses[0].State)
+
+	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
+	statuses, err = Status(ctx, url, migrations.FS)
+	require.NoError(t, err)
+	require.Len(t, statuses, 1)
+	require.Equal(t, goose.StatePending, statuses[0].State)
 }
 
 func TestOpenFailsFastOnBadURL(t *testing.T) {

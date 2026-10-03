@@ -11,13 +11,14 @@ Tracing and structured logger setup are injected by the application.
 - `RequestIDFrom` retrieves the request ID for downstream logging.
 
 ## Dependencies
-- Uses: apperr, chi v5, UUID and OpenTelemetry trace context.
+- Uses: `internal/errors`, chi v5, UUID and OpenTelemetry trace context.
 - Used by: API handlers and the application router.
 
 ## Run & test
 ```bash
 cd backend-core
 go test ./internal/platform/httpx/... -count=1
+golangci-lint fmt ./...
 golangci-lint run ./internal/platform/...
 ```
 
@@ -34,6 +35,9 @@ The current Meta type supplies requestId; pagination is reserved for paginated h
 5xx details are never serialized; they are logged once via ErrorLogger.
 All 5xx codes and custom messages become the catalog INTERNAL_ERROR response.
 404, 405 and recovered panics use the error envelope. ErrorLogger may be nil.
+Routes return named definitions such as `errors.ErrNotFound`; causes and details use their
+immutable builder methods. `WriteError` normalizes both sentinels and `*AppError` values.
+Legacy `apperr.Error` callers remain compatible through a type alias.
 Trace IDs come from active OpenTelemetry span context; absent trace context omits traceId.
 Callers must supply tracing and access logging middleware before registering routes.
 

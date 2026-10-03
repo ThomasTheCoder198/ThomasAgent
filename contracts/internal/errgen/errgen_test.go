@@ -32,6 +32,26 @@ func TestRenderGoMatchesGolden(t *testing.T) {
 	require.Equal(t, golden(t, "golden.go.txt"), out)
 }
 
+func TestRenderGoDefinesNamedErrorsAndReadableDefinitions(t *testing.T) {
+	out, err := RenderGo(loadFixture(t))
+	require.NoError(t, err)
+	require.Contains(t, out, "package errors")
+	require.Contains(t, out, "ErrRateLimited")
+	require.Contains(t, out, "Sentinel = Sentinel(CodeRateLimited)")
+	require.Contains(t, out, "func LookupDefinition(code Code) ErrorDefinition")
+	require.Contains(t, out, "HTTPStatus:")
+	require.Contains(t, out, "MessageVI:")
+	require.NotContains(t, out, "var catalog")
+}
+
+func TestRenderGoCompatibilityMatchesGolden(t *testing.T) {
+	out, err := RenderGoCompatibility(loadFixture(t))
+	require.NoError(t, err)
+	require.Equal(t, golden(t, "golden.compat.go.txt"), out)
+	require.Contains(t, out, "type Code = catalogerrors.Code")
+	require.NotContains(t, out, "Slow down")
+}
+
 func TestRenderPythonMatchesGolden(t *testing.T) {
 	require.Equal(t, golden(t, "golden.py.txt"), RenderPython(loadFixture(t)))
 }

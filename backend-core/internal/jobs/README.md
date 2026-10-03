@@ -11,6 +11,7 @@ recovery, acknowledgement, and dead-letter delivery.
 - `Handler`: application processing with the restored W3C trace context.
 
 ## Dependencies
+- Logger construction returns an error for unknown levels; callers must handle it before injecting a logger.
 - Uses: pgx/Postgres, go-redis/Redis Streams, apperr, OpenTelemetry, slog.
 - Used by: core relay and future domain workers.
 - Configure batch/poll limits from `config.RelayConfig`; consumer limits from

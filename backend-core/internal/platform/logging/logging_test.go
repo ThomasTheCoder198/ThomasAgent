@@ -4,12 +4,85 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 )
+
+func testLogger(t *testing.T, w io.Writer, level, service string, otelHandler slog.Handler) *slog.Logger {
+	t.Helper()
+	logger, err := New(w, level, service, otelHandler)
+	require.NoError(t, err)
+	return logger
+}
+
+func TestParseLevel(t *testing.T) {
+	for name, want := range map[string]slog.Level{
+		"debug": slog.LevelDebug,
+		"info":  slog.LevelInfo,
+		"warn":  slog.LevelWarn,
+		"error": slog.LevelError,
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := ParseLevel(name)
+			require.NoError(t, err)
+			require.Equal(t, want, got)
+		})
+	}
+}
+
+func TestParseLevelRejectsUnknown(t *testing.T) {
+	for _, name := range []string{"verbose", "", "INFO"} {
+		t.Run(name, func(t *testing.T) {
+			_, err := ParseLevel(name)
+			require.ErrorContains(t, err, "unknown log level")
+		})
+	}
+}
+
+func TestNewRejectsUnknownLevel(t *testing.T) {
+	var buf bytes.Buffer
+	logger, err := New(&buf, "verbose", "service", nil)
+	require.ErrorContains(t, err, "unknown log level")
+	require.Nil(t, logger)
+	require.Empty(t, buf.String())
+}
+
+type failingWriter struct{ err error }
+
+func (w failingWriter) Write([]byte) (int, error) { return 0, w.err }
+
+func TestFanoutReturnsJSONWriteError(t *testing.T) {
+	wantErr := errors.New("stdout write failed")
+	var exported bytes.Buffer
+	logger := testLogger(t, failingWriter{wantErr}, "info", "service", slog.NewJSONHandler(&exported, nil))
+	err := logger.Handler().Handle(context.Background(), slog.NewRecord(time.Now(), slog.LevelInfo, "event", 0))
+	require.ErrorIs(t, err, wantErr)
+	require.Equal(t, "event", lastLine(t, &exported)["msg"])
+}
+
+func TestFanoutWritesJSONDespiteOTLPError(t *testing.T) {
+	wantErr := errors.New("OTLP write failed")
+	var local bytes.Buffer
+	logger := testLogger(t, &local, "info", "service", slog.NewJSONHandler(failingWriter{wantErr}, nil))
+	err := logger.Handler().Handle(context.Background(), slog.NewRecord(time.Now(), slog.LevelInfo, "event", 0))
+	require.ErrorIs(t, err, wantErr)
+	require.Equal(t, "event", lastLine(t, &local)["msg"])
+}
+
+func TestFanoutJoinsHandlerErrors(t *testing.T) {
+	jsonErr := errors.New("stdout write failed")
+	otlpErr := errors.New("OTLP write failed")
+	logger := testLogger(t, failingWriter{jsonErr}, "info", "service", slog.NewJSONHandler(failingWriter{otlpErr}, nil))
+	err := logger.Handler().Handle(context.Background(), slog.NewRecord(time.Now(), slog.LevelInfo, "event", 0))
+	require.ErrorIs(t, err, jsonErr)
+	require.ErrorIs(t, err, otlpErr)
+}
 
 func lastLine(t *testing.T, buf *bytes.Buffer) map[string]any {
 	t.Helper()
@@ -21,7 +94,7 @@ func lastLine(t *testing.T, buf *bytes.Buffer) map[string]any {
 
 func TestRedactsSecretKeysAndValues(t *testing.T) {
 	var buf bytes.Buffer
-	l := New(&buf, "debug", "thomas-core", nil)
+	l := testLogger(t, &buf, "debug", "thomas-core", nil)
 	l.Info("calling provider",
 		"api_key", "sk-or-v1-abc",
 		"Authorization", "Bearer xyz",
@@ -43,7 +116,7 @@ func TestRedactsSecretKeysAndValues(t *testing.T) {
 
 func TestAddsServiceAndTraceIDs(t *testing.T) {
 	var buf bytes.Buffer
-	l := New(&buf, "info", "thomas-core", nil)
+	l := testLogger(t, &buf, "info", "thomas-core", nil)
 	traceID, _ := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
 	spanID, _ := trace.SpanIDFromHex("00f067aa0ba902b7")
 	ctx := trace.ContextWithSpanContext(context.Background(),
@@ -57,7 +130,7 @@ func TestAddsServiceAndTraceIDs(t *testing.T) {
 
 func TestRespectsLevel(t *testing.T) {
 	var buf bytes.Buffer
-	l := New(&buf, "warn", "thomas-core", nil)
+	l := testLogger(t, &buf, "warn", "thomas-core", nil)
 	l.Info("hidden")
 	require.Empty(t, buf.String())
 }
@@ -65,7 +138,7 @@ func TestRespectsLevel(t *testing.T) {
 func TestExportRedactsBoundAndGroupedAttributesAndHonorsLevel(t *testing.T) {
 	var local, exported bytes.Buffer
 	sink := slog.NewJSONHandler(&exported, &slog.HandlerOptions{Level: slog.LevelDebug})
-	l := New(&local, "warn", "thomas-core", sink).With("api_key", "bound-secret").WithGroup("provider").With("password", "group-secret")
+	l := testLogger(t, &local, "warn", "thomas-core", sink).With("api_key", "bound-secret").WithGroup("provider").With("password", "group-secret")
 	l.Info("hidden")
 	require.Empty(t, exported.String())
 	l.Warn("token sk-live-message", "token", "record-secret", slog.Group("nested", "password", "nested-secret"), "details", map[string]any{"password": "map-secret"})
@@ -91,7 +164,7 @@ func TestRedactsSecretAncestorGroupsInBothSinks(t *testing.T) {
 	for name, emit := range cases {
 		t.Run(name, func(t *testing.T) {
 			var local, exported bytes.Buffer
-			l := New(&local, "info", "service", slog.NewJSONHandler(&exported, nil))
+			l := testLogger(t, &local, "info", "service", slog.NewJSONHandler(&exported, nil))
 			emit(l)
 			for _, buf := range []*bytes.Buffer{&local, &exported} {
 				require.NotContains(t, buf.String(), "plain-secret")
@@ -99,4 +172,27 @@ func TestRedactsSecretAncestorGroupsInBothSinks(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRedactsNestedContainersInBothSinks(t *testing.T) {
+	var local, exported bytes.Buffer
+	l := testLogger(t, &local, "info", "service", slog.NewJSONHandler(&exported, nil))
+	details := map[string]any{
+		"providers": []map[string]any{{"api_key": "plain-secret", "input_tokens": 392}},
+		"headers":   map[string]string{"Authorization": "plain-secret", "name": "visible"},
+		"nested":    [][]map[string]string{{{"password": "plain-secret"}}},
+		"values":    []any{[]string{"Bearer plain-secret"}},
+		"token":     []map[string]string{{"value": "plain-secret"}},
+	}
+	l.With("details", details).Info("event")
+	for _, buf := range []*bytes.Buffer{&local, &exported} {
+		require.NotContains(t, buf.String(), "plain-secret")
+		m := lastLine(t, buf)["details"].(map[string]any)
+		provider := m["providers"].([]any)[0].(map[string]any)
+		require.Equal(t, Redacted, provider["api_key"])
+		require.EqualValues(t, 392, provider["input_tokens"])
+		require.Equal(t, "visible", m["headers"].(map[string]any)["name"])
+		require.Equal(t, Redacted, m["token"])
+	}
+	require.Equal(t, "plain-secret", details["headers"].(map[string]string)["Authorization"])
 }

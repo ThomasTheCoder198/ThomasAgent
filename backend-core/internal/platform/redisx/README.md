@@ -26,6 +26,7 @@ Docker Desktop is required for the jobs integration tests.
 
 ## Conventions
 Failed startup ping closes the client before returning an application error.
+Successful readiness ping returns a nil error interface; only failed commands are wrapped.
 Open and readiness ping use client spans; startup failures are logged once by
 core with a catalog code and trace context, without the connection URL.
 Redis URL credentials and document content must never be logged.

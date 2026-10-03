@@ -9,7 +9,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apperr"
+	catalogerrors "github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 )
 
@@ -49,7 +49,7 @@ func IsRetryable(err error) bool {
 	if errors.Is(err, context.Canceled) {
 		return false
 	}
-	var appErr *apperr.Error
+	var appErr *catalogerrors.AppError
 	if errors.As(err, &appErr) {
 		return appErr.Retryable()
 	}
@@ -85,7 +85,7 @@ func Do(ctx context.Context, p Policy, op func(context.Context) error) error {
 		delay := Backoff(p, attempt)
 		var ra RetryAfterer
 		if errors.As(err, &ra) && ra.RetryAfter() > 0 {
-			delay = ra.RetryAfter()
+			delay = min(ra.RetryAfter(), p.MaxDelay)
 		}
 		if sleepErr := p.Sleep(ctx, delay); sleepErr != nil {
 			return errors.Join(err, sleepErr)

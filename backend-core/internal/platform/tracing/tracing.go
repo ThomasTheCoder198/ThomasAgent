@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
@@ -15,6 +16,11 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+)
+
+const (
+	tracesPath = "/v1/traces"
+	logsPath   = "/v1/logs"
 )
 
 type Providers struct {
@@ -30,13 +36,13 @@ func Setup(ctx context.Context, serviceName, env, otlpEndpoint string) (Provider
 	res := resource.NewWithAttributes(semconv.SchemaURL,
 		semconv.ServiceName(serviceName), semconv.DeploymentEnvironment(env))
 
-	traceExp, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(otlpEndpoint+"/v1/traces"))
+	traceExp, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(signalEndpoint(otlpEndpoint, tracesPath)))
 	if err != nil {
 		return Providers{}, fmt.Errorf("trace exporter: %w", err)
 	}
 	tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(traceExp), sdktrace.WithResource(res))
 
-	logExp, err := otlploghttp.New(ctx, otlploghttp.WithEndpointURL(otlpEndpoint+"/v1/logs"))
+	logExp, err := otlploghttp.New(ctx, otlploghttp.WithEndpointURL(signalEndpoint(otlpEndpoint, logsPath)))
 	if err != nil {
 		return Providers{}, fmt.Errorf("log exporter: %w", errors.Join(err, tp.Shutdown(ctx)))
 	}
@@ -49,4 +55,8 @@ func Setup(ctx context.Context, serviceName, env, otlpEndpoint string) (Provider
 			return errors.Join(tp.Shutdown(ctx), lp.Shutdown(ctx))
 		},
 	}, nil
+}
+
+func signalEndpoint(otlpEndpoint, signalPath string) string {
+	return strings.TrimRight(otlpEndpoint, "/") + signalPath
 }

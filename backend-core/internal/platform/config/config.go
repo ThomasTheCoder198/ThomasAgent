@@ -6,19 +6,20 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
-)
 
-const (
-	logLevelDebug = "debug"
-	logLevelInfo  = "info"
-	logLevelWarn  = "warn"
-	logLevelError = "error"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 )
 
 type RetryConfig struct {
 	MaxAttempts int           `env:"MAX_ATTEMPTS" envDefault:"4"`
 	BaseDelay   time.Duration `env:"BASE_DELAY" envDefault:"200ms"`
 	MaxDelay    time.Duration `env:"MAX_DELAY" envDefault:"10s"`
+}
+
+type BreakerConfig struct {
+	FailureThreshold uint32        `env:"FAILURE_THRESHOLD" envDefault:"5"`
+	OpenTimeout      time.Duration `env:"OPEN_TIMEOUT" envDefault:"30s"`
+	HalfOpenMaxCalls uint32        `env:"HALF_OPEN_MAX_CALLS" envDefault:"1"`
 }
 
 type StreamConfig struct {
@@ -44,14 +45,20 @@ type Config struct {
 	OTLPEndpoint      string        `env:"OTLP_ENDPOINT"`
 	LogLevel          string        `env:"LOG_LEVEL" envDefault:"info"`
 	Retry             RetryConfig   `envPrefix:"RETRY_"`
+	Breaker           BreakerConfig `envPrefix:"BREAKER_"`
 	Stream            StreamConfig  `envPrefix:"STREAM_"`
 	Relay             RelayConfig   `envPrefix:"RELAY_"`
+	Schema            SchemaConfig  `envPrefix:"SCHEMA_"`
 }
 
 const envPrefix = "CORE_"
 
 func Load() (Config, error) {
-	cfg, err := env.ParseAsWithOptions[Config](env.Options{Prefix: envPrefix})
+	values, err := environmentValues()
+	if err != nil {
+		return Config{}, err
+	}
+	cfg, err := env.ParseAsWithOptions[Config](env.Options{Prefix: envPrefix, Environment: values})
 	if err != nil {
 		return Config{}, fmt.Errorf("load config: %w", err)
 	}
@@ -63,14 +70,23 @@ func Load() (Config, error) {
 
 func (c Config) validate() error {
 	var errs []error
-	if c.LogLevel != logLevelDebug && c.LogLevel != logLevelInfo && c.LogLevel != logLevelWarn && c.LogLevel != logLevelError {
-		errs = append(errs, fmt.Errorf("CORE_LOG_LEVEL %q must be debug|info|warn|error", c.LogLevel))
+	if _, err := logging.ParseLevel(c.LogLevel); err != nil {
+		errs = append(errs, fmt.Errorf("CORE_LOG_LEVEL: %w", err))
 	}
 	if c.Retry.MaxDelay < c.Retry.BaseDelay {
 		errs = append(errs, errors.New("CORE_RETRY_MAX_DELAY must be >= CORE_RETRY_BASE_DELAY"))
 	}
 	if c.Retry.MaxAttempts < 1 || c.Stream.MaxDeliveries < 1 {
 		errs = append(errs, errors.New("CORE_RETRY_MAX_ATTEMPTS and CORE_STREAM_MAX_DELIVERIES must be >= 1"))
+	}
+	if c.Breaker.FailureThreshold < 1 {
+		errs = append(errs, errors.New("CORE_BREAKER_FAILURE_THRESHOLD must be >= 1"))
+	}
+	if c.Breaker.HalfOpenMaxCalls < 1 {
+		errs = append(errs, errors.New("CORE_BREAKER_HALF_OPEN_MAX_CALLS must be >= 1"))
+	}
+	if err := c.Schema.Validate(); err != nil {
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }

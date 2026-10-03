@@ -31,5 +31,8 @@ type Pinger struct{ Client *redis.Client }
 func (p Pinger) Ping(ctx context.Context) error {
 	ctx, span := otel.Tracer("redisx").Start(ctx, "redis.ping", trace.WithSpanKind(trace.SpanKindClient))
 	defer span.End()
-	return apperr.From(p.Client.Ping(ctx).Err())
+	if err := p.Client.Ping(ctx).Err(); err != nil {
+		return apperr.From(err)
+	}
+	return nil
 }

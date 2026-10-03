@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apperr"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
 
 type Pinger interface {
@@ -25,7 +25,7 @@ func MountHealth(r chi.Router, deps map[string]Pinger) {
 			}
 		}
 		if len(failing) > 0 {
-			WriteError(w, req, apperr.New(apperr.CodeProviderUnavailable, apperr.WithDetails(failing)))
+			WriteError(w, req, errors.ErrProviderUnavailable.WithDetails(failing))
 			return
 		}
 		WriteData(w, req, http.StatusOK, map[string]string{"status": "ready"})

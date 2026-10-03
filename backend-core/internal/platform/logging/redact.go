@@ -2,6 +2,7 @@ package logging
 
 import (
 	"log/slog"
+	"reflect"
 	"regexp"
 	"strings"
 )
@@ -39,14 +40,7 @@ func RedactValue(key string, v slog.Value) slog.Value {
 	v = v.Resolve()
 	switch v.Kind() {
 	case slog.KindAny:
-		if value, ok := v.Any().(map[string]any); ok {
-			attrs := make([]slog.Attr, 0, len(value))
-			for k, item := range value {
-				attrs = append(attrs, slog.Attr{Key: k, Value: RedactValue(k, slog.AnyValue(item))})
-			}
-			return slog.GroupValue(attrs...)
-		}
-		return v
+		return slog.AnyValue(redactContainer(v.Any()))
 	case slog.KindString:
 		return slog.StringValue(secretValuePattern.ReplaceAllString(v.String(), Redacted))
 	case slog.KindGroup:
@@ -58,5 +52,35 @@ func RedactValue(key string, v slog.Value) slog.Value {
 		return slog.GroupValue(out...)
 	default:
 		return v
+	}
+}
+
+func redactContainer(value any) any {
+	v := reflect.ValueOf(value)
+	if !v.IsValid() {
+		return value
+	}
+	switch v.Kind() {
+	case reflect.Map:
+		if v.Type().Key().Kind() != reflect.String {
+			return value
+		}
+		out := make(map[string]any, v.Len())
+		for _, key := range v.MapKeys() {
+			out[key.String()] = RedactValue(key.String(), slog.AnyValue(v.MapIndex(key).Interface())).Any()
+		}
+		return out
+	case reflect.Slice, reflect.Array:
+		// Byte slices are encoded as binary strings, not structured log containers.
+		if v.Type().Elem().Kind() == reflect.Uint8 || (v.Kind() == reflect.Slice && v.IsNil()) {
+			return value
+		}
+		out := make([]any, v.Len())
+		for i := range out {
+			out[i] = RedactValue("", slog.AnyValue(v.Index(i).Interface())).Any()
+		}
+		return out
+	default:
+		return value
 	}
 }

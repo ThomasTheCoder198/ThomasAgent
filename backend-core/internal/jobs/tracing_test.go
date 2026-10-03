@@ -35,7 +35,9 @@ func TestHandlerRestoresTraceAndLogsWithoutPayload(t *testing.T) {
 	rdb := startRedis(t)
 	c := newConsumer(rdb, 3)
 	var output bytes.Buffer
-	c.Log = logging.New(&output, "debug", "test", nil)
+	log, err := logging.New(&output, "debug", "test", nil)
+	require.NoError(t, err)
+	c.Log = log
 	require.NoError(t, c.EnsureGroup(context.Background()))
 	require.NoError(t, rdb.XAdd(context.Background(), &redis.XAddArgs{Stream: testStream, Values: map[string]any{FieldPayload: "private-document", FieldTraceParent: carrier.Get(FieldTraceParent)}}).Err())
 	require.NoError(t, c.Poll(context.Background(), func(ctx context.Context, _ Message) error {

@@ -2,6 +2,7 @@ package logging
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -9,11 +10,35 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-var levels = map[string]slog.Level{"debug": slog.LevelDebug, "info": slog.LevelInfo, "warn": slog.LevelWarn, "error": slog.LevelError}
+const (
+	levelDebug = "debug"
+	levelInfo  = "info"
+	levelWarn  = "warn"
+	levelError = "error"
+)
 
-func New(w io.Writer, level, service string, otelHandler slog.Handler) *slog.Logger {
+func ParseLevel(level string) (slog.Level, error) {
+	switch level {
+	case levelDebug:
+		return slog.LevelDebug, nil
+	case levelInfo:
+		return slog.LevelInfo, nil
+	case levelWarn:
+		return slog.LevelWarn, nil
+	case levelError:
+		return slog.LevelError, nil
+	default:
+		return 0, fmt.Errorf("unknown log level %q", level)
+	}
+}
+
+func New(w io.Writer, level, service string, otelHandler slog.Handler) (*slog.Logger, error) {
+	parsedLevel, err := ParseLevel(level)
+	if err != nil {
+		return nil, fmt.Errorf("create logger: %w", err)
+	}
 	opts := &slog.HandlerOptions{
-		Level: levels[level],
+		Level: parsedLevel,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			for _, group := range groups {
 				if isSecretKey(group) {
@@ -27,7 +52,7 @@ func New(w io.Writer, level, service string, otelHandler slog.Handler) *slog.Log
 	if otelHandler != nil {
 		h = fanout{h, redacting{Handler: otelHandler}}
 	}
-	return slog.New(levelFilter{Handler: traceContext{h}, level: levels[level]}).With("service", service)
+	return slog.New(levelFilter{Handler: traceContext{h}, level: parsedLevel}).With("service", service), nil
 }
 
 type traceContext struct{ slog.Handler }
@@ -78,12 +103,15 @@ func (f fanout) Enabled(ctx context.Context, l slog.Level) bool {
 }
 
 func (f fanout) Handle(ctx context.Context, r slog.Record) error {
+	var errs []error
 	for _, h := range f {
 		if h.Enabled(ctx, r.Level) {
-			_ = h.Handle(ctx, r.Clone())
+			if err := h.Handle(ctx, r.Clone()); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (f fanout) WithAttrs(attrs []slog.Attr) slog.Handler {

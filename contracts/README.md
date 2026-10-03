@@ -29,9 +29,14 @@ go vet ./...
 Never edit generated files. Add an error code to `errors.yaml` first, then run `task gen`.
 Catalog version is 1; codes use UPPER_SNAKE and must be unique. HTTP statuses are 400–599 and both localized messages are required.
 The parser sorts entries by code so generated output is deterministic. Renderers emit UTF-8 with LF line endings.
-The generated Go catalog references the `spec` type supplied by the consuming `apperr` package.
+Four files are generated: `backend-core/internal/errors/errors.go` (canonical Go definitions),
+`backend-core/internal/platform/apperr/codes_gen.go` (compatibility aliases),
+`ragx/src/thomas_ragx/platform/error_codes_gen.py`, and `frontend/lib/errors/codes.gen.ts`.
+The canonical Go file defines immutable named errors such as `errors.ErrNotFound` and
+maps codes to `ErrorDefinition{HTTPStatus, Retryable, MessageVI, MessageEN}` through `LookupDefinition`.
+There is no second Go message catalog or mutable global error instance.
 
 ## Common failures
 - Invalid catalog → malformed YAML, duplicate code, unsupported version, invalid status, or missing message → correct `errors.yaml` and rerun generation.
-- Golden mismatch → output differs from the fixtures → inspect the diff; update a golden only for confirmed formatting differences.
+- Golden mismatch → output differs from the fixtures → inspect the diff; update a golden only for an intentional catalog/API change.
 - Missing dependency checksum → dependencies have not been resolved → run `go mod tidy`.

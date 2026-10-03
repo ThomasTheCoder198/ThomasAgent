@@ -2,15 +2,14 @@ package retry
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"net"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
-	catalogerrors "github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apperr"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 )
 
@@ -36,16 +35,16 @@ func (e retryAfterWrapper) Unwrap() error             { return e.error }
 func (e retryAfterWrapper) RetryAfter() time.Duration { return time.Second }
 
 func TestNamedErrorRetryability(t *testing.T) {
-	require.True(t, IsRetryable(catalogerrors.ErrProviderUnavailable))
-	require.True(t, IsRetryable(retryAfterWrapper{error: catalogerrors.ErrRateLimited}))
-	require.False(t, IsRetryable(catalogerrors.ErrValidationFailed))
-	require.False(t, IsRetryable(retryAfterWrapper{error: catalogerrors.ErrNotFound}))
+	require.True(t, IsRetryable(errors.ErrProviderUnavailable))
+	require.True(t, IsRetryable(retryAfterWrapper{error: errors.ErrRateLimited}))
+	require.False(t, IsRetryable(errors.ErrValidationFailed))
+	require.False(t, IsRetryable(retryAfterWrapper{error: errors.ErrNotFound}))
 }
 
 func TestRetryAfterDoesNotOverrideCatalogRetryability(t *testing.T) {
-	for _, code := range []apperr.Code{apperr.CodeValidationFailed, apperr.CodeNotFound} {
+	for _, code := range []errors.Code{errors.CodeValidationFailed, errors.CodeNotFound} {
 		t.Run(string(code), func(t *testing.T) {
-			wrapped := retryAfterWrapper{error: apperr.New(code)}
+			wrapped := retryAfterWrapper{error: errors.New(code)}
 			require.False(t, IsRetryable(wrapped))
 			s := &recordedSleeps{}
 			calls := 0
@@ -66,7 +65,7 @@ func TestDoRetriesRetryableUntilSuccess(t *testing.T) {
 	err := Do(context.Background(), testPolicy(s), func(context.Context) error {
 		calls++
 		if calls < 3 {
-			return apperr.New(apperr.CodeProviderUnavailable)
+			return errors.New(errors.CodeProviderUnavailable)
 		}
 		return nil
 	})
@@ -80,7 +79,7 @@ func TestDoStopsOnNonRetryable(t *testing.T) {
 	calls := 0
 	err := Do(context.Background(), testPolicy(s), func(context.Context) error {
 		calls++
-		return apperr.New(apperr.CodeValidationFailed)
+		return errors.New(errors.CodeValidationFailed)
 	})
 	require.Error(t, err)
 	require.Equal(t, 1, calls)
@@ -91,7 +90,7 @@ func TestDoGivesUpAfterMaxAttempts(t *testing.T) {
 	calls := 0
 	err := Do(context.Background(), testPolicy(s), func(context.Context) error {
 		calls++
-		return apperr.New(apperr.CodeRateLimited)
+		return errors.New(errors.CodeRateLimited)
 	})
 	require.Error(t, err)
 	require.Equal(t, 4, calls)
@@ -134,28 +133,28 @@ func TestBackoffIsCappedAndJittered(t *testing.T) {
 }
 
 func TestIsRetryable(t *testing.T) {
-	require.True(t, IsRetryable(apperr.New(apperr.CodeRateLimited)))
-	require.False(t, IsRetryable(apperr.New(apperr.CodeNotFound)))
-	require.True(t, IsRetryable(&net.OpError{Op: "dial", Err: errors.New("refused")}))
+	require.True(t, IsRetryable(errors.New(errors.CodeRateLimited)))
+	require.False(t, IsRetryable(errors.New(errors.CodeNotFound)))
+	require.True(t, IsRetryable(&net.OpError{Op: "dial", Err: stderrors.New("refused")}))
 	require.False(t, IsRetryable(context.Canceled))
 }
 
 func TestBreakerOpensAfterThreshold(t *testing.T) {
 	b := NewBreaker(BreakerSettings{Name: "test", FailureThreshold: 2, OpenTimeout: time.Minute, HalfOpenMaxCalls: 1})
-	fail := func(context.Context) error { return apperr.New(apperr.CodeProviderUnavailable) }
+	fail := func(context.Context) error { return errors.New(errors.CodeProviderUnavailable) }
 	_ = b.Execute(context.Background(), fail)
 	_ = b.Execute(context.Background(), fail)
 	err := b.Execute(context.Background(), func(context.Context) error { return nil })
-	var appErr *apperr.Error
+	var appErr *errors.Error
 	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, apperr.CodeProviderUnavailable, appErr.Code)
+	require.Equal(t, errors.CodeProviderUnavailable, appErr.Code)
 }
 
 func TestBreakerNonRetryableErrorsLeaveClosed(t *testing.T) {
-	for _, code := range []apperr.Code{apperr.CodeValidationFailed, apperr.CodeNotFound} {
+	for _, code := range []errors.Code{errors.CodeValidationFailed, errors.CodeNotFound} {
 		t.Run(string(code), func(t *testing.T) {
 			b := NewBreaker(BreakerSettings{Name: "client-errors", FailureThreshold: 5, OpenTimeout: time.Minute, HalfOpenMaxCalls: 1})
-			failure := apperr.New(code)
+			failure := errors.New(code)
 			for range 6 {
 				require.ErrorIs(t, b.Execute(context.Background(), func(context.Context) error { return failure }), failure)
 			}

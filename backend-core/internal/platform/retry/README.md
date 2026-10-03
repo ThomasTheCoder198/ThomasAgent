@@ -33,7 +33,7 @@ golangci-lint run ./...
 - Named sentinels and per-call `*AppError` values share the same retry policy;
   the breaker returns `ErrProviderUnavailable.WithCause(err)` when calls are blocked.
 - Context cancellation is non-retryable; the default wait is cancellable.
-- Failed waits preserve both operation and wait errors through `errors.Join`.
+- Failed waits preserve both operation and wait errors through `stderrors.Join`.
 - Load and validate config before calling `BreakerFromConfig`; defaults are five
   failures, a 30-second open timeout and one half-open call. Thresholds and
   half-open call limits must be at least one.

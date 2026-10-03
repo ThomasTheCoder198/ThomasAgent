@@ -27,17 +27,6 @@ func RenderGo(cat Catalog) (string, error) {
 	return formatGo(b.String())
 }
 
-func RenderGoCompatibility(cat Catalog) (string, error) {
-	var b strings.Builder
-	fmt.Fprintf(&b, "// %s\n\npackage apperr\n\nimport catalogerrors %q\n\ntype Code = catalogerrors.Code\n\nconst (\n", generatedHeader,
-		"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors")
-	for _, e := range cat.Errors {
-		fmt.Fprintf(&b, "\t%s = catalogerrors.%s\n", goConst(e.Code), goConst(e.Code))
-	}
-	b.WriteString(")\n")
-	return formatGo(b.String())
-}
-
 func formatGo(source string) (string, error) {
 	formatted, err := format.Source([]byte(source))
 	if err != nil {

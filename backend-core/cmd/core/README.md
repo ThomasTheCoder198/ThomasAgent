@@ -31,15 +31,14 @@ probe launched by Docker against the API process.
 
 ## Dependencies
 
-- Uses: platform config, logging, tracing, httpx, postgres, redisx, jobs, and embedded migrations.
+- Uses: `internal/errors`, platform config, logging, tracing, httpx, postgres, redisx, jobs, and embedded migrations.
 - Used by: the backend Docker image, Compose `core`/`migrate`/`relay` services, and local CLI commands.
 
 ## Run & test
 
 ```bash
 cd backend-core
-cp .env.example .env
-# Fill CORE_DATABASE_URL and CORE_REDIS_URL for your local services.
+# Export CORE_DATABASE_URL and CORE_REDIS_URL for your local services.
 go run ./cmd/core migrate up
 go run ./cmd/core migrate status
 go run ./cmd/core migrate down
@@ -49,13 +48,9 @@ go run ./cmd/core healthcheck
 go test ./cmd/core -count=1
 ```
 
-Local configuration comes from `.env` in the working directory and process
-environment variables; process environment values take precedence, including
-explicitly empty values. `CORE_ENV_FILE` selects another file; an explicitly
-empty `CORE_ENV_FILE` disables file loading. A missing default `.env` is allowed,
-but a missing explicitly selected file fails startup. Compose
-configuration is supplied through `deploy/compose/.env` and service environment
-blocks, so it does not use the local backend `.env` file.
+Core reads process environment variables. Compose supplies them through
+`deploy/compose/.env` and service environment blocks. Export CORE_* variables
+yourself when running the binary outside Docker.
 
 ## Conventions
 

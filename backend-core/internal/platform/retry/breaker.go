@@ -2,13 +2,13 @@ package retry
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"fmt"
 	"time"
 
 	"github.com/sony/gobreaker/v2"
 
-	catalogerrors "github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 )
 
@@ -43,8 +43,8 @@ func NewBreaker(s BreakerSettings) *Breaker {
 
 func (b *Breaker) Execute(ctx context.Context, op func(context.Context) error) error {
 	_, err := b.cb.Execute(func() (struct{}, error) { return struct{}{}, op(ctx) })
-	if errors.Is(err, gobreaker.ErrOpenState) || errors.Is(err, gobreaker.ErrTooManyRequests) {
-		return catalogerrors.ErrProviderUnavailable.WithCause(err)
+	if stderrors.Is(err, gobreaker.ErrOpenState) || stderrors.Is(err, gobreaker.ErrTooManyRequests) {
+		return errors.ErrProviderUnavailable.WithCause(err)
 	}
 	if err != nil {
 		return fmt.Errorf(breakerErrorFormat, err)

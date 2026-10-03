@@ -1,7 +1,7 @@
-package apperr
+package errors
 
 import (
-	"errors"
+	stderrors "errors"
 	"fmt"
 	"net/http"
 	"testing"
@@ -22,7 +22,7 @@ func TestCustomMessageOverridesCatalog(t *testing.T) {
 }
 
 func TestFromWrapsUnknownErrorsAsInternal(t *testing.T) {
-	cause := errors.New("db exploded")
+	cause := stderrors.New("db exploded")
 	e := From(cause)
 	require.Equal(t, CodeInternalError, e.Code)
 	require.ErrorIs(t, e, cause)

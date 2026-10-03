@@ -2,14 +2,14 @@ package retry
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"fmt"
 	"math"
 	"math/rand/v2"
 	"net"
 	"time"
 
-	catalogerrors "github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 )
 
@@ -46,23 +46,23 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 }
 
 func IsRetryable(err error) bool {
-	if errors.Is(err, context.Canceled) {
+	if stderrors.Is(err, context.Canceled) {
 		return false
 	}
-	var appErr *catalogerrors.AppError
-	if errors.As(err, &appErr) {
+	var appErr *errors.AppError
+	if stderrors.As(err, &appErr) {
 		return appErr.Retryable()
 	}
 	var ra RetryAfterer
-	if errors.As(err, &ra) {
+	if stderrors.As(err, &ra) {
 		return true
 	}
 	var netErr net.Error
-	if errors.As(err, &netErr) {
+	if stderrors.As(err, &netErr) {
 		return true
 	}
 	var opErr *net.OpError
-	return errors.As(err, &opErr)
+	return stderrors.As(err, &opErr)
 }
 
 func Backoff(p Policy, attempt int) time.Duration {
@@ -84,11 +84,11 @@ func Do(ctx context.Context, p Policy, op func(context.Context) error) error {
 		}
 		delay := Backoff(p, attempt)
 		var ra RetryAfterer
-		if errors.As(err, &ra) && ra.RetryAfter() > 0 {
+		if stderrors.As(err, &ra) && ra.RetryAfter() > 0 {
 			delay = min(ra.RetryAfter(), p.MaxDelay)
 		}
 		if sleepErr := p.Sleep(ctx, delay); sleepErr != nil {
-			return errors.Join(err, sleepErr)
+			return stderrors.Join(err, sleepErr)
 		}
 	}
 	return err

@@ -17,18 +17,17 @@ const (
 func main() {
 	in := flag.String("in", "errors.yaml", "catalog file")
 	goOut := flag.String("go", "", "Go output file")
-	goCompatibilityOut := flag.String("go-compat", "", "Go compatibility aliases output file")
 	pyOut := flag.String("py", "", "Python output file")
 	tsOut := flag.String("ts", "", "TypeScript output file")
 	flag.Parse()
 
-	if err := run(*in, *goOut, *goCompatibilityOut, *pyOut, *tsOut); err != nil {
+	if err := run(*in, *goOut, *pyOut, *tsOut); err != nil {
 		fmt.Fprintln(os.Stderr, "errgen:", err)
 		os.Exit(1)
 	}
 }
 
-func run(in, goOut, goCompatibilityOut, pyOut, tsOut string) error {
+func run(in, goOut, pyOut, tsOut string) error {
 	raw, err := os.ReadFile(in)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", in, err)
@@ -41,11 +40,7 @@ func run(in, goOut, goCompatibilityOut, pyOut, tsOut string) error {
 	if err != nil {
 		return err
 	}
-	compatibilitySrc, err := errgen.RenderGoCompatibility(cat)
-	if err != nil {
-		return err
-	}
-	outputs := map[string]string{goOut: goSrc, goCompatibilityOut: compatibilitySrc, pyOut: errgen.RenderPython(cat), tsOut: errgen.RenderTS(cat)}
+	outputs := map[string]string{goOut: goSrc, pyOut: errgen.RenderPython(cat), tsOut: errgen.RenderTS(cat)}
 	for path, content := range outputs {
 		if path == "" {
 			continue

@@ -2,7 +2,7 @@ package jobs
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -14,7 +14,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apperr"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
 
 const (
@@ -52,7 +52,7 @@ func (c *Consumer) EnsureGroup(ctx context.Context) error {
 	defer span.End()
 	err := c.Redis.XGroupCreateMkStream(ctx, c.Stream, c.Group, streamStartID).Err()
 	if err != nil && !strings.HasPrefix(err.Error(), busyGroupPrefix) {
-		return apperr.From(fmt.Errorf("create group %s/%s: %w", c.Stream, c.Group, err))
+		return errors.From(fmt.Errorf("create group %s/%s: %w", c.Stream, c.Group, err))
 	}
 	return nil
 }
@@ -61,8 +61,8 @@ func (c *Consumer) Run(ctx context.Context, h Handler) error {
 	ctx, span := otel.Tracer("jobs").Start(ctx, "jobs.consume")
 	defer span.End()
 	for ctx.Err() == nil {
-		if err := c.Poll(ctx, h); err != nil && !errors.Is(err, context.Canceled) {
-			c.Log.ErrorContext(ctx, "stream poll failed", "stream", c.Stream, "error_code", apperr.From(err).Code)
+		if err := c.Poll(ctx, h); err != nil && !stderrors.Is(err, context.Canceled) {
+			c.Log.ErrorContext(ctx, "stream poll failed", "stream", c.Stream, "error_code", errors.From(err).Code)
 		}
 	}
 	return nil
@@ -75,18 +75,18 @@ func (c *Consumer) Poll(ctx context.Context, h Handler) error {
 		Stream: c.Stream, Group: c.Group, Consumer: c.Name, MinIdle: c.VisibilityTimeout, Start: autoClaimStart, Count: c.BatchSize,
 	}).Result()
 	if err != nil {
-		return apperr.From(fmt.Errorf("xautoclaim: %w", err))
+		return errors.From(fmt.Errorf("xautoclaim: %w", err))
 	}
 	c.handleAll(ctx, reclaimed, h)
 
 	streams, err := c.Redis.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group: c.Group, Consumer: c.Name, Streams: []string{c.Stream, newMessagesID}, Count: c.BatchSize, Block: c.BlockTimeout,
 	}).Result()
-	if errors.Is(err, redis.Nil) {
+	if stderrors.Is(err, redis.Nil) {
 		return nil
 	}
 	if err != nil {
-		return apperr.From(fmt.Errorf("xreadgroup: %w", err))
+		return errors.From(fmt.Errorf("xreadgroup: %w", err))
 	}
 	for _, s := range streams {
 		c.handleAll(ctx, s.Messages, h)
@@ -108,7 +108,7 @@ func (c *Consumer) handle(ctx context.Context, raw redis.XMessage, h Handler) {
 	deliveries, err := c.deliveries(ctx, raw.ID)
 	if err != nil {
 		span.SetStatus(codes.Error, "delivery count failed")
-		c.Log.ErrorContext(ctx, "read delivery count failed", "id", raw.ID, "error_code", apperr.From(err).Code)
+		c.Log.ErrorContext(ctx, "read delivery count failed", "id", raw.ID, "error_code", errors.From(err).Code)
 		return
 	}
 	msg := toMessage(c.Stream, raw, deliveries)
@@ -123,14 +123,14 @@ func (c *Consumer) handle(ctx context.Context, raw redis.XMessage, h Handler) {
 		c.deadLetter(ctx, msg, herr)
 		return
 	}
-	c.Log.WarnContext(ctx, "job failed, will retry", "stream", c.Stream, "id", raw.ID, "deliveries", deliveries, "error_code", apperr.From(herr).Code)
+	c.Log.WarnContext(ctx, "job failed, will retry", "stream", c.Stream, "id", raw.ID, "deliveries", deliveries, "error_code", errors.From(herr).Code)
 
 }
 
 func (c *Consumer) deliveries(ctx context.Context, id string) (int64, error) {
 	pending, err := c.Redis.XPendingExt(ctx, &redis.XPendingExtArgs{Stream: c.Stream, Group: c.Group, Start: id, End: id, Count: 1}).Result()
 	if err != nil {
-		return 0, apperr.From(fmt.Errorf("xpending: %w", err))
+		return 0, errors.From(fmt.Errorf("xpending: %w", err))
 	}
 	if len(pending) == 0 {
 		return 1, nil
@@ -140,7 +140,7 @@ func (c *Consumer) deliveries(ctx context.Context, id string) (int64, error) {
 
 func (c *Consumer) ack(ctx context.Context, id string) {
 	if err := c.Redis.XAck(ctx, c.Stream, c.Group, id).Err(); err != nil {
-		c.Log.ErrorContext(ctx, "xack failed", "id", id, "error_code", apperr.From(err).Code)
+		c.Log.ErrorContext(ctx, "xack failed", "id", id, "error_code", errors.From(err).Code)
 	}
 }
 
@@ -150,11 +150,11 @@ func (c *Consumer) deadLetter(ctx context.Context, m Message, cause error) {
 		FieldDeliveries: m.Deliveries, FieldOriginalID: m.ID, FieldOutboxID: m.OutboxID,
 	}
 	if err := c.Redis.XAdd(ctx, &redis.XAddArgs{Stream: c.Stream + DLQSuffix, Values: values}).Err(); err != nil {
-		c.Log.ErrorContext(ctx, "dead-letter failed; leaving message pending", "id", m.ID, "error_code", apperr.From(err).Code)
+		c.Log.ErrorContext(ctx, "dead-letter failed; leaving message pending", "id", m.ID, "error_code", errors.From(err).Code)
 		return
 	}
 	c.ack(ctx, m.ID)
-	c.Log.ErrorContext(ctx, "job moved to DLQ", "stream", c.Stream, "id", m.ID, "deliveries", m.Deliveries, "error_code", apperr.From(cause).Code)
+	c.Log.ErrorContext(ctx, "job moved to DLQ", "stream", c.Stream, "id", m.ID, "deliveries", m.Deliveries, "error_code", errors.From(cause).Code)
 }
 
 func toMessage(stream string, raw redis.XMessage, deliveries int64) Message {

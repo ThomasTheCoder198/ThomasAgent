@@ -15,16 +15,19 @@ HTTP serialization and boundary logging belong to `platform/httpx` and callers.
 ## Dependencies
 - Uses: generated contracts and the Go standard library.
 - Used by: HTTP boundaries, retry, command startup and domain services.
-- `platform/apperr` delegates its existing API here for compatibility.
 
 ## Run & test
 ```bash
 task gen
 cd backend-core
-go test ./internal/errors ./internal/platform/apperr ./internal/platform/httpx ./internal/platform/retry -count=1
+go test ./internal/errors ./internal/platform/httpx ./internal/platform/retry -count=1
 ```
 
 ## Conventions
+Keep this package imported as `errors`. In files needing both error packages,
+import the standard library as `stderrors "errors"`; use `stderrors.Is` and
+`stderrors.As` for matching and `errors.ErrNotFound` for application definitions.
+
 ```go
 import "github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 
@@ -34,8 +37,8 @@ return errors.ErrProviderUnavailable.WithCause(err)
 ```
 Named errors are typed constants, so a request cannot mutate a shared error.
 `WithCause`, `WithMessage` and `WithDetails` return fresh values; details maps are copied shallowly.
-Standard `errors.Is` matches application codes and still traverses causes.
-Standard `errors.As` can normalize a sentinel into `*AppError`; `From` uses the same behavior.
+Standard `stderrors.Is` matches application codes and still traverses causes.
+Standard `stderrors.As` can normalize a sentinel into `*AppError`; `From` uses the same behavior.
 Generated lookup uses an immutable switch rather than a mutable package-wide map.
 Unknown codes retain their code but use INTERNAL_ERROR status, retryability and messages.
 Never edit `errors.go` manually or log here; log once at the caller's boundary.

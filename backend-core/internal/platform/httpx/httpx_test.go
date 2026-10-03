@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apperr"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
 
 type envelope struct {
@@ -27,13 +27,13 @@ func decode(t *testing.T, rec *httptest.ResponseRecorder) envelope {
 	return env
 }
 
-func newTestRouter(logged *[]*apperr.Error) chi.Router {
-	r := NewRouter(func(_ context.Context, e *apperr.Error) { *logged = append(*logged, e) })
+func newTestRouter(logged *[]*errors.Error) chi.Router {
+	r := NewRouter(func(_ context.Context, e *errors.Error) { *logged = append(*logged, e) })
 	r.Get("/ok", func(w http.ResponseWriter, req *http.Request) {
 		WriteData(w, req, http.StatusOK, map[string]string{"hello": "world"})
 	})
 	r.Get("/conflict", func(w http.ResponseWriter, req *http.Request) {
-		WriteError(w, req, apperr.New(apperr.CodeConflict, apperr.WithDetails(map[string]any{"field": "name"})))
+		WriteError(w, req, errors.New(errors.CodeConflict, errors.WithDetails(map[string]any{"field": "name"})))
 	})
 	r.Get("/boom", func(w http.ResponseWriter, req *http.Request) {
 		WriteError(w, req, context.DeadlineExceeded)
@@ -51,7 +51,7 @@ func do(r http.Handler, method, path, lang string) *httptest.ResponseRecorder {
 }
 
 func TestWriteDataWrapsInEnvelopeWithRequestID(t *testing.T) {
-	var logged []*apperr.Error
+	var logged []*errors.Error
 	rec := do(newTestRouter(&logged), http.MethodGet, "/ok", "vi")
 	require.Equal(t, http.StatusOK, rec.Code)
 	env := decode(t, rec)
@@ -61,7 +61,7 @@ func TestWriteDataWrapsInEnvelopeWithRequestID(t *testing.T) {
 }
 
 func TestWriteErrorUsesCatalogAndLanguage(t *testing.T) {
-	var logged []*apperr.Error
+	var logged []*errors.Error
 	rec := do(newTestRouter(&logged), http.MethodGet, "/conflict", "en")
 	require.Equal(t, http.StatusConflict, rec.Code)
 	env := decode(t, rec)
@@ -72,7 +72,7 @@ func TestWriteErrorUsesCatalogAndLanguage(t *testing.T) {
 }
 
 func TestInternalErrorHidesCauseAndIsLoggedOnce(t *testing.T) {
-	var logged []*apperr.Error
+	var logged []*errors.Error
 	rec := do(newTestRouter(&logged), http.MethodGet, "/boom", "vi")
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
 	env := decode(t, rec)
@@ -83,21 +83,21 @@ func TestInternalErrorHidesCauseAndIsLoggedOnce(t *testing.T) {
 }
 
 func TestRouterUnknownRouteUsesEnvelope(t *testing.T) {
-	var logged []*apperr.Error
+	var logged []*errors.Error
 	rec := do(newTestRouter(&logged), http.MethodGet, "/missing", "vi")
 	require.Equal(t, http.StatusNotFound, rec.Code)
 	require.Equal(t, "NOT_FOUND", decode(t, rec).Error.Code)
 }
 
 func TestRouterWrongMethodUsesEnvelope(t *testing.T) {
-	var logged []*apperr.Error
+	var logged []*errors.Error
 	rec := do(newTestRouter(&logged), http.MethodPost, "/ok", "vi")
 	require.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 	require.Equal(t, "METHOD_NOT_ALLOWED", decode(t, rec).Error.Code)
 }
 
 func TestRecoverReturnsInternalEnvelope(t *testing.T) {
-	var logged []*apperr.Error
+	var logged []*errors.Error
 	rec := do(newTestRouter(&logged), http.MethodGet, "/panic", "vi")
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
 	require.Equal(t, "INTERNAL_ERROR", decode(t, rec).Error.Code)
@@ -113,8 +113,8 @@ func TestServerErrorSanitizesOverridesAndPreservesTraceID(t *testing.T) {
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
 	req.Header.Set("Accept-Language", "en")
 	rec := httptest.NewRecorder()
-	WriteError(rec, req, apperr.New(apperr.CodeProviderUnavailable,
-		apperr.WithMessage("secret override"), apperr.WithDetails(map[string]any{"secret": "value"})))
+	WriteError(rec, req, errors.New(errors.CodeProviderUnavailable,
+		errors.WithMessage("secret override"), errors.WithDetails(map[string]any{"secret": "value"})))
 	env := decode(t, rec)
 	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	require.Equal(t, "INTERNAL_ERROR", env.Error.Code)
@@ -142,12 +142,12 @@ type fakePinger struct{ err error }
 func (f fakePinger) Ping(context.Context) error { return f.err }
 
 func TestReadyzReportsUnavailableDependency(t *testing.T) {
-	var logged []*apperr.Error
-	r := NewRouter(func(_ context.Context, e *apperr.Error) { logged = append(logged, e) })
+	var logged []*errors.Error
+	r := NewRouter(func(_ context.Context, e *errors.Error) { logged = append(logged, e) })
 	MountHealth(r, map[string]Pinger{"postgres": fakePinger{err: context.DeadlineExceeded}})
 	rec := do(r, http.MethodGet, "/readyz", "vi")
 	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	require.Equal(t, "INTERNAL_ERROR", decode(t, rec).Error.Code)
-	require.Equal(t, apperr.CodeProviderUnavailable, logged[0].Code)
+	require.Equal(t, errors.CodeProviderUnavailable, logged[0].Code)
 	require.Len(t, logged, 1)
 }

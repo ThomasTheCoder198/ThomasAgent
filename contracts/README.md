@@ -29,8 +29,7 @@ go vet ./...
 Never edit generated files. Add an error code to `errors.yaml` first, then run `task gen`.
 Catalog version is 1; codes use UPPER_SNAKE and must be unique. HTTP statuses are 400–599 and both localized messages are required.
 The parser sorts entries by code so generated output is deterministic. Renderers emit UTF-8 with LF line endings.
-Four files are generated: `backend-core/internal/errors/errors.go` (canonical Go definitions),
-`backend-core/internal/platform/apperr/codes_gen.go` (compatibility aliases),
+Three files are generated: `backend-core/internal/errors/errors.go` (canonical Go definitions),
 `ragx/src/thomas_ragx/platform/error_codes_gen.py`, and `frontend/lib/errors/codes.gen.ts`.
 The canonical Go file defines immutable named errors such as `errors.ErrNotFound` and
 maps codes to `ErrorDefinition{HTTPStatus, Retryable, MessageVI, MessageEN}` through `LookupDefinition`.

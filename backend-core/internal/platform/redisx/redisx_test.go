@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apperr"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
 
 func TestPingerSuccessAndFailure(t *testing.T) {
@@ -22,7 +22,7 @@ func TestPingerSuccessAndFailure(t *testing.T) {
 	pinger := Pinger{Client: client}
 	require.NoError(t, pinger.Ping(ctx))
 	require.NoError(t, client.Close())
-	var appErr *apperr.Error
+	var appErr *errors.Error
 	require.ErrorAs(t, pinger.Ping(ctx), &appErr)
-	require.Equal(t, apperr.CodeInternalError, appErr.Code)
+	require.Equal(t, errors.CodeInternalError, appErr.Code)
 }

@@ -7,7 +7,7 @@ tasks:
   gen:
     desc: Regenerate code from contracts/
     cmds:
-      - go run ./cmd/errgen -in errors.yaml -go ../backend-core/internal/errors/errors.go -go-compat ../backend-core/internal/platform/apperr/codes_gen.go -py ../ragx/src/thomas_ragx/platform/error_codes_gen.py -ts ../frontend/lib/errors/codes.gen.ts
+      - go run ./cmd/errgen -in errors.yaml -go ../backend-core/internal/errors/errors.go -py ../ragx/src/thomas_ragx/platform/error_codes_gen.py -ts ../frontend/lib/errors/codes.gen.ts
     dir: contracts
 
   lint:
@@ -51,17 +51,8 @@ tasks:
   migrate:
     desc: Run database migrations
     cmds: ["{{.COMPOSE}} run --rm migrate"]
-  migration:diff:
-    desc: Generate a timestamped Goose migration from backend-core/schema.sql
-    dir: backend-core
-    requires:
-      vars: [NAME]
-    env:
-      CORE_SCHEMA_MIGRATION_NAME: "{{.NAME}}"
-    cmds:
-      - go run ./cmd/migrationgen -name "$CORE_SCHEMA_MIGRATION_NAME"
   core:serve:
-    desc: Run the core API locally using backend-core/.env
+    desc: Run the core API locally using exported CORE_* environment variables
     dir: backend-core
     cmds: [go run ./cmd/core serve]
   smoke:

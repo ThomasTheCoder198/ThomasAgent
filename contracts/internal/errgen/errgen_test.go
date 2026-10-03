@@ -44,14 +44,6 @@ func TestRenderGoDefinesNamedErrorsAndReadableDefinitions(t *testing.T) {
 	require.NotContains(t, out, "var catalog")
 }
 
-func TestRenderGoCompatibilityMatchesGolden(t *testing.T) {
-	out, err := RenderGoCompatibility(loadFixture(t))
-	require.NoError(t, err)
-	require.Equal(t, golden(t, "golden.compat.go.txt"), out)
-	require.Contains(t, out, "type Code = catalogerrors.Code")
-	require.NotContains(t, out, "Slow down")
-}
-
 func TestRenderPythonMatchesGolden(t *testing.T) {
 	require.Equal(t, golden(t, "golden.py.txt"), RenderPython(loadFixture(t)))
 }

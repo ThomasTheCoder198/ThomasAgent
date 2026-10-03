@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apperr"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
@@ -16,12 +16,12 @@ func Open(ctx context.Context, url string) (*redis.Client, error) {
 	defer span.End()
 	opts, err := redis.ParseURL(url)
 	if err != nil {
-		return nil, apperr.From(fmt.Errorf("redis url: %w", err))
+		return nil, errors.From(fmt.Errorf("redis url: %w", err))
 	}
 	client := redis.NewClient(opts)
 	if err := client.Ping(ctx).Err(); err != nil {
 		_ = client.Close()
-		return nil, apperr.From(fmt.Errorf("redis ping: %w", err))
+		return nil, errors.From(fmt.Errorf("redis ping: %w", err))
 	}
 	return client, nil
 }
@@ -32,7 +32,7 @@ func (p Pinger) Ping(ctx context.Context) error {
 	ctx, span := otel.Tracer("redisx").Start(ctx, "redis.ping", trace.WithSpanKind(trace.SpanKindClient))
 	defer span.End()
 	if err := p.Client.Ping(ctx).Err(); err != nil {
-		return apperr.From(err)
+		return errors.From(err)
 	}
 	return nil
 }

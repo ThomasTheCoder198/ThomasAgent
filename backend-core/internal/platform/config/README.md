@@ -2,12 +2,8 @@
 
 ## Purpose
 Loads typed startup configuration from CORE_ environment variables and validates required values and retry policy.
-Local commands also read `.env` in their working directory. Process variables
-take precedence; loading a file never modifies the process environment.
 
 ## Entry points
-- `LoadSchema() (SchemaConfig, error)` loads only schema-generation settings,
-  without requiring the application's Postgres or Redis URLs.
 - `BreakerConfig` supplies typed provider circuit breaker settings.
 - `Load() (Config, error)` — called during core startup.
 - `Config`, `RetryConfig`, `StreamConfig`, `RelayConfig` — configuration consumed by platform services.
@@ -23,11 +19,8 @@ go test ./internal/platform/config/... -count=1
 ```
 
 ## Conventions
-Set `CORE_ENV_FILE` to an explicit dotenv path, or to an empty value to disable
-file loading. A missing default `.env` is allowed for container deployments;
-a missing explicitly configured file or malformed file fails startup. Parser
-errors do not expose file contents. `backend-core/.env.example` lists local defaults;
-the real `.env` is ignored by Git and excluded from Docker build contexts.
+Only process environment variables are read. Compose supplies them from
+`deploy/compose/.env` and its service environment blocks.
 
 Environment variables and defaults:
 
@@ -54,15 +47,10 @@ Environment variables and defaults:
 | CORE_STREAM_BATCH_SIZE | 16 |
 | CORE_RELAY_BATCH_SIZE | 100 |
 | CORE_RELAY_POLL_INTERVAL | 500ms |
-| CORE_SCHEMA_POSTGRES_IMAGE | postgres:18.6-alpine |
-| CORE_SCHEMA_GENERATION_TIMEOUT | 2m |
-| CORE_SCHEMA_CLEANUP_TIMEOUT | 15s |
 
 `Load` returns startup errors without logging. Retry maximum delay must be at least the base delay; retry attempts, stream deliveries, breaker failure threshold and half-open call limit must be at least one.
 
 Log levels are validated through `logging.ParseLevel`, the same parser used to construct loggers; unknown names fail startup.
-Schema-generation image must be nonempty; generation and cleanup timeouts must
-be positive. `Config.Schema` and `LoadSchema` use the same typed defaults and validation.
 
 ## Common failures
 - Missing or empty database/Redis URL → set both required variables.

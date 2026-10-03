@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apperr"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
 
 const (
@@ -31,14 +31,14 @@ func Enqueue(ctx context.Context, q Querier, topic string, payload any) error {
 	defer span.End()
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return apperr.From(fmt.Errorf("marshal outbox payload: %w", err))
+		return errors.From(fmt.Errorf("marshal outbox payload: %w", err))
 	}
 	carrier := propagation.MapCarrier{}
 	otel.GetTextMapPropagator().Inject(ctx, carrier)
 	_, err = q.Exec(ctx, `INSERT INTO outbox (topic, payload, trace_parent) VALUES ($1, $2, $3)`,
 		topic, body, carrier.Get(FieldTraceParent))
 	if err != nil {
-		return apperr.From(fmt.Errorf("insert outbox: %w", err))
+		return errors.From(fmt.Errorf("insert outbox: %w", err))
 	}
 	return nil
 }

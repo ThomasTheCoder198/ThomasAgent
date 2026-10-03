@@ -8,26 +8,19 @@ Go API and agent runtime for ThomasAgent.
 - GET `/healthz`: liveness. GET `/readyz`: injected dependency checks.
 
 ## Dependencies
-- Uses platform config, apperr, httpx, logging and tracing; see each README in `internal/platform/*`.
+- Uses platform config, `internal/errors`, httpx, logging and tracing; see each README in `internal/platform/*`.
 - Used by the frontend and service clients.
 
 ## Run & test
-Local Go commands load `backend-core/.env` when run from this folder. Copy
-`.env.example` for a new workstation; process variables override file values.
-The local `.env` is ignored by Git and excluded from Docker builds. Compose
-continues to use `deploy/compose/.env` and explicit container variables.
+Run core through Compose. To run core outside Docker, export the CORE_* variables yourself; CORE_DATABASE_URL and CORE_REDIS_URL are required.
 
-`schema.sql` is the complete desired database schema. After changing it, run
-`task migration:diff NAME=add_feature` from the repository root. This compares
-the existing migration history with the desired schema on disposable Postgres,
-validates the generated Up/Down, and writes `migrations/YYYYMMDDHHMMSS_add_feature.sql`.
-It does not apply schema changes to the application's database. Review the SQL,
-then use `task migrate` to apply it. An unchanged schema produces no migration.
+Database changes use hand-written Goose SQL files under `migrations/`. Add a
+new timestamped migration, verify Up and Down in dev, then run `task migrate`.
 
 Go errors are declared in generated `internal/errors/errors.go`: use named
 values such as `errors.ErrNotFound` and `.WithCause(err)`. Add codes/messages in
-`contracts/errors.yaml` and run `task gen`; old `platform/apperr` imports remain
-compatible. The core executable's responsibilities are split under `cmd/core`.
+`contracts/errors.yaml` and run `task gen`. The core executable's responsibilities
+are split under `cmd/core`.
 
 ```bash
 cd backend-core

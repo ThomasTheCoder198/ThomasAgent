@@ -9,7 +9,7 @@ Stream operations belong to the jobs module.
 - `Pinger.Ping(ctx)`: adapt Redis to the HTTP readiness interface.
 
 ## Dependencies
-- Uses: go-redis v9, apperr, OpenTelemetry.
+- Uses: go-redis v9, `internal/errors`, OpenTelemetry.
 - Used by: core serve and relay startup; HTTP readiness.
 - The caller supplies CORE_REDIS_URL through typed platform config.
 - The caller owns client shutdown after a successful Open.

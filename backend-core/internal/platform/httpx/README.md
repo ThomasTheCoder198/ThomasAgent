@@ -37,7 +37,6 @@ All 5xx codes and custom messages become the catalog INTERNAL_ERROR response.
 404, 405 and recovered panics use the error envelope. ErrorLogger may be nil.
 Routes return named definitions such as `errors.ErrNotFound`; causes and details use their
 immutable builder methods. `WriteError` normalizes both sentinels and `*AppError` values.
-Legacy `apperr.Error` callers remain compatible through a type alias.
 Trace IDs come from active OpenTelemetry span context; absent trace context omits traceId.
 Callers must supply tracing and access logging middleware before registering routes.
 

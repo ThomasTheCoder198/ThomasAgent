@@ -48,17 +48,12 @@ type Config struct {
 	Breaker           BreakerConfig `envPrefix:"BREAKER_"`
 	Stream            StreamConfig  `envPrefix:"STREAM_"`
 	Relay             RelayConfig   `envPrefix:"RELAY_"`
-	Schema            SchemaConfig  `envPrefix:"SCHEMA_"`
 }
 
 const envPrefix = "CORE_"
 
 func Load() (Config, error) {
-	values, err := environmentValues()
-	if err != nil {
-		return Config{}, err
-	}
-	cfg, err := env.ParseAsWithOptions[Config](env.Options{Prefix: envPrefix, Environment: values})
+	cfg, err := env.ParseAsWithOptions[Config](env.Options{Prefix: envPrefix})
 	if err != nil {
 		return Config{}, fmt.Errorf("load config: %w", err)
 	}
@@ -84,9 +79,6 @@ func (c Config) validate() error {
 	}
 	if c.Breaker.HalfOpenMaxCalls < 1 {
 		errs = append(errs, errors.New("CORE_BREAKER_HALF_OPEN_MAX_CALLS must be >= 1"))
-	}
-	if err := c.Schema.Validate(); err != nil {
-		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }

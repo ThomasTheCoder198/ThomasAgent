@@ -1,0 +1,38 @@
+version: "2"
+run:
+  timeout: 5m
+linters:
+  default: standard
+  enable:
+    - mnd
+    - dupl
+    - gocritic
+    - revive
+    - errorlint
+    - gocyclo
+    - nestif
+    - funlen
+    - bodyclose
+    - noctx
+    - misspell
+  settings:
+    gocyclo:
+      min-complexity: 10
+    nestif:
+      min-complexity: 3
+    funlen:
+      lines: 50
+      statements: 40
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+  exclusions:
+    presets: [std-error-handling, common-false-positives]
+    rules:
+      - path: _test\.go
+        linters: [mnd, funlen, dupl, noctx]
+      - path: _gen\.go
+        linters: [mnd, dupl, funlen]
+formatters:
+  enable: [gofmt, goimports]

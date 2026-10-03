@@ -1,0 +1,65 @@
+# Reference project (its own git repo, read-only reference)
+Reference/
+
+# Brainstorm companion + impeccable runtime artifacts
+.superpowers/
+.impeccable/review/
+.impeccable/build/
+.impeccable/live/
+.impeccable/config.local.json
+.impeccable/hook.cache.json
+
+# Vendored skills: heavy assets re-downloadable or not needed for this project
+.claude/skills/impeccable/scripts/bin/
+.claude/skills/huashu-design/assets/*.mp3
+.claude/settings.local.json
+
+# Secrets and env
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Go
+bin/
+*.test
+coverage.out
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+playwright-report/
+test-results/
+
+# Data volumes (local dev)
+deploy/compose/data/
+
+# Planning docs, agent rules and skills are local-only (owner decision 2026-10-03)
+docs/
+AGENTS.md
+CLAUDE.md
+PRODUCT.md
+DESIGN.md
+.claude/
+.impeccable/
+
+# Postman generator scratch output
+contracts/postman/.raw.json

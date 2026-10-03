@@ -1,0 +1,56 @@
+version: "3"
+
+vars:
+  COMPOSE: docker compose --env-file deploy/compose/.env -f deploy/compose/compose.infra.yaml -f deploy/compose/compose.observability.yaml -f deploy/compose/compose.yaml
+
+tasks:
+  gen:
+    desc: Regenerate code from contracts/
+    cmds:
+      - go run ./cmd/errgen -in errors.yaml -go ../backend-core/internal/platform/apperr/codes_gen.go -py ../ragx/src/thomas_ragx/platform/error_codes_gen.py -ts ../frontend/lib/errors/codes.gen.ts
+    dir: contracts
+
+  lint:
+    desc: Lint all services
+    cmds:
+      - task: lint:core
+      - task: lint:ragx
+  fmt:
+    desc: Format Go code
+    dir: backend-core
+    cmds: [golangci-lint fmt ./...]
+  lint:core:
+    dir: backend-core
+    cmds: [golangci-lint fmt ./..., golangci-lint run ./...]
+  lint:ragx:
+    dir: ragx
+    cmds: [uv run ruff check ., uv run ruff format --check ., uv run mypy src]
+
+  test:
+    desc: Test all services
+    cmds:
+      - task: test:contracts
+      - task: test:core
+      - task: test:ragx
+  test:contracts:
+    dir: contracts
+    cmds: [go test ./...]
+  test:core:
+    dir: backend-core
+    cmds: [go test ./... -count=1]
+  test:ragx:
+    dir: ragx
+    cmds: [uv run pytest -q]
+
+  up:
+    desc: Start the full stack
+    cmds: ["{{.COMPOSE}} up -d --build --wait"]
+  down:
+    desc: Stop the full stack
+    cmds: ["{{.COMPOSE}} down"]
+  migrate:
+    desc: Run database migrations
+    cmds: ["{{.COMPOSE}} run --rm migrate"]
+  smoke:
+    desc: Check service health
+    cmds: [bash scripts/smoke.sh]

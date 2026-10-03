@@ -1,0 +1,52 @@
+package tracing
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+
+	"go.opentelemetry.io/contrib/bridges/otelslog"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/propagation"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+)
+
+type Providers struct {
+	LogHandler slog.Handler
+	Shutdown   func(context.Context) error
+}
+
+func Setup(ctx context.Context, serviceName, env, otlpEndpoint string) (Providers, error) {
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+	if otlpEndpoint == "" {
+		return Providers{Shutdown: func(context.Context) error { return nil }}, nil
+	}
+	res := resource.NewWithAttributes(semconv.SchemaURL,
+		semconv.ServiceName(serviceName), semconv.DeploymentEnvironment(env))
+
+	traceExp, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(otlpEndpoint+"/v1/traces"))
+	if err != nil {
+		return Providers{}, fmt.Errorf("trace exporter: %w", err)
+	}
+	tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(traceExp), sdktrace.WithResource(res))
+
+	logExp, err := otlploghttp.New(ctx, otlploghttp.WithEndpointURL(otlpEndpoint+"/v1/logs"))
+	if err != nil {
+		return Providers{}, fmt.Errorf("log exporter: %w", errors.Join(err, tp.Shutdown(ctx)))
+	}
+	otel.SetTracerProvider(tp)
+	lp := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewBatchProcessor(logExp)), sdklog.WithResource(res))
+
+	return Providers{
+		LogHandler: otelslog.NewHandler(serviceName, otelslog.WithLoggerProvider(lp)),
+		Shutdown: func(ctx context.Context) error {
+			return errors.Join(tp.Shutdown(ctx), lp.Shutdown(ctx))
+		},
+	}, nil
+}

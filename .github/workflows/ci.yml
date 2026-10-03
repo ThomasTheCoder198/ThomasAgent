@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    name: contracts (test + codegen drift)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: contracts/go.mod
+          cache-dependency-path: contracts/go.sum
+      - name: Test
+        working-directory: contracts
+        run: go test ./...
+      - name: Regenerate code
+        working-directory: contracts
+        run: go run ./cmd/errgen -in errors.yaml -go ../backend-core/internal/platform/apperr/codes_gen.go -py ../ragx/src/thomas_ragx/platform/error_codes_gen.py -ts ../frontend/lib/errors/codes.gen.ts
+      - name: Fail if generated code is out of date
+        run: git diff --exit-code
+
+  backend-core:
+    name: backend-core (lint + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend-core/go.mod
+          cache-dependency-path: backend-core/go.sum
+      - name: Lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+          working-directory: backend-core
+      - name: Test
+        working-directory: backend-core
+        run: go test ./... -count=1

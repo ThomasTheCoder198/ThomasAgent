@@ -17,27 +17,27 @@ const (
 	Down Direction = "down"
 )
 
-func Migrate(ctx context.Context, url string, fsys fs.FS, dir Direction) error {
+func Migrate(ctx context.Context, url string, fsys fs.FS, direction Direction) error {
 	provider, db, err := newMigrationProvider(url, fsys)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = db.Close() }()
-	switch dir {
+	switch direction {
 	case Up:
 		_, err = provider.Up(ctx)
 	case Down:
 		_, err = provider.Down(ctx)
 	default:
-		return fmt.Errorf("unknown migration direction %q", dir)
+		return fmt.Errorf("unknown migration direction %q", direction)
 	}
 	if err != nil {
-		return fmt.Errorf("migrate %s: %w", dir, err)
+		return fmt.Errorf("migrate %s: %w", direction, err)
 	}
 	return nil
 }
 
-func Status(ctx context.Context, url string, fsys fs.FS) ([]*goose.MigrationStatus, error) {
+func MigrationStatuses(ctx context.Context, url string, fsys fs.FS) ([]*goose.MigrationStatus, error) {
 	provider, db, err := newMigrationProvider(url, fsys)
 	if err != nil {
 		return nil, err

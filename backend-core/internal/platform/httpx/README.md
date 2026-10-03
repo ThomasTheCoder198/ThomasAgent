@@ -1,17 +1,17 @@
 # httpx
 
 ## Purpose
-Owns JSON response envelopes, request IDs and chi error boundaries.
-Tracing and structured logger setup are injected by the application.
+Owns JSON responses, request IDs and chi error boundaries.
+TraceRequests and structured logger setup are injected by the application.
 
 ## Entry points
-- `NewRouter` registers requestID → caller middleware → errorLogging → recoverer.
-- `WriteData` serializes success data and request ID metadata.
+- `NewRouter` registers assignRequestID → caller middleware → injectErrorLogger → recoverPanics.
+- `WriteSuccess` serializes success data and request ID metadata.
 - `WriteError` localizes catalog errors and sanitizes server errors.
-- `RequestIDFrom` retrieves the request ID for downstream logging.
+- `logging.RequestIDFromContext` retrieves the shared request ID for callers that need it; logging receives it automatically.
 
 ## Dependencies
-- Uses: `internal/errors`, chi v5, UUID and OpenTelemetry trace context.
+- Uses: `internal/errors`, platform logging, chi v5, UUID and OpenTelemetry trace context.
 - Used by: API handlers and the application router.
 
 ## Run & test
@@ -23,20 +23,14 @@ golangci-lint run ./internal/platform/...
 ```
 
 ## Conventions
-Success envelope:
-```json
-{ "data": { ... }, "meta": { "requestId": "req_...", "page": { "cursor": "...", "limit": 20 } } }
-```
-Error envelope:
-```json
-{ "error": { "code": "KB_FILE_NOT_FOUND", "message": "Không tìm thấy tài liệu.", "details": { ... }, "traceId": "4bf9..." } }
-```
-The current Meta type supplies requestId; pagination is reserved for paginated handlers.
+See the [shared naming glossary](../../../../docs/glossary.md) for terms used across services.
+Response terminology and JSON shape: [glossary](../../../../docs/glossary.md).
+The current ResponseMeta type supplies requestId; pagination is reserved for paginated handlers.
 5xx details are never serialized; they are logged once via ErrorLogger.
 All 5xx codes and custom messages become the catalog INTERNAL_ERROR response.
-404, 405 and recovered panics use the error envelope. ErrorLogger may be nil.
+404, 405 and recovered panics use the error response. ErrorLogger may be nil.
 Routes return named definitions such as `errors.ErrNotFound`; causes and details use their
-immutable builder methods. `WriteError` normalizes both sentinels and `*AppError` values.
+immutable builder methods. `WriteError` normalizes both named errors and `*AppError` values.
 Trace IDs come from active OpenTelemetry span context; absent trace context omits traceId.
 Callers must supply tracing and access logging middleware before registering routes.
 
@@ -46,8 +40,10 @@ Callers must supply tracing and access logging middleware before registering rou
 - Panic after headers were sent: recovery cannot replace an already committed response.
 
 ## Health and observability
-`MountHealth` registers GET `/healthz` and `/readyz` using the shared envelope. Liveness returns ok; readiness pings injected dependencies. A failed dependency returns 503 with INTERNAL_ERROR publicly and retains PROVIDER_UNAVAILABLE plus dependency names in the boundary log.
+`MountHealth` uses `LivenessPath` and `ReadinessPath` with injected `DependencyPinger` capabilities. See [liveness and readiness](../../../../docs/glossary.md) for route meanings.
 
-`Tracing` wraps handlers with otelhttp; install it before `AccessLog` for trace correlation. `SlogErrorLogger` records structured boundary errors. Access logs include method, path, status, duration and request ID.
+`TraceRequests` wraps handlers with otelhttp; install it before `LogAccess` for trace correlation. `NewSlogErrorLogger` records structured boundary errors. Access logs include method, path, status, duration and request ID.
+
+`assignRequestID` uses `logging.ContextWithRequestID`; handler, access, and error logs follow the shared [log field contract](../logging/README.md#log-field-contract).
 
 Access logging preserves the first final response status, including implicit commitment by Write or Flush; informational responses do not commit the final status.

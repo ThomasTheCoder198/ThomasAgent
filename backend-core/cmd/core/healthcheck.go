@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 )
 
-const healthcheckEndpoint = "http://127.0.0.1"
-const healthcheckPath = "/healthz"
+const localHealthBaseURL = "http://127.0.0.1"
 
 func checkHTTPHealth(ctx context.Context, addr string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthcheckEndpoint+addr+healthcheckPath, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, localHealthBaseURL+addr+httpx.LivenessPath, nil)
 	if err != nil {
 		return fmt.Errorf("create healthcheck request: %w", err)
 	}

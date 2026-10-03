@@ -19,7 +19,9 @@ uv run pytest -q
 ```
 
 ## Conventions
-Settings use RAG_ variables. Required credentials are RAG_CORE_SERVICE_TOKEN, RAG_MINIO_ACCESS_KEY, and RAG_MINIO_SECRET_KEY. Errors use catalog codes and envelopes; boundary logs omit exception text and document content.
+See the [RAG service conventions](../../README.md#conventions) for Config, credentials, shared naming, and boundary logging.
+
+CLI bootstrap initializes logging with Config's service and `environment` before storage setup, so bucket creation and bootstrap lifecycle logs share the configured context. See [platform configuration aliases](platform/README.md#conventions) for preserved environment variable names. Logging follows the [shared field contract](../../../backend-core/internal/platform/logging/README.md#log-field-contract).
 
 ## Common failures
 - Missing credentials: supply the required RAG_ environment variables.

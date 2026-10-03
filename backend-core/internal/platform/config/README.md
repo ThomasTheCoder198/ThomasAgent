@@ -6,7 +6,7 @@ Loads typed startup configuration from CORE_ environment variables and validates
 ## Entry points
 - `BreakerConfig` supplies typed provider circuit breaker settings.
 - `Load() (Config, error)` — called during core startup.
-- `Config`, `RetryConfig`, `StreamConfig`, `RelayConfig` — configuration consumed by platform services.
+- `Config`, `RetryConfig`, `ConsumerConfig`, `OutboxRelayConfig` — configuration consumed by platform services. `Config.OutboxRelay` retains the `CORE_RELAY_` environment prefix and its existing defaults.
 
 ## Dependencies
 - Uses: `github.com/caarlos0/env/v11`, platform logging's `ParseLevel`, and Go standard library.
@@ -19,6 +19,7 @@ go test ./internal/platform/config/... -count=1
 ```
 
 ## Conventions
+See the [shared naming glossary](../../../../docs/glossary.md) for terms used across services.
 Only process environment variables are read. Compose supplies them from
 `deploy/compose/.env` and its service environment blocks.
 
@@ -41,7 +42,7 @@ Environment variables and defaults:
 | CORE_BREAKER_FAILURE_THRESHOLD | 5 |
 | CORE_BREAKER_OPEN_TIMEOUT | 30s |
 | CORE_BREAKER_HALF_OPEN_MAX_CALLS | 1 |
-| CORE_STREAM_MAX_DELIVERIES | 5 |
+| CORE_STREAM_MAX_DELIVERIES | 4 (initial delivery + 3 retries) |
 | CORE_STREAM_VISIBILITY_TIMEOUT | 30s |
 | CORE_STREAM_BLOCK_TIMEOUT | 5s |
 | CORE_STREAM_BATCH_SIZE | 16 |
@@ -51,6 +52,8 @@ Environment variables and defaults:
 `Load` returns startup errors without logging. Retry maximum delay must be at least the base delay; retry attempts, stream deliveries, breaker failure threshold and half-open call limit must be at least one.
 
 Log levels are validated through `logging.ParseLevel`, the same parser used to construct loggers; unknown names fail startup.
+
+The logger's field contract is defined in the [logging README](../logging/README.md#log-field-contract). `Config.Environment` supplies every logger's deployment environment.
 
 ## Common failures
 - Missing or empty database/Redis URL → set both required variables.

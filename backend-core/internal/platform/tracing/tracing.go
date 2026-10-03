@@ -23,33 +23,33 @@ const (
 	logsPath   = "/v1/logs"
 )
 
-type Providers struct {
+type Telemetry struct {
 	LogHandler slog.Handler
 	Shutdown   func(context.Context) error
 }
 
-func Setup(ctx context.Context, serviceName, env, otlpEndpoint string) (Providers, error) {
+func Setup(ctx context.Context, serviceName, env, otlpEndpoint string) (Telemetry, error) {
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 	if otlpEndpoint == "" {
-		return Providers{Shutdown: func(context.Context) error { return nil }}, nil
+		return Telemetry{Shutdown: func(context.Context) error { return nil }}, nil
 	}
 	res := resource.NewWithAttributes(semconv.SchemaURL,
 		semconv.ServiceName(serviceName), semconv.DeploymentEnvironment(env))
 
 	traceExp, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(signalEndpoint(otlpEndpoint, tracesPath)))
 	if err != nil {
-		return Providers{}, fmt.Errorf("trace exporter: %w", err)
+		return Telemetry{}, fmt.Errorf("trace exporter: %w", err)
 	}
 	tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(traceExp), sdktrace.WithResource(res))
 
 	logExp, err := otlploghttp.New(ctx, otlploghttp.WithEndpointURL(signalEndpoint(otlpEndpoint, logsPath)))
 	if err != nil {
-		return Providers{}, fmt.Errorf("log exporter: %w", errors.Join(err, tp.Shutdown(ctx)))
+		return Telemetry{}, fmt.Errorf("log exporter: %w", errors.Join(err, tp.Shutdown(ctx)))
 	}
 	otel.SetTracerProvider(tp)
 	lp := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewBatchProcessor(logExp)), sdklog.WithResource(res))
 
-	return Providers{
+	return Telemetry{
 		LogHandler: otelslog.NewHandler(serviceName, otelslog.WithLoggerProvider(lp)),
 		Shutdown: func(ctx context.Context) error {
 			return errors.Join(tp.Shutdown(ctx), lp.Shutdown(ctx))

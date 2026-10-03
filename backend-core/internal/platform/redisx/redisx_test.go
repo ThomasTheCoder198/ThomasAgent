@@ -9,7 +9,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
 
-func TestPingerSuccessAndFailure(t *testing.T) {
+func TestClientPinger_SuccessAndFailure(t *testing.T) {
 	ctx := context.Background()
 	container, err := tcredis.Run(ctx, "redis:8.10.2")
 	require.NoError(t, err)
@@ -19,10 +19,15 @@ func TestPingerSuccessAndFailure(t *testing.T) {
 	client, err := Open(ctx, url)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
-	pinger := Pinger{Client: client}
+	pinger := ClientPinger{Client: client}
 	require.NoError(t, pinger.Ping(ctx))
 	require.NoError(t, client.Close())
-	var appErr *errors.Error
+	var appErr *errors.AppError
 	require.ErrorAs(t, pinger.Ping(ctx), &appErr)
 	require.Equal(t, errors.CodeInternalError, appErr.Code)
+}
+
+func TestSpanNames_UseCoreServicePrefix(t *testing.T) {
+	require.Equal(t, "redisx", redisTracerName)
+	require.Equal(t, []string{"core.redis.open", "core.redis.ping"}, []string{openSpan, pingSpan})
 }

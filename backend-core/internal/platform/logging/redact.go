@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const Redacted = "[REDACTED]"
+const RedactedPlaceholder = "[REDACTED]"
 
 // Matching whole words keeps usage fields such as input_tokens visible while csrf_token or X-Api-Key are hidden.
 var (
@@ -35,14 +35,14 @@ func isSecretKey(key string) bool {
 
 func RedactValue(key string, v slog.Value) slog.Value {
 	if isSecretKey(key) {
-		return slog.StringValue(Redacted)
+		return slog.StringValue(RedactedPlaceholder)
 	}
 	v = v.Resolve()
 	switch v.Kind() {
 	case slog.KindAny:
 		return slog.AnyValue(redactContainer(v.Any()))
 	case slog.KindString:
-		return slog.StringValue(secretValuePattern.ReplaceAllString(v.String(), Redacted))
+		return slog.StringValue(secretValuePattern.ReplaceAllString(v.String(), RedactedPlaceholder))
 	case slog.KindGroup:
 		attrs := v.Group()
 		out := make([]slog.Attr, len(attrs))

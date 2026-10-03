@@ -27,7 +27,7 @@ func startPostgres(t *testing.T) string {
 	return url
 }
 
-func TestMigrateUpAndDown(t *testing.T) {
+func TestMigrate_UpAndDown(t *testing.T) {
 	url := startPostgres(t)
 	ctx := context.Background()
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Up))
@@ -43,7 +43,7 @@ func TestMigrateUpAndDown(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestMigrateUpFailsOnBrokenMigration(t *testing.T) {
+func TestMigrate_UpFailsOnBrokenMigration(t *testing.T) {
 	url := startPostgres(t)
 	broken := fstest.MapFS{
 		"20260101000001_ok.sql":     {Data: []byte("-- +goose Up\nCREATE TABLE a (id int);\n-- +goose Down\nDROP TABLE a;\n")},
@@ -53,10 +53,10 @@ func TestMigrateUpFailsOnBrokenMigration(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestStatusReturnsMigrationStates(t *testing.T) {
+func TestMigrationStatuses_ReturnsMigrationStates(t *testing.T) {
 	url := startPostgres(t)
 	ctx := context.Background()
-	statuses, err := Status(ctx, url, migrations.FS)
+	statuses, err := MigrationStatuses(ctx, url, migrations.FS)
 	require.NoError(t, err)
 	require.Len(t, statuses, 1)
 	require.EqualValues(t, 20261003000001, statuses[0].Source.Version)
@@ -64,19 +64,19 @@ func TestStatusReturnsMigrationStates(t *testing.T) {
 	require.Equal(t, goose.StatePending, statuses[0].State)
 
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Up))
-	statuses, err = Status(ctx, url, migrations.FS)
+	statuses, err = MigrationStatuses(ctx, url, migrations.FS)
 	require.NoError(t, err)
 	require.Len(t, statuses, 1)
 	require.Equal(t, goose.StateApplied, statuses[0].State)
 
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	statuses, err = Status(ctx, url, migrations.FS)
+	statuses, err = MigrationStatuses(ctx, url, migrations.FS)
 	require.NoError(t, err)
 	require.Len(t, statuses, 1)
 	require.Equal(t, goose.StatePending, statuses[0].State)
 }
 
-func TestOpenFailsFastOnBadURL(t *testing.T) {
+func TestOpen_FailsFastOnBadURL(t *testing.T) {
 	_, err := Open(context.Background(), "postgres://nobody:nothing@127.0.0.1:1/none?connect_timeout=1")
 	require.Error(t, err)
 }

@@ -1,4 +1,4 @@
-package errgen
+package errorcodegen
 
 import (
 	"os"
@@ -13,46 +13,52 @@ func loadFixture(t *testing.T) Catalog {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("testdata", "errors.yaml"))
 	require.NoError(t, err)
-	cat, err := Parse(raw)
+	catalog, err := Parse(raw)
 	require.NoError(t, err)
-	return cat
+	return catalog
 }
 
 // Golden files written on a Windows host may carry CRLF; renderers always emit LF.
-func golden(t *testing.T, name string) string {
+func golden(t *testing.T, name, output string) string {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("testdata", name))
+	path := filepath.Join("testdata", name)
+	if os.Getenv("UPDATE_GOLDEN") == "1" {
+		require.NoError(t, os.WriteFile(path, []byte(output), 0o644))
+	}
+	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
 	return strings.ReplaceAll(string(raw), "\r\n", "\n")
 }
 
-func TestRenderGoMatchesGolden(t *testing.T) {
+func TestRenderGo_MatchesGolden(t *testing.T) {
 	out, err := RenderGo(loadFixture(t))
 	require.NoError(t, err)
-	require.Equal(t, golden(t, "golden.go.txt"), out)
+	require.Equal(t, golden(t, "golden.go.txt", out), out)
 }
 
-func TestRenderGoDefinesNamedErrorsAndReadableDefinitions(t *testing.T) {
+func TestRenderGo_DefinesNamedErrorsAndReadableDefinitions(t *testing.T) {
 	out, err := RenderGo(loadFixture(t))
 	require.NoError(t, err)
 	require.Contains(t, out, "package errors")
 	require.Contains(t, out, "ErrRateLimited")
-	require.Contains(t, out, "Sentinel = Sentinel(CodeRateLimited)")
+	require.Contains(t, out, "NamedError = NamedError(CodeRateLimited)")
 	require.Contains(t, out, "func LookupDefinition(code Code) ErrorDefinition")
 	require.Contains(t, out, "HTTPStatus:")
 	require.Contains(t, out, "MessageVI:")
 	require.NotContains(t, out, "var catalog")
 }
 
-func TestRenderPythonMatchesGolden(t *testing.T) {
-	require.Equal(t, golden(t, "golden.py.txt"), RenderPython(loadFixture(t)))
+func TestRenderPython_MatchesGolden(t *testing.T) {
+	output := RenderPython(loadFixture(t))
+	require.Equal(t, golden(t, "golden.py.txt", output), output)
 }
 
-func TestRenderTSMatchesGolden(t *testing.T) {
-	require.Equal(t, golden(t, "golden.ts.txt"), RenderTS(loadFixture(t)))
+func TestRenderTS_MatchesGolden(t *testing.T) {
+	output := RenderTS(loadFixture(t))
+	require.Equal(t, golden(t, "golden.ts.txt", output), output)
 }
 
-func TestParseRejectsInvalidCatalog(t *testing.T) {
+func TestParse_RejectsInvalidCatalog(t *testing.T) {
 	cases := map[string]string{
 		"lowercase code":      "version: 1\nerrors:\n  - {code: bad_code, status: 400, retryable: false, message: {vi: a, en: b}}\n",
 		"duplicate code":      "version: 1\nerrors:\n  - {code: A_B, status: 400, retryable: false, message: {vi: a, en: b}}\n  - {code: A_B, status: 400, retryable: false, message: {vi: a, en: b}}\n",

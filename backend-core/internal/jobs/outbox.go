@@ -13,32 +13,32 @@ import (
 )
 
 const (
-	FieldPayload     = "payload"
-	FieldTraceParent = "traceparent"
-	FieldOutboxID    = "outbox_id"
-	FieldError       = "error"
-	FieldDeliveries  = "deliveries"
-	FieldOriginalID  = "original_id"
-	DLQSuffix        = ".dlq"
+	StreamFieldPayload     = "payload"
+	StreamFieldTraceParent = "traceparent"
+	StreamFieldOutboxID    = "outbox_id"
+	StreamFieldError       = "error"
+	StreamFieldDeliveries  = "deliveries"
+	StreamFieldOriginalID  = "original_id"
+	DeadLetterSuffix       = ".dlq"
 )
 
-type Querier interface {
+type Execer interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
-func Enqueue(ctx context.Context, q Querier, topic string, payload any) error {
-	ctx, span := otel.Tracer("jobs").Start(ctx, "jobs.enqueue")
+func EnqueueOutbox(ctx context.Context, q Execer, stream string, payload any) error {
+	ctx, span := otel.Tracer(jobsTracerName).Start(ctx, enqueueOutboxSpan)
 	defer span.End()
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return errors.From(fmt.Errorf("marshal outbox payload: %w", err))
+		return errors.ToAppError(fmt.Errorf("marshal outbox payload: %w", err))
 	}
 	carrier := propagation.MapCarrier{}
 	otel.GetTextMapPropagator().Inject(ctx, carrier)
 	_, err = q.Exec(ctx, `INSERT INTO outbox (topic, payload, trace_parent) VALUES ($1, $2, $3)`,
-		topic, body, carrier.Get(FieldTraceParent))
+		stream, body, carrier.Get(StreamFieldTraceParent))
 	if err != nil {
-		return errors.From(fmt.Errorf("insert outbox: %w", err))
+		return errors.ToAppError(fmt.Errorf("insert outbox: %w", err))
 	}
 	return nil
 }

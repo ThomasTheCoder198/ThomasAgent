@@ -5,27 +5,29 @@ Owns transactional outbox enqueueing, Redis stream publishing, pending-message
 recovery, acknowledgement, and dead-letter delivery.
 
 ## Entry points
-- `Enqueue`: call inside the transaction that writes the business change.
-- `Relay.Run` / `PublishBatch`: `core relay` publishes committed outbox rows.
-- `Consumer.EnsureGroup`, `Run`, `Poll`: worker entry points.
+- `EnqueueOutbox`: call inside the transaction that writes the business change.
+- `OutboxRelay.Run` / `PublishBatch`: `core outbox-relay` publishes committed outbox rows.
+- `Consumer.EnsureGroup`, `Run`, `PollOnce`: worker entry points.
 - `Handler`: application processing with the restored W3C trace context.
+- `spans.go`: named tracer and fixed span constants, including `core.jobs.outbox_relay`.
 
 ## Dependencies
 - Logger construction returns an error for unknown levels; callers must handle it before injecting a logger.
 - Uses: pgx/Postgres, go-redis/Redis Streams, `internal/errors`, OpenTelemetry, slog.
-- Used by: core relay and future domain workers.
-- Configure batch/poll limits from `config.RelayConfig`; consumer limits from
-  `config.StreamConfig`. Callers provide clients and a structured logger.
+- Used by: core outbox-relay and future domain workers.
+- Configure batch/poll limits from `config.OutboxRelayConfig`; consumer limits from
+  `config.ConsumerConfig`. Callers provide clients and a structured logger.
 
 ## Run & test
 ```bash
 cd backend-core
 go test ./internal/jobs/... -count=1
-go run ./cmd/core relay
+go run ./cmd/core outbox-relay
 ```
 Docker Desktop must run for the pinned Postgres/Redis integration containers.
 
 ## Conventions
+See the [shared naming glossary](../../../docs/glossary.md) for terms used across services.
 Delivery is at-least-once. A crash after XADD and before transaction COMMIT can
 publish the same outbox row again. Handlers must deduplicate by `outbox_id` and
 make their business side effects idempotent. Handlers receive the original `outbox_id` directly in `Message.OutboxID`
@@ -34,9 +36,11 @@ field; domain handlers must define an appropriate idempotency key for those jobs
 Rows use FOR UPDATE SKIP LOCKED so multiple relays can share the outbox.
 Only successful handlers are acknowledged; failures remain pending until reclaim.
 XAUTOCLAIM and XPENDING determine delivery count; final failure goes to DLQ.
-Enqueue/relay/poll/job boundaries have spans; handler logs use restored trace IDs.
+EnqueueOutbox/relay/poll/job boundaries have spans; handler logs use restored trace IDs.
+The shared [log field contract](../platform/logging/README.md#log-field-contract) applies to worker and handler logs.
 Logs contain catalog error codes and job metadata, never payloads or raw errors.
 Handler errors should be safe to persist because the DLQ retains the last error.
+The default is four total deliveries: the initial attempt plus up to three retries; see [consumer config](../platform/config/README.md).
 The foundation consumer retries handler failures up to its configured limit;
 domain handlers must apply retryable-error/backoff policy for outbound operations.
 

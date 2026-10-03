@@ -8,7 +8,7 @@ SQL migrations. Business queries remain in their consuming modules.
 - `Open(ctx, url)` creates a pool and pings before returning it.
 - `Migrate(ctx, url, fsys, direction)` runs goose up or down.
 - `Up`, `Down` define supported migration directions.
-- `Status(ctx, url, fsys)` returns goose migration versions, source paths, and states for callers to inspect or display.
+- `MigrationStatuses(ctx, url, fsys)` returns goose migration versions, source paths, and states for callers to inspect or display.
 
 ## Dependencies
 - Uses: pgx v5, goose v3, and Postgres.
@@ -25,12 +25,13 @@ Tests apply and roll back the platform migration, reject deliberately broken
 SQL, verify status transitions from pending to applied and back, and check that connection failure is returned before a pool is exposed.
 
 ## Conventions
+See the [shared naming glossary](../../../../docs/glossary.md) for terms used across services.
 The core command wraps migration and startup connection/ping operations in
 client spans and logs failures once at that boundary. This package returns errors.
 The caller closes a returned pool. Failed ping closes it internally.
 Migration files use `YYYYMMDDHHMMSS_<desc>.sql` and goose Up/Down annotations.
 `Up` applies all pending migrations; `Down` rolls back one migration.
-`Status` returns every migration row instead of discarding status results.
+`MigrationStatuses` returns every migration row instead of discarding status results.
 Never edit an applied migration. Use expand/contract for breaking changes.
 
 ## Common failures

@@ -20,14 +20,14 @@ const (
 	LangEN Lang = "en"
 )
 
-type Sentinel Code
+type NamedError Code
 
-func (s Sentinel) Error() string { return string(s) }
+func (s NamedError) Error() string { return string(s) }
 
-func (s Sentinel) Is(target error) bool { return matchesCode(Code(s), target) }
+func (s NamedError) Is(target error) bool { return matchesCode(Code(s), target) }
 
 // Normalization creates request-local fields instead of attaching state to the shared definition.
-func (s Sentinel) As(target any) bool {
+func (s NamedError) As(target any) bool {
 	appErr, ok := target.(**AppError)
 	if !ok {
 		return false
@@ -36,11 +36,11 @@ func (s Sentinel) As(target any) bool {
 	return true
 }
 
-func (s Sentinel) WithCause(cause error) *AppError { return New(Code(s), WithCause(cause)) }
+func (s NamedError) WithCause(cause error) *AppError { return New(Code(s), WithCause(cause)) }
 
-func (s Sentinel) WithMessage(message string) *AppError { return New(Code(s), WithMessage(message)) }
+func (s NamedError) WithMessage(message string) *AppError { return New(Code(s), WithMessage(message)) }
 
-func (s Sentinel) WithDetails(details map[string]any) *AppError {
+func (s NamedError) WithDetails(details map[string]any) *AppError {
 	return New(Code(s), WithDetails(details))
 }
 
@@ -50,8 +50,6 @@ type AppError struct {
 	Details map[string]any
 	Cause   error
 }
-
-type Error = AppError
 
 type Option func(*AppError)
 
@@ -88,7 +86,7 @@ func matchesCode(code Code, target error) bool {
 	return stderrors.As(target, &candidate) && candidate != nil && code == candidate.Code
 }
 
-func (e *AppError) Status() int { return LookupDefinition(e.Code).HTTPStatus }
+func (e *AppError) HTTPStatus() int { return LookupDefinition(e.Code).HTTPStatus }
 
 func (e *AppError) Retryable() bool { return LookupDefinition(e.Code).Retryable }
 
@@ -115,7 +113,7 @@ func (e *AppError) WithDetails(details map[string]any) *AppError {
 	return New(e.Code, WithMessage(e.Message), WithDetails(details), WithCause(e.Cause))
 }
 
-func From(err error) *AppError {
+func ToAppError(err error) *AppError {
 	if err == nil {
 		return nil
 	}
@@ -124,6 +122,10 @@ func From(err error) *AppError {
 		return appErr
 	}
 	return ErrInternalError.WithCause(err)
+}
+
+func CodeOf(err error) Code {
+	return ToAppError(err).Code
 }
 
 func LangFromHeader(acceptLanguage string) Lang {

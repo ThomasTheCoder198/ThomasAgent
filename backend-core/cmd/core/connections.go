@@ -18,15 +18,21 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/redisx"
 )
 
+const (
+	postgresOpenSpan    = "core.postgres.open"
+	redisStartupSpan    = "core.redis.startup"
+	postgresMigrateSpan = "core.postgres.migrate"
+)
+
 const dependencyURLPattern = "(?i)(postgres(?:ql)?|redis(?:s)?)://[^\\s`\"<>]+"
 
-type loggedError struct{ error }
+type alreadyLoggedError struct{ error }
 
-func (e loggedError) Unwrap() error { return e.error }
+func (e alreadyLoggedError) Unwrap() error { return e.error }
 
 func sanitizeDependencyError(err error, dsn string) error {
-	message := strings.ReplaceAll(err.Error(), dsn, logging.Redacted)
-	message = regexp.MustCompile(dependencyURLPattern).ReplaceAllString(message, logging.Redacted)
+	message := strings.ReplaceAll(err.Error(), dsn, logging.RedactedPlaceholder)
+	message = regexp.MustCompile(dependencyURLPattern).ReplaceAllString(message, logging.RedactedPlaceholder)
 	password := ""
 	if parsed, parseErr := url.Parse(dsn); parseErr == nil && parsed.User != nil {
 		password, _ = parsed.User.Password()
@@ -35,7 +41,7 @@ func sanitizeDependencyError(err error, dsn string) error {
 		password = parsed.ConnConfig.Password
 	}
 	if password != "" {
-		message = strings.ReplaceAll(message, password, logging.Redacted)
+		message = strings.ReplaceAll(message, password, logging.RedactedPlaceholder)
 	}
 	return stderrors.New(message)
 }
@@ -44,13 +50,13 @@ func (a *application) recordDependencyFailure(ctx context.Context, span trace.Sp
 	clean := sanitizeDependencyError(err, dsn)
 	span.SetStatus(codes.Error, message)
 	span.RecordError(clean)
-	appErr := errors.From(err).WithCause(clean)
+	appErr := errors.ToAppError(err).WithCause(clean)
 	a.log.ErrorContext(ctx, message, "error_code", appErr.Code, "error", clean)
-	return loggedError{appErr}
+	return alreadyLoggedError{appErr}
 }
 
 func (a *application) openPostgres(ctx context.Context) (*pgxpool.Pool, error) {
-	ctx, span := a.dependencyTracer.Start(ctx, "postgres.open", trace.WithSpanKind(trace.SpanKindClient))
+	ctx, span := a.startupTracer.Start(ctx, postgresOpenSpan, trace.WithSpanKind(trace.SpanKindClient))
 	defer span.End()
 	pool, err := postgres.Open(ctx, a.cfg.DatabaseURL)
 	if err != nil {
@@ -60,11 +66,11 @@ func (a *application) openPostgres(ctx context.Context) (*pgxpool.Pool, error) {
 }
 
 func (a *application) openRedis(ctx context.Context) (*redis.Client, error) {
-	ctx, span := a.dependencyTracer.Start(ctx, "redis.startup")
+	ctx, span := a.startupTracer.Start(ctx, redisStartupSpan)
 	defer span.End()
-	rdb, err := redisx.Open(ctx, a.cfg.RedisURL)
+	redisClient, err := redisx.Open(ctx, a.cfg.RedisURL)
 	if err != nil {
 		return nil, a.recordDependencyFailure(ctx, span, "redis startup failed", err, a.cfg.RedisURL)
 	}
-	return rdb, nil
+	return redisClient, nil
 }

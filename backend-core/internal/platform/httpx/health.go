@@ -9,25 +9,33 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
 
-type Pinger interface {
+const (
+	LivenessPath                = "/healthz"
+	ReadinessPath               = "/readyz"
+	LivenessStatus              = "ok"
+	ReadinessStatus             = "ready"
+	DependencyUnreachableStatus = "unreachable"
+)
+
+type DependencyPinger interface {
 	Ping(ctx context.Context) error
 }
 
-func MountHealth(r chi.Router, deps map[string]Pinger) {
-	r.Get("/healthz", func(w http.ResponseWriter, req *http.Request) {
-		WriteData(w, req, http.StatusOK, map[string]string{"status": "ok"})
+func MountHealth(r chi.Router, deps map[string]DependencyPinger) {
+	r.Get(LivenessPath, func(w http.ResponseWriter, req *http.Request) {
+		WriteSuccess(w, req, http.StatusOK, map[string]string{"status": LivenessStatus})
 	})
-	r.Get("/readyz", func(w http.ResponseWriter, req *http.Request) {
+	r.Get(ReadinessPath, func(w http.ResponseWriter, req *http.Request) {
 		failing := map[string]any{}
 		for name, dep := range deps {
 			if err := dep.Ping(req.Context()); err != nil {
-				failing[name] = "unreachable"
+				failing[name] = DependencyUnreachableStatus
 			}
 		}
 		if len(failing) > 0 {
 			WriteError(w, req, errors.ErrProviderUnavailable.WithDetails(failing))
 			return
 		}
-		WriteData(w, req, http.StatusOK, map[string]string{"status": "ready"})
+		WriteSuccess(w, req, http.StatusOK, map[string]string{"status": ReadinessStatus})
 	})
 }

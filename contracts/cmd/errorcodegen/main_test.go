@@ -8,12 +8,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRunWritesGoPythonAndTypeScriptOutputs(t *testing.T) {
+func TestRun_WritesGoPythonAndTypeScriptOutputs(t *testing.T) {
 	directory := t.TempDir()
 	canonical := filepath.Join(directory, "errors", "errors.go")
 	python := filepath.Join(directory, "python", "codes.py")
 	typescript := filepath.Join(directory, "typescript", "codes.ts")
-	require.NoError(t, run("../../internal/errgen/testdata/errors.yaml", canonical, python, typescript))
+	require.NoError(t, run("../../internal/errorcodegen/testdata/errors.yaml", canonical, python, typescript))
 	for path, expected := range map[string]string{
 		canonical: "package errors",
 		python:    "INTERNAL_ERROR", typescript: "INTERNAL_ERROR",
@@ -24,7 +24,7 @@ func TestRunWritesGoPythonAndTypeScriptOutputs(t *testing.T) {
 	}
 }
 
-func TestRunRejectsInvalidCatalogWithoutWritingOutputs(t *testing.T) {
+func TestRun_RejectsInvalidCatalogWithoutWritingOutputs(t *testing.T) {
 	directory := t.TempDir()
 	source := filepath.Join(directory, "invalid.yaml")
 	output := filepath.Join(directory, "errors.go")

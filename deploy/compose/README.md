@@ -21,8 +21,8 @@ Configuration is mounted read only; credentials come from compose/.env.
 
 Prometheus, Grafana, and both Langfuse services have real HTTP healthchecks.
 Grafana waits for healthy Prometheus; Langfuse web waits for a healthy worker.
-Collector, Loki, and relay still need additional internal probe implementations;
-their prescribed images lack an HTTP client, and relay has no readiness endpoint.
+Collector, Loki, and `outbox-relay` still need additional internal probe implementations;
+their prescribed images lack an HTTP client, and `outbox-relay` has no readiness endpoint.
 The migration and bootstrap jobs remain one-shot completed-successfully gates.
 
 ## Common failures

@@ -1,10 +1,10 @@
-# Tracing
+# TraceRequests
 
 ## Purpose
 Owns OTLP trace and log provider lifecycle.
 
 ## Entry points
-- `Setup`, `Providers.Shutdown`
+- `Setup`, `Telemetry.Shutdown`
 
 ## Dependencies
 - Uses: OTEL SDK and otelslog; consumed by core
@@ -16,6 +16,7 @@ go test ./... -count=1
 ```
 
 ## Conventions
+See the [shared naming glossary](../../../../docs/glossary.md) for terms used across services.
 An empty endpoint disables exporters. W3C trace context and baggage propagation are registered. Pass the OTLP HTTP base endpoint; trailing slashes are normalized before the named traces and logs paths are appended. Shut providers down after HTTP stops with a caller-provided deadline.
 
 ## Common failures

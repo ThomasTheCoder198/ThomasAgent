@@ -6,8 +6,8 @@ Builds service images and runs the local infrastructure, application, and observ
 ## Entry points
 - `compose/compose.infra.yaml`: Postgres, Redis, Qdrant, and MinIO.
 - `compose/compose.observability.yaml`: collector, metrics, logs, Grafana, and Langfuse.
-- `compose/compose.yaml`: migrations, core, relay, RAG bootstrap, and API.
-- `../scripts/smoke.sh`: checks service health and the core error envelope.
+- `compose/compose.yaml`: migrations, core, `outbox-relay`, RAG bootstrap, and API.
+- `../scripts/smoke.sh`: checks service health and the core error response.
 
 ## Dependencies
 - Uses Docker Desktop Linux engine and Docker Compose; builds backend-core and ragx.
@@ -36,7 +36,8 @@ task down
 | Prometheus / Loki | 9090 / 3100 |
 
 ## Conventions
-Migrations must finish successfully before core and relay start. RAG bootstrap creates
+Shared response and health terminology is defined in the [glossary](../docs/glossary.md).
+Migrations must finish successfully before core and `outbox-relay` start. RAG bootstrap creates
 buckets before RAG API and Langfuse worker start. Named volumes preserve data on down.
 The collector release uses the published 0.162.0-amd64 tag: this stack requires linux/amd64.
 
@@ -52,12 +53,12 @@ Prometheus readiness, Grafana health, and Langfuse worker/web health/readiness u
 checks with wget already present in their pinned images. Grafana waits for healthy
 Prometheus and Langfuse web waits for a healthy worker. Langfuse checks use service DNS
 because the pinned services bind their container hostname rather than loopback.
-Collector, Loki, and relay have no in-image HTTP probe client; relay also exposes no
+Collector, Loki, and `outbox-relay` have no in-image HTTP probe client; `outbox-relay` also exposes no
 readiness endpoint. Their compose healthchecks remain unresolved pending a probe
 implementation. Grafana can only wait for Loki to start until such a probe exists.
 
 ## Common failures
-- Failed migrate prevents core and relay startup: inspect migrate logs and fix the migration.
+- Failed migrate prevents core and `outbox-relay` startup: inspect migrate logs and fix the migration.
 - Existing Postgres volume lacks langfuse: create that database or reset development volumes.
 - Health failures: inspect compose logs and check occupied host ports and .env credentials.
 

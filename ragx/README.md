@@ -24,7 +24,7 @@ uv run mypy src
 ```
 
 ## Conventions
-Settings use RAG_ variables. Required credentials are RAG_CORE_SERVICE_TOKEN, RAG_MINIO_ACCESS_KEY, and RAG_MINIO_SECRET_KEY. Errors use catalog codes and envelopes; boundary logs omit exception text and document content.
+Config uses `RAG_` variables. Required credentials are `RAG_CORE_SERVICE_TOKEN`, `RAG_MINIO_ACCESS_KEY`, and `RAG_MINIO_SECRET_KEY`. See the [glossary](../docs/glossary.md) for shared naming and response terms. Boundary logs omit exception text and document content.
 
 ## Common failures
 - Missing credentials: supply the required RAG_ environment variables.

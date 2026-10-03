@@ -22,32 +22,32 @@ type BreakerConfig struct {
 	HalfOpenMaxCalls uint32        `env:"HALF_OPEN_MAX_CALLS" envDefault:"1"`
 }
 
-type StreamConfig struct {
-	MaxDeliveries     int           `env:"MAX_DELIVERIES" envDefault:"5"`
+type ConsumerConfig struct {
+	MaxDeliveries     int           `env:"MAX_DELIVERIES" envDefault:"4"`
 	VisibilityTimeout time.Duration `env:"VISIBILITY_TIMEOUT" envDefault:"30s"`
 	BlockTimeout      time.Duration `env:"BLOCK_TIMEOUT" envDefault:"5s"`
 	BatchSize         int64         `env:"BATCH_SIZE" envDefault:"16"`
 }
 
-type RelayConfig struct {
+type OutboxRelayConfig struct {
 	BatchSize    int           `env:"BATCH_SIZE" envDefault:"100"`
 	PollInterval time.Duration `env:"POLL_INTERVAL" envDefault:"500ms"`
 }
 
 type Config struct {
-	Env               string        `env:"ENV" envDefault:"dev"`
-	ServiceName       string        `env:"SERVICE_NAME" envDefault:"thomas-core"`
-	HTTPAddr          string        `env:"HTTP_ADDR" envDefault:":8080"`
-	ShutdownTimeout   time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"15s"`
-	ReadHeaderTimeout time.Duration `env:"READ_HEADER_TIMEOUT" envDefault:"10s"`
-	DatabaseURL       string        `env:"DATABASE_URL,required,notEmpty"`
-	RedisURL          string        `env:"REDIS_URL,required,notEmpty"`
-	OTLPEndpoint      string        `env:"OTLP_ENDPOINT"`
-	LogLevel          string        `env:"LOG_LEVEL" envDefault:"info"`
-	Retry             RetryConfig   `envPrefix:"RETRY_"`
-	Breaker           BreakerConfig `envPrefix:"BREAKER_"`
-	Stream            StreamConfig  `envPrefix:"STREAM_"`
-	Relay             RelayConfig   `envPrefix:"RELAY_"`
+	Environment       string            `env:"ENV" envDefault:"dev"`
+	ServiceName       string            `env:"SERVICE_NAME" envDefault:"thomas-core"`
+	HTTPAddr          string            `env:"HTTP_ADDR" envDefault:":8080"`
+	ShutdownTimeout   time.Duration     `env:"SHUTDOWN_TIMEOUT" envDefault:"15s"`
+	ReadHeaderTimeout time.Duration     `env:"READ_HEADER_TIMEOUT" envDefault:"10s"`
+	DatabaseURL       string            `env:"DATABASE_URL,required,notEmpty"`
+	RedisURL          string            `env:"REDIS_URL,required,notEmpty"`
+	OTLPEndpoint      string            `env:"OTLP_ENDPOINT"`
+	LogLevel          string            `env:"LOG_LEVEL" envDefault:"info"`
+	Retry             RetryConfig       `envPrefix:"RETRY_"`
+	Breaker           BreakerConfig     `envPrefix:"BREAKER_"`
+	Stream            ConsumerConfig    `envPrefix:"STREAM_"`
+	OutboxRelay       OutboxRelayConfig `envPrefix:"RELAY_"`
 }
 
 const envPrefix = "CORE_"

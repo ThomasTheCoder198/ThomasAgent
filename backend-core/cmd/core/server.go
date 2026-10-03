@@ -19,13 +19,13 @@ func (a *application) serveHTTP(ctx context.Context) error {
 		return err
 	}
 	defer pool.Close()
-	rdb, err := a.openRedis(ctx)
+	redisClient, err := a.openRedis(ctx)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = rdb.Close() }()
-	r := httpx.NewRouter(httpx.SlogErrorLogger(a.log), httpx.Tracing(a.cfg.ServiceName), httpx.AccessLog(a.log))
-	httpx.MountHealth(r, a.readinessChecks(pool, rdb))
+	defer func() { _ = redisClient.Close() }()
+	r := httpx.NewRouter(httpx.NewSlogErrorLogger(a.log), httpx.TraceRequests(a.cfg.ServiceName), httpx.LogAccess(a.log))
+	httpx.MountHealth(r, a.readinessChecks(pool, redisClient))
 	srv := &http.Server{Addr: a.cfg.HTTPAddr, Handler: r, ReadHeaderTimeout: a.cfg.ReadHeaderTimeout}
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
@@ -46,6 +46,6 @@ func (a *application) serveHTTP(ctx context.Context) error {
 	}
 }
 
-func (a *application) readinessChecks(pool *pgxpool.Pool, rdb *redis.Client) map[string]httpx.Pinger {
-	return map[string]httpx.Pinger{"postgres": pool, "redis": redisx.Pinger{Client: rdb}}
+func (a *application) readinessChecks(pool *pgxpool.Pool, redisClient *redis.Client) map[string]httpx.DependencyPinger {
+	return map[string]httpx.DependencyPinger{"postgres": pool, "redis": redisx.ClientPinger{Client: redisClient}}
 }

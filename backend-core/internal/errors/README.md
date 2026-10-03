@@ -6,11 +6,11 @@ Codes, HTTP statuses, retryability and VI/EN messages come from `contracts/error
 HTTP serialization and boundary logging belong to `platform/httpx` and callers.
 
 ## Entry points
-- Generated `errors.go`: `ErrNotFound`, other named sentinels, `Code` constants and `LookupDefinition`.
+- Generated `errors.go`: `ErrNotFound`, other named errors, `Code` constants and `LookupDefinition`.
 - `ErrorDefinition`: explicit `HTTPStatus`, `Retryable`, `MessageVI` and `MessageEN` metadata.
 - `ErrNotFound.WithCause(err)`, `.WithDetails(details)` and `.WithMessage(message)` construct fresh `*AppError` values.
-- `From`: finds wrapped application errors and normalizes named sentinels; unknown causes become INTERNAL_ERROR.
-- `Status`, `Retryable`, `LocalizedMessage` and `LangFromHeader`: policy and localization for boundaries.
+- `ToAppError` and `CodeOf`: find wrapped application errors and normalizes named errors; unknown causes become INTERNAL_ERROR.
+- `HTTPStatus`, `Retryable`, `LocalizedMessage` and `LangFromHeader`: policy and localization for boundaries.
 
 ## Dependencies
 - Uses: generated contracts and the Go standard library.
@@ -24,6 +24,7 @@ go test ./internal/errors ./internal/platform/httpx ./internal/platform/retry -c
 ```
 
 ## Conventions
+See the [shared naming glossary](../../../docs/glossary.md) for terms used across services.
 Keep this package imported as `errors`. In files needing both error packages,
 import the standard library as `stderrors "errors"`; use `stderrors.Is` and
 `stderrors.As` for matching and `errors.ErrNotFound` for application definitions.
@@ -38,7 +39,7 @@ return errors.ErrProviderUnavailable.WithCause(err)
 Named errors are typed constants, so a request cannot mutate a shared error.
 `WithCause`, `WithMessage` and `WithDetails` return fresh values; details maps are copied shallowly.
 Standard `stderrors.Is` matches application codes and still traverses causes.
-Standard `stderrors.As` can normalize a sentinel into `*AppError`; `From` uses the same behavior.
+Standard `stderrors.As` can normalize a named error into `*AppError`; `ToAppError` uses the same behavior.
 Generated lookup uses an immutable switch rather than a mutable package-wide map.
 Unknown codes retain their code but use INTERNAL_ERROR status, retryability and messages.
 Never edit `errors.go` manually or log here; log once at the caller's boundary.

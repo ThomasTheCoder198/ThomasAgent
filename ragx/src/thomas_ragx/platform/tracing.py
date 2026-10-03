@@ -3,18 +3,18 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-from thomas_ragx.platform.settings import Settings
+from thomas_ragx.platform.config import Config
 
 TRACES_PATH = "/v1/traces"
 
 
-def configure_tracing(settings: Settings) -> TracerProvider:
+def configure_tracing(config: Config) -> TracerProvider:
     resource = Resource.create(
-        {"service.name": settings.service_name, "deployment.environment": settings.env}
+        {"service.name": config.service_name, "deployment.environment": config.environment}
     )
     provider = TracerProvider(resource=resource)
-    if settings.otlp_endpoint:
+    if config.otlp_endpoint:
         provider.add_span_processor(
-            BatchSpanProcessor(OTLPSpanExporter(endpoint=settings.otlp_endpoint.rstrip("/") + TRACES_PATH))
+            BatchSpanProcessor(OTLPSpanExporter(endpoint=config.otlp_endpoint.rstrip("/") + TRACES_PATH))
         )
     return provider

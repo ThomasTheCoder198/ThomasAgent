@@ -12,24 +12,24 @@ import (
 const migrationStatusCommand = "status"
 
 func (a *application) applyMigrations(ctx context.Context, args []string) error {
-	ctx, span := a.dependencyTracer.Start(ctx, "postgres.migrate", trace.WithSpanKind(trace.SpanKindClient))
+	ctx, span := a.startupTracer.Start(ctx, postgresMigrateSpan, trace.WithSpanKind(trace.SpanKindClient))
 	defer span.End()
-	dir := postgres.Up
+	direction := postgres.Up
 	if len(args) > 0 {
 		if args[0] == migrationStatusCommand {
 			return a.reportMigrationStatus(ctx, span)
 		}
-		dir = postgres.Direction(args[0])
+		direction = postgres.Direction(args[0])
 	}
-	if err := postgres.Migrate(ctx, a.cfg.DatabaseURL, migrations.FS, dir); err != nil {
+	if err := postgres.Migrate(ctx, a.cfg.DatabaseURL, migrations.FS, direction); err != nil {
 		return a.recordDependencyFailure(ctx, span, "migration failed", err, a.cfg.DatabaseURL)
 	}
-	a.log.InfoContext(ctx, "migrations applied", "direction", string(dir))
+	a.log.InfoContext(ctx, "migrations applied", "direction", string(direction))
 	return nil
 }
 
 func (a *application) reportMigrationStatus(ctx context.Context, span trace.Span) error {
-	statuses, err := postgres.Status(ctx, a.cfg.DatabaseURL, migrations.FS)
+	statuses, err := postgres.MigrationStatuses(ctx, a.cfg.DatabaseURL, migrations.FS)
 	if err != nil {
 		return a.recordDependencyFailure(ctx, span, "migration status failed", err, a.cfg.DatabaseURL)
 	}

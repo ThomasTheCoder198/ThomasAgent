@@ -5,8 +5,8 @@ Single source for error codes and shared schemas used by the Go core, Python RAG
 
 ## Entry points
 - `errors.yaml` — authoritative error codes, HTTP statuses, retryability, and VI/EN messages.
-- `cmd/errgen` — command invoked by `task gen`.
-- `internal/errgen` — catalog parser and Go, Python, and TypeScript renderers.
+- `cmd/errorcodegen` — command invoked by `task gen`.
+- `internal/errorcodegen` — catalog parser and Go, Python, and TypeScript renderers.
 
 ## Dependencies
 - Uses: `gopkg.in/yaml.v3` v3.0.1; tests use `github.com/stretchr/testify` v1.12.1.
@@ -34,8 +34,10 @@ Three files are generated: `backend-core/internal/errors/errors.go` (canonical G
 The canonical Go file defines immutable named errors such as `errors.ErrNotFound` and
 maps codes to `ErrorDefinition{HTTPStatus, Retryable, MessageVI, MessageEN}` through `LookupDefinition`.
 There is no second Go message catalog or mutable global error instance.
+Python exposes `ErrorDefinition.http_status` and `ERROR_DEFINITIONS`; TypeScript exposes
+`errorDefinitions` with `httpStatus`. See the [glossary](../docs/glossary.md) for shared terminology.
 
 ## Common failures
 - Invalid catalog → malformed YAML, duplicate code, unsupported version, invalid status, or missing message → correct `errors.yaml` and rerun generation.
-- Golden mismatch → output differs from the fixtures → inspect the diff; update a golden only for an intentional catalog/API change.
+- Golden mismatch → output differs from the fixtures → inspect the diff; regenerate an intentional change with the generator tests described in [the renderer README](internal/errorcodegen/README.md).
 - Missing dependency checksum → dependencies have not been resolved → run `go mod tidy`.

@@ -1,14 +1,14 @@
 # RAG API
 
 ## Purpose
-Owns FastAPI construction, request tracing, error envelopes, and health endpoints.
+Owns FastAPI construction, request tracing, error responses, and health endpoints.
 
 ## Entry points
 - `app.py:create_app`: application factory.
 - `health.py`: GET /healthz.
 
 ## Dependencies
-- Uses: platform settings, errors, logging, and tracing.
+- Uses: platform config, errors, logging, and tracing.
 - Used by: CLI serve command and API tests.
 
 ## Run & test
@@ -19,7 +19,9 @@ uv run pytest -q tests/unit
 ```
 
 ## Conventions
-Settings use RAG_ variables. Required credentials are RAG_CORE_SERVICE_TOKEN, RAG_MINIO_ACCESS_KEY, and RAG_MINIO_SECRET_KEY. Errors use catalog codes and envelopes; boundary logs omit exception text and document content.
+See the [RAG service conventions](../../../README.md#conventions) for Config, credentials, shared naming, and boundary logging.
+
+The application passes `Config.environment` to logging configuration, preserving the `env` log field. Middleware binds only the request ID; handler logs inherit it and the active request span, including synchronous handlers. Logging fields follow the [shared contract](../../../../backend-core/internal/platform/logging/README.md#log-field-contract).
 
 ## Common failures
 - Missing credentials: supply the required RAG_ environment variables.

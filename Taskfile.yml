@@ -7,7 +7,7 @@ tasks:
   gen:
     desc: Regenerate code from contracts/
     cmds:
-      - go run ./cmd/errgen -in errors.yaml -go ../backend-core/internal/errors/errors.go -py ../ragx/src/thomas_ragx/platform/error_codes_gen.py -ts ../frontend/lib/errors/codes.gen.ts
+      - go run ./cmd/errorcodegen -in errors.yaml -go ../backend-core/internal/errors/errors.go -py ../ragx/src/thomas_ragx/platform/error_codes_gen.py -ts ../frontend/lib/errors/codes.gen.ts
     dir: contracts
 
   lint:

@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/thomasthecoder198/thomastheragx/contracts/internal/errgen"
+	"github.com/thomasthecoder198/thomastheragx/contracts/internal/errorcodegen"
 )
 
 const (
@@ -15,32 +15,32 @@ const (
 )
 
 func main() {
-	in := flag.String("in", "errors.yaml", "catalog file")
+	inputPath := flag.String("in", "errors.yaml", "catalog file")
 	goOut := flag.String("go", "", "Go output file")
 	pyOut := flag.String("py", "", "Python output file")
 	tsOut := flag.String("ts", "", "TypeScript output file")
 	flag.Parse()
 
-	if err := run(*in, *goOut, *pyOut, *tsOut); err != nil {
-		fmt.Fprintln(os.Stderr, "errgen:", err)
+	if err := run(*inputPath, *goOut, *pyOut, *tsOut); err != nil {
+		fmt.Fprintln(os.Stderr, "errorcodegen:", err)
 		os.Exit(1)
 	}
 }
 
-func run(in, goOut, pyOut, tsOut string) error {
-	raw, err := os.ReadFile(in)
+func run(inputPath, goOut, pyOut, tsOut string) error {
+	raw, err := os.ReadFile(inputPath)
 	if err != nil {
-		return fmt.Errorf("read %s: %w", in, err)
+		return fmt.Errorf("read %s: %w", inputPath, err)
 	}
-	cat, err := errgen.Parse(raw)
-	if err != nil {
-		return err
-	}
-	goSrc, err := errgen.RenderGo(cat)
+	catalog, err := errorcodegen.Parse(raw)
 	if err != nil {
 		return err
 	}
-	outputs := map[string]string{goOut: goSrc, pyOut: errgen.RenderPython(cat), tsOut: errgen.RenderTS(cat)}
+	goSrc, err := errorcodegen.RenderGo(catalog)
+	if err != nil {
+		return err
+	}
+	outputs := map[string]string{goOut: goSrc, pyOut: errorcodegen.RenderPython(catalog), tsOut: errorcodegen.RenderTS(catalog)}
 	for path, content := range outputs {
 		if path == "" {
 			continue

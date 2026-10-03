@@ -1,7 +1,8 @@
 # Scripts
 
 ## Purpose
-Owns root service smoke checks.
+Owns root service smoke checks, including `ragx-health` and `error-response-404`.
+See the [glossary](../docs/glossary.md) for response and health terminology.
 
 ## Entry points
 - `smoke.sh`: called by `task smoke`.

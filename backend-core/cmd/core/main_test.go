@@ -25,19 +25,19 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tracing"
 )
 
-func TestDatabaseFailureBoundaries(t *testing.T) {
+func TestApplication_DatabaseFailuresRecordDiagnosticsOnce(t *testing.T) {
 	for _, operation := range []string{"migrate", "open"} {
 		t.Run(operation, func(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()
 			provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 			t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
 			var output bytes.Buffer
-			log, logErr := logging.New(&output, "info", "core-test", nil)
+			log, logErr := logging.NewLogger(&output, "info", "core-test", "test", nil)
 			require.NoError(t, logErr)
 			a := &application{
-				cfg:              config.Config{DatabaseURL: "postgres://nobody:secret-password@127.0.0.1:1/none?connect_timeout=1"},
-				log:              log,
-				dependencyTracer: provider.Tracer("core-test"),
+				cfg:           config.Config{DatabaseURL: "postgres://nobody:secret-password@127.0.0.1:1/none?connect_timeout=1"},
+				log:           log,
+				startupTracer: provider.Tracer("core-test"),
 			}
 			var err error
 			if operation == "migrate" {
@@ -48,7 +48,7 @@ func TestDatabaseFailureBoundaries(t *testing.T) {
 			require.Error(t, err)
 			spans := recorder.Ended()
 			require.Len(t, spans, 1)
-			require.Equal(t, "postgres."+operation, spans[0].Name())
+			require.Equal(t, "core.postgres."+operation, spans[0].Name())
 			require.Equal(t, codes.Error, spans[0].Status().Code)
 			var record map[string]any
 			require.NoError(t, json.Unmarshal(output.Bytes(), &record))
@@ -69,7 +69,7 @@ func TestDatabaseFailureBoundaries(t *testing.T) {
 	}
 }
 
-func TestRealMainHelper(t *testing.T) {
+func TestRealMain_Helper(t *testing.T) {
 	if os.Getenv("CORE_TEST_REAL_MAIN") != "1" {
 		return
 	}
@@ -80,36 +80,36 @@ func TestRealMainHelper(t *testing.T) {
 	os.Exit(runProcess())
 }
 
-func TestProcessReportsUsageBeforeLoadingConfiguration(t *testing.T) {
+func TestProcess_ReportsUsageBeforeLoadingConfiguration(t *testing.T) {
 	for _, command := range []string{"", "unknown"} {
 		t.Run(command, func(t *testing.T) {
 			t.Setenv("CORE_TEST_REAL_MAIN", "1")
 			t.Setenv("CORE_TEST_COMMAND", command)
 			t.Setenv("CORE_SHUTDOWN_TIMEOUT", "invalid-duration")
-			process := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestRealMainHelper$")
+			process := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestRealMain_Helper$")
 			output, err := process.CombinedOutput()
 			var exitErr *exec.ExitError
 			require.ErrorAs(t, err, &exitErr)
 			require.Equal(t, exitFailure, exitErr.ExitCode())
-			require.Contains(t, string(output), usage)
+			require.Contains(t, string(output), usageMessage)
 			require.NotContains(t, string(output), "invalid-duration")
 			require.NotContains(t, string(output), "error_code")
 			if command != "" {
-				require.Contains(t, string(output), `unknown command "unknown"`)
+				require.Contains(t, string(output), `unknown command "`+command+`"`)
 			}
 		})
 	}
 }
 
-func TestRealMainLogsDatabaseFailureOnce(t *testing.T) {
-	for _, command := range []string{"migrate", "serve"} {
+func TestRealMain_LogsDatabaseFailureOnce(t *testing.T) {
+	for _, command := range []string{"migrate", "serve", outboxRelayCommand} {
 		t.Run(command, func(t *testing.T) {
 			t.Setenv("CORE_TEST_REAL_MAIN", "1")
 			t.Setenv("CORE_TEST_COMMAND", command)
 			t.Setenv("CORE_DATABASE_URL", "postgres://nobody:secret-password@127.0.0.1:1/none?connect_timeout=1")
 			t.Setenv("CORE_REDIS_URL", "redis://127.0.0.1:1")
 			t.Setenv("CORE_OTLP_ENDPOINT", "")
-			process := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestRealMainHelper$")
+			process := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestRealMain_Helper$")
 			output, err := process.CombinedOutput()
 			var exitErr *exec.ExitError
 			require.ErrorAs(t, err, &exitErr)
@@ -125,7 +125,7 @@ func TestRealMainLogsDatabaseFailureOnce(t *testing.T) {
 	}
 }
 
-func TestSanitizeDependencyError(t *testing.T) {
+func TestSanitizeDependencyError_RemovesCredentials(t *testing.T) {
 	for _, fixture := range []struct{ dsn, password string }{
 		{"postgres://nobody:secret-password@localhost/none", "secret-password"},
 		{"postgres://nobody:secret%2Fpassword@localhost/none", "secret/password"},
@@ -142,10 +142,10 @@ func TestSanitizeDependencyError(t *testing.T) {
 	}
 }
 
-func TestTracingShutdownHasDeadline(t *testing.T) {
+func TestApplication_TelemetryShutdownHasDeadline(t *testing.T) {
 	a := &application{
 		cfg: config.Config{ShutdownTimeout: 20 * time.Millisecond},
-		tracer: tracing.Providers{Shutdown: func(ctx context.Context) error {
+		telemetry: tracing.Telemetry{Shutdown: func(ctx context.Context) error {
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			require.WithinDuration(t, time.Now().Add(20*time.Millisecond), deadline, 10*time.Millisecond)
@@ -169,7 +169,7 @@ func (w *cancelOnListeningWriter) Write(line []byte) (int, error) {
 	return n, err
 }
 
-func TestServeListeningLogCarriesTraceContext(t *testing.T) {
+func TestServe_ListeningLogCarriesTraceContext(t *testing.T) {
 	ctx := t.Context()
 	database, err := tcpostgres.Run(ctx, "postgres:18.6-alpine",
 		tcpostgres.WithDatabase("core"), tcpostgres.WithUsername("core"), tcpostgres.WithPassword("core"), tcpostgres.BasicWaitStrategies())
@@ -189,11 +189,11 @@ func TestServeListeningLogCarriesTraceContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	output := &cancelOnListeningWriter{cancel: cancel}
-	log, err := logging.New(output, "info", "core-test", nil)
+	log, err := logging.NewLogger(output, "info", "core-test", "test", nil)
 	require.NoError(t, err)
 	a := &application{
 		cfg: config.Config{DatabaseURL: databaseURL, RedisURL: redisURL, HTTPAddr: "127.0.0.1:0", ShutdownTimeout: time.Second},
-		log: log, dependencyTracer: provider.Tracer("core-test"),
+		log: log, startupTracer: provider.Tracer("core-test"),
 	}
 	require.NoError(t, a.serveHTTP(ctx))
 	var record map[string]any
@@ -202,7 +202,7 @@ func TestServeListeningLogCarriesTraceContext(t *testing.T) {
 	require.Equal(t, span.SpanContext().SpanID().String(), record["span_id"])
 }
 
-func TestHealthcheckDoesNotOpenDependencies(t *testing.T) {
+func TestHealthcheck_DoesNotOpenDependencies(t *testing.T) {
 	t.Setenv("CORE_DATABASE_URL", "postgres://invalid:invalid@127.0.0.1:1/none")
 	t.Setenv("CORE_REDIS_URL", "redis://127.0.0.1:1")
 	t.Setenv("CORE_OTLP_ENDPOINT", "")
@@ -215,10 +215,14 @@ func TestHealthcheckDoesNotOpenDependencies(t *testing.T) {
 	require.NoError(t, executeCommand(context.Background(), "healthcheck", nil))
 }
 
-func TestHealthcheckRejectsUnhealthyStatus(t *testing.T) {
+func TestHealthcheck_RejectsUnhealthyStatus(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer server.Close()
 	require.ErrorContains(t, checkHTTPHealth(context.Background(), strings.TrimPrefix(server.URL, "http://127.0.0.1")), "503")
+}
+
+func TestSpanNames_UseCoreServicePrefix(t *testing.T) {
+	require.Equal(t, []string{"core.postgres.open", "core.redis.startup", "core.postgres.migrate"}, []string{postgresOpenSpan, redisStartupSpan, postgresMigrateSpan})
 }

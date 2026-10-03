@@ -12,24 +12,24 @@ import (
 const (
 	exitOK             = 0
 	exitFailure        = 1
-	minArgs            = 2
+	minArgsWithCommand = 2
 	serveCommand       = "serve"
 	migrateCommand     = "migrate"
-	relayCommand       = "relay"
+	outboxRelayCommand = "outbox-relay"
 	healthcheckCommand = "healthcheck"
 )
 
-const usage = "usage: core <serve|migrate|relay|healthcheck> [args]"
+const usageMessage = "usage: core <serve|migrate|outbox-relay|healthcheck> [args]"
 
 func runProcess() int {
-	if len(os.Args) < minArgs {
-		fmt.Fprintln(os.Stderr, usage)
+	if len(os.Args) < minArgsWithCommand {
+		fmt.Fprintln(os.Stderr, usageMessage)
 		return exitFailure
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := executeCommand(ctx, os.Args[1], os.Args[minArgs:]); err != nil {
-		var logged loggedError
+	if err := executeCommand(ctx, os.Args[1], os.Args[minArgsWithCommand:]); err != nil {
+		var logged alreadyLoggedError
 		if !errors.As(err, &logged) {
 			fmt.Fprintln(os.Stderr, "core:", err)
 		}
@@ -40,9 +40,9 @@ func runProcess() int {
 
 func executeCommand(ctx context.Context, command string, args []string) error {
 	switch command {
-	case serveCommand, migrateCommand, relayCommand, healthcheckCommand:
+	case serveCommand, migrateCommand, outboxRelayCommand, healthcheckCommand:
 	default:
-		return fmt.Errorf("unknown command %q; %s", command, usage)
+		return fmt.Errorf("unknown command %q; %s", command, usageMessage)
 	}
 	a, err := newApplication(ctx)
 	if err != nil {
@@ -54,11 +54,11 @@ func executeCommand(ctx context.Context, command string, args []string) error {
 		return checkHTTPHealth(ctx, a.cfg.HTTPAddr)
 	case serveCommand:
 		return a.serveHTTP(ctx)
-	case relayCommand:
+	case outboxRelayCommand:
 		return a.runOutboxRelay(ctx)
 	case migrateCommand:
 		return a.applyMigrations(ctx, args)
 	default:
-		return fmt.Errorf("unknown command %q; %s", command, usage)
+		return fmt.Errorf("unknown command %q; %s", command, usageMessage)
 	}
 }

@@ -12,7 +12,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
 
-func Tracing(serviceName string) func(http.Handler) http.Handler {
+func TraceRequests(serviceName string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler { return otelhttp.NewHandler(next, serviceName) }
 }
 
@@ -56,7 +56,7 @@ func (s *statusRecorder) Flush() {
 
 func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
-func AccessLog(l *slog.Logger) func(http.Handler) http.Handler {
+func LogAccess(l *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -64,13 +64,13 @@ func AccessLog(l *slog.Logger) func(http.Handler) http.Handler {
 			next.ServeHTTP(rec, r)
 			l.InfoContext(r.Context(), "http request",
 				"method", r.Method, "path", r.URL.Path, "status", rec.status,
-				"duration_ms", time.Since(start).Milliseconds(), "request_id", RequestIDFrom(r.Context()))
+				"duration_ms", time.Since(start).Milliseconds())
 		})
 	}
 }
 
-func SlogErrorLogger(l *slog.Logger) ErrorLogger {
-	return func(ctx context.Context, err *errors.Error) {
-		l.ErrorContext(ctx, "request failed", "code", string(err.Code), "error", err.Error(), "details", err.Details, "request_id", RequestIDFrom(ctx))
+func NewSlogErrorLogger(l *slog.Logger) ErrorLogger {
+	return func(ctx context.Context, err *errors.AppError) {
+		l.ErrorContext(ctx, "request failed", "code", string(err.Code), "error", err.Error(), "details", err.Details)
 	}
 }

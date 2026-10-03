@@ -4,7 +4,8 @@
 Provides the generated shared error definitions for frontend consumers.
 
 ## Entry points
-- `codes.gen.ts`: catalog codes, statuses, retryability, and localized messages.
+- `codes.gen.ts`: `ErrorCode` and `errorDefinitions` with `httpStatus`, retryability, and localized messages.
+- [Glossary](../../../docs/glossary.md): shared error and response terminology.
 
 ## Dependencies
 - Uses: contracts/errors.yaml through the Go catalog generator.

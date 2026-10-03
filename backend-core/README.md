@@ -4,7 +4,7 @@
 Go API and agent runtime for ThomasAgent.
 
 ## Entry points
-- `cmd/core`: `serve|migrate|relay` command family. Implements serve, migrate, relay, and healthcheck.
+- `cmd/core`: `serve|migrate|outbox-relay` command family. Implements serve, migrate, outbox-relay, and healthcheck.
 - GET `/healthz`: liveness. GET `/readyz`: injected dependency checks.
 
 ## Dependencies
@@ -27,7 +27,7 @@ cd backend-core
 # Set CORE_DATABASE_URL and CORE_REDIS_URL to reachable services.
 go run ./cmd/core migrate up
 go run ./cmd/core serve
-go run ./cmd/core relay
+go run ./cmd/core outbox-relay
 go run ./cmd/core healthcheck
 go test ./... -count=1
 golangci-lint fmt ./...
@@ -35,7 +35,9 @@ golangci-lint run ./...
 ```
 
 ## Conventions
-Go 1.27.1 is pinned. CORE_ variables configure startup. Optional CORE_OTLP_ENDPOINT enables OTLP HTTP traces and logs. Serve opens and pings Postgres and Redis before listening; readiness checks both dependencies. All HTTP responses use the shared envelope.
+See the [shared naming glossary](../docs/glossary.md) for terms used across services.
+Go 1.27.1 is pinned. CORE_ variables configure startup. Optional CORE_OTLP_ENDPOINT enables OTLP HTTP traces and logs. Serve opens and pings Postgres and Redis before listening; readiness checks both dependencies. All HTTP responses use the shared response.
+Process, HTTP, and worker logs follow the shared [log field contract](internal/platform/logging/README.md#log-field-contract).
 
 ## Common failures
 - Missing database/Redis environment values fail config loading.

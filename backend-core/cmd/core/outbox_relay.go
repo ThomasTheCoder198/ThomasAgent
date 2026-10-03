@@ -12,12 +12,12 @@ func (a *application) runOutboxRelay(ctx context.Context) error {
 		return err
 	}
 	defer pool.Close()
-	rdb, err := a.openRedis(ctx)
+	redisClient, err := a.openRedis(ctx)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = rdb.Close() }()
-	r := &jobs.Relay{Pool: pool, Redis: rdb, BatchSize: a.cfg.Relay.BatchSize, PollInterval: a.cfg.Relay.PollInterval, Log: a.log}
+	defer func() { _ = redisClient.Close() }()
+	r := &jobs.OutboxRelay{Pool: pool, Redis: redisClient, BatchSize: a.cfg.OutboxRelay.BatchSize, PollInterval: a.cfg.OutboxRelay.PollInterval, Log: a.log}
 	a.log.InfoContext(ctx, "outbox relay started")
 	return r.Run(ctx)
 }

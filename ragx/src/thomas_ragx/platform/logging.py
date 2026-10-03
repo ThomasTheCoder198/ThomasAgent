@@ -57,7 +57,7 @@ def _add_trace(_logger: Any, _method: str, event_dict: MutableMapping[str, Any])
     return event_dict
 
 
-def configure_logging(level: str, service: str) -> None:
+def configure_logging(level: str, service: str, environment: str) -> None:
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
@@ -71,4 +71,4 @@ def configure_logging(level: str, service: str) -> None:
         wrapper_class=structlog.make_filtering_bound_logger(LEVELS[level]),
         cache_logger_on_first_use=True,
     )
-    structlog.contextvars.bind_contextvars(service=service)
+    structlog.contextvars.bind_contextvars(service=service, env=environment)

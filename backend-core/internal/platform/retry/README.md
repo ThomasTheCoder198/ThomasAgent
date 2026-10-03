@@ -5,11 +5,11 @@ Provides shared synchronous retries with exponential backoff and full jitter,
 and a circuit breaker for provider calls.
 
 ## Entry points
-- `FromConfig` builds a policy from typed `config.RetryConfig`.
-- `BreakerFromConfig` builds named breaker settings from typed `config.BreakerConfig`.
+- `NewPolicy` builds a policy embedding `config.RetryConfig`; `Sleep` and `Rand` remain injectable test seams.
+- `NewBreaker(name, config.BreakerConfig)` creates the named breaker directly from typed config.
 - `Do` executes an operation up to `MaxAttempts`, including its initial call.
 - `Backoff` computes the capped jittered delay for a zero-based retry attempt.
-- `IsRetryable` classifies catalog errors, network errors and `RetryAfterer`.
+- `IsRetryable` classifies catalog errors, network errors and `RetryAfterProvider`.
 - `NewBreaker` and `Breaker.Execute` gate provider calls with gobreaker.
 
 ## Dependencies
@@ -25,18 +25,17 @@ golangci-lint run ./...
 ```
 
 ## Conventions
-- Load and validate config before calling `FromConfig`; custom policies must
+See the [shared naming glossary](../../../../docs/glossary.md) for terms used across services.
+- Load and validate config before calling `NewPolicy`; custom policies must
   supply valid attempts/delays and non-nil sleep/random functions.
-- Positive `RetryAfterer` delays override backoff up to `Policy.MaxDelay`.
-- Catalog retryability takes precedence over `RetryAfterer` wrappers; a delay
+- Positive `RetryAfterProvider` delays override backoff up to `Policy.MaxDelay`.
+- Catalog retryability takes precedence over `RetryAfterProvider` wrappers; a delay
   hint cannot cause non-retryable catalog errors to be retried.
-- Named sentinels and per-call `*AppError` values share the same retry policy;
+- Named errors and per-call `*AppError` values share the same retry policy;
   the breaker returns `ErrProviderUnavailable.WithCause(err)` when calls are blocked.
 - Context cancellation is non-retryable; the default wait is cancellable.
 - Failed waits preserve both operation and wait errors through `stderrors.Join`.
-- Load and validate config before calling `BreakerFromConfig`; defaults are five
-  failures, a 30-second open timeout and one half-open call. Thresholds and
-  half-open call limits must be at least one.
+- Load and validate config before calling `NewBreaker`; see [config defaults](../config/README.md). Thresholds and half-open call limits must be at least one.
 - Only consecutive retryable operation failures trip the breaker. Client errors
   count as successful calls so invalid requests cannot block valid traffic.
   Open and saturated half-open

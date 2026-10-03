@@ -19,22 +19,20 @@ const (
 )
 
 type Policy struct {
-	MaxAttempts int
-	BaseDelay   time.Duration
-	MaxDelay    time.Duration
-	Sleep       func(context.Context, time.Duration) error
-	Rand        func() float64
+	config.RetryConfig
+	Sleep func(context.Context, time.Duration) error
+	Rand  func() float64
 }
 
-type RetryAfterer interface {
+type RetryAfterProvider interface {
 	RetryAfter() time.Duration
 }
 
-func FromConfig(c config.RetryConfig) Policy {
-	return Policy{MaxAttempts: c.MaxAttempts, BaseDelay: c.BaseDelay, MaxDelay: c.MaxDelay, Sleep: sleepCtx, Rand: rand.Float64}
+func NewPolicy(c config.RetryConfig) Policy {
+	return Policy{RetryConfig: c, Sleep: sleepWithContext, Rand: rand.Float64}
 }
 
-func sleepCtx(ctx context.Context, d time.Duration) error {
+func sleepWithContext(ctx context.Context, d time.Duration) error {
 	t := time.NewTimer(d)
 	defer t.Stop()
 	select {
@@ -53,7 +51,7 @@ func IsRetryable(err error) bool {
 	if stderrors.As(err, &appErr) {
 		return appErr.Retryable()
 	}
-	var ra RetryAfterer
+	var ra RetryAfterProvider
 	if stderrors.As(err, &ra) {
 		return true
 	}
@@ -83,7 +81,7 @@ func Do(ctx context.Context, p Policy, op func(context.Context) error) error {
 			break
 		}
 		delay := Backoff(p, attempt)
-		var ra RetryAfterer
+		var ra RetryAfterProvider
 		if stderrors.As(err, &ra) && ra.RetryAfter() > 0 {
 			delay = min(ra.RetryAfter(), p.MaxDelay)
 		}

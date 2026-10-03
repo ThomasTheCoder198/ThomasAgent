@@ -14,10 +14,10 @@ import (
 )
 
 type application struct {
-	cfg              config.Config
-	log              *slog.Logger
-	tracer           tracing.Providers
-	dependencyTracer trace.Tracer
+	cfg           config.Config
+	log           *slog.Logger
+	telemetry     tracing.Telemetry
+	startupTracer trace.Tracer
 }
 
 func newApplication(ctx context.Context) (*application, error) {
@@ -25,19 +25,19 @@ func newApplication(ctx context.Context) (*application, error) {
 	if err != nil {
 		return nil, err
 	}
-	tp, err := tracing.Setup(ctx, cfg.ServiceName, cfg.Env, cfg.OTLPEndpoint)
+	tp, err := tracing.Setup(ctx, cfg.ServiceName, cfg.Environment, cfg.OTLPEndpoint)
 	if err != nil {
 		return nil, err
 	}
-	log, err := logging.New(os.Stdout, cfg.LogLevel, cfg.ServiceName, tp.LogHandler)
+	log, err := logging.NewLogger(os.Stdout, cfg.LogLevel, cfg.ServiceName, cfg.Environment, tp.LogHandler)
 	if err != nil {
 		return nil, err
 	}
-	return &application{cfg: cfg, tracer: tp, dependencyTracer: otel.Tracer(cfg.ServiceName), log: log}, nil
+	return &application{cfg: cfg, telemetry: tp, startupTracer: otel.Tracer(cfg.ServiceName), log: log}, nil
 }
 
 func (a *application) shutdownTelemetry() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), a.cfg.ShutdownTimeout)
 	defer cancel()
-	return a.tracer.Shutdown(shutdownCtx)
+	return a.telemetry.Shutdown(shutdownCtx)
 }

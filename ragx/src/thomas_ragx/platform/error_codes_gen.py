@@ -5,15 +5,27 @@ from typing import Final
 
 
 class ErrorCode(StrEnum):
+    AUTH_CSRF_INVALID = "AUTH_CSRF_INVALID"
+    AUTH_INVALID_CREDENTIALS = "AUTH_INVALID_CREDENTIALS"
+    AUTH_SESSION_EXPIRED = "AUTH_SESSION_EXPIRED"
     CONFLICT = "CONFLICT"
     DEPENDENCY_TIMEOUT = "DEPENDENCY_TIMEOUT"
     FORBIDDEN = "FORBIDDEN"
     INTERNAL_ERROR = "INTERNAL_ERROR"
+    INTERNAL_TOKEN_INVALID = "INTERNAL_TOKEN_INVALID"
     METHOD_NOT_ALLOWED = "METHOD_NOT_ALLOWED"
     NOT_FOUND = "NOT_FOUND"
     PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE"
     PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
     RATE_LIMITED = "RATE_LIMITED"
+    REGISTRY_CAPABILITY_MISMATCH = "REGISTRY_CAPABILITY_MISMATCH"
+    REGISTRY_MODEL_IN_USE = "REGISTRY_MODEL_IN_USE"
+    REGISTRY_MODEL_NOT_FOUND = "REGISTRY_MODEL_NOT_FOUND"
+    REGISTRY_NAME_TAKEN = "REGISTRY_NAME_TAKEN"
+    REGISTRY_PROVIDER_NOT_FOUND = "REGISTRY_PROVIDER_NOT_FOUND"
+    REGISTRY_PROVIDER_REJECTED = "REGISTRY_PROVIDER_REJECTED"
+    REGISTRY_ROLE_NOT_ASSIGNED = "REGISTRY_ROLE_NOT_ASSIGNED"
+    REGISTRY_SYNC_UNSUPPORTED = "REGISTRY_SYNC_UNSUPPORTED"
     UNAUTHENTICATED = "UNAUTHENTICATED"
     VALIDATION_FAILED = "VALIDATION_FAILED"
 
@@ -27,15 +39,27 @@ class ErrorDefinition:
 
 
 ERROR_DEFINITIONS: Final[dict[ErrorCode, ErrorDefinition]] = {
+    ErrorCode.AUTH_CSRF_INVALID: ErrorDefinition(http_status=403, retryable=False, message_vi="Yêu cầu không hợp lệ, vui lòng tải lại trang.", message_en="Invalid request, please reload the page."),
+    ErrorCode.AUTH_INVALID_CREDENTIALS: ErrorDefinition(http_status=401, retryable=False, message_vi="Email hoặc mật khẩu không đúng.", message_en="Incorrect email or password."),
+    ErrorCode.AUTH_SESSION_EXPIRED: ErrorDefinition(http_status=401, retryable=False, message_vi="Phiên đăng nhập đã hết hạn.", message_en="Your session has expired."),
     ErrorCode.CONFLICT: ErrorDefinition(http_status=409, retryable=False, message_vi="Dữ liệu bị xung đột với trạng thái hiện tại.", message_en="The request conflicts with the current state."),
     ErrorCode.DEPENDENCY_TIMEOUT: ErrorDefinition(http_status=504, retryable=True, message_vi="Dịch vụ phụ thuộc phản hồi quá chậm.", message_en="A dependency timed out."),
     ErrorCode.FORBIDDEN: ErrorDefinition(http_status=403, retryable=False, message_vi="Bạn không có quyền thực hiện thao tác này.", message_en="You are not allowed to do this."),
     ErrorCode.INTERNAL_ERROR: ErrorDefinition(http_status=500, retryable=False, message_vi="Đã có lỗi xảy ra. Vui lòng thử lại.", message_en="Something went wrong. Please try again."),
+    ErrorCode.INTERNAL_TOKEN_INVALID: ErrorDefinition(http_status=401, retryable=False, message_vi="Token dịch vụ không hợp lệ.", message_en="Invalid service token."),
     ErrorCode.METHOD_NOT_ALLOWED: ErrorDefinition(http_status=405, retryable=False, message_vi="Phương thức không được hỗ trợ.", message_en="This method is not allowed."),
     ErrorCode.NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy tài nguyên.", message_en="The resource was not found."),
     ErrorCode.PAYLOAD_TOO_LARGE: ErrorDefinition(http_status=413, retryable=False, message_vi="Dữ liệu gửi lên quá lớn.", message_en="The request payload is too large."),
     ErrorCode.PROVIDER_UNAVAILABLE: ErrorDefinition(http_status=503, retryable=True, message_vi="Dịch vụ bên ngoài đang không khả dụng.", message_en="An upstream provider is unavailable."),
     ErrorCode.RATE_LIMITED: ErrorDefinition(http_status=429, retryable=True, message_vi="Quá nhiều yêu cầu, vui lòng thử lại sau.", message_en="Too many requests, please retry later."),
+    ErrorCode.REGISTRY_CAPABILITY_MISMATCH: ErrorDefinition(http_status=422, retryable=False, message_vi="Model không có khả năng cần cho vai trò này.", message_en="The model lacks a capability this role requires."),
+    ErrorCode.REGISTRY_MODEL_IN_USE: ErrorDefinition(http_status=409, retryable=False, message_vi="Model đang được gán cho một vai trò.", message_en="The model is assigned to a role."),
+    ErrorCode.REGISTRY_MODEL_NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy model.", message_en="Model not found."),
+    ErrorCode.REGISTRY_NAME_TAKEN: ErrorDefinition(http_status=409, retryable=False, message_vi="Tên này đã được dùng.", message_en="This name is already in use."),
+    ErrorCode.REGISTRY_PROVIDER_NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy provider.", message_en="Provider not found."),
+    ErrorCode.REGISTRY_PROVIDER_REJECTED: ErrorDefinition(http_status=400, retryable=False, message_vi="Provider từ chối key hoặc cấu hình.", message_en="The provider rejected the key or configuration."),
+    ErrorCode.REGISTRY_ROLE_NOT_ASSIGNED: ErrorDefinition(http_status=404, retryable=False, message_vi="Vai trò này chưa được gán model.", message_en="No model is assigned to this role."),
+    ErrorCode.REGISTRY_SYNC_UNSUPPORTED: ErrorDefinition(http_status=400, retryable=False, message_vi="Provider này chưa hỗ trợ đồng bộ model.", message_en="Model sync is not supported for this provider."),
     ErrorCode.UNAUTHENTICATED: ErrorDefinition(http_status=401, retryable=False, message_vi="Bạn cần đăng nhập.", message_en="You need to sign in."),
     ErrorCode.VALIDATION_FAILED: ErrorDefinition(http_status=400, retryable=False, message_vi="Dữ liệu gửi lên không hợp lệ.", message_en="The request data is invalid."),
 }

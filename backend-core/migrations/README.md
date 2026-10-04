@@ -3,10 +3,13 @@
 ## Purpose
 Owns the versioned Postgres schema embedded in the core executable.
 The platform migration establishes the outbox and audit event tables.
+The identity/registry migration establishes users, sessions, secrets, providers,
+models, and tenant-specific model roles.
 
 ## Entry points
 - `FS` embeds all SQL files for the Postgres migration provider.
 - `20261003000001_platform.sql` creates `outbox` and `audit_events`.
+- `20261003000002_identity_registry.sql` creates the six identity/registry tables and their constraints.
 - `task migrate` applies pending migrations through Compose.
 - `core migrate status` reports applied and pending migration versions.
 
@@ -40,4 +43,4 @@ Keep development seeds separate from schema migrations.
 ## Common failures
 - SQL failure: the migration returns an error; inspect the unapplied SQL.
 - Missing database configuration: set the required core environment variables.
-- Down removes platform tables and their data; use only on disposable dev data.
+- Down removes the latest migration's tables and their data; two successive downs remove identity/registry, then platform tables. Use only on disposable dev data.

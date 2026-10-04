@@ -5,35 +5,65 @@ package errors
 type Code string
 
 const (
-	CodeConflict            Code = "CONFLICT"
-	CodeDependencyTimeout   Code = "DEPENDENCY_TIMEOUT"
-	CodeForbidden           Code = "FORBIDDEN"
-	CodeInternalError       Code = "INTERNAL_ERROR"
-	CodeMethodNotAllowed    Code = "METHOD_NOT_ALLOWED"
-	CodeNotFound            Code = "NOT_FOUND"
-	CodePayloadTooLarge     Code = "PAYLOAD_TOO_LARGE"
-	CodeProviderUnavailable Code = "PROVIDER_UNAVAILABLE"
-	CodeRateLimited         Code = "RATE_LIMITED"
-	CodeUnauthenticated     Code = "UNAUTHENTICATED"
-	CodeValidationFailed    Code = "VALIDATION_FAILED"
+	CodeAuthCsrfInvalid            Code = "AUTH_CSRF_INVALID"
+	CodeAuthInvalidCredentials     Code = "AUTH_INVALID_CREDENTIALS"
+	CodeAuthSessionExpired         Code = "AUTH_SESSION_EXPIRED"
+	CodeConflict                   Code = "CONFLICT"
+	CodeDependencyTimeout          Code = "DEPENDENCY_TIMEOUT"
+	CodeForbidden                  Code = "FORBIDDEN"
+	CodeInternalError              Code = "INTERNAL_ERROR"
+	CodeInternalTokenInvalid       Code = "INTERNAL_TOKEN_INVALID"
+	CodeMethodNotAllowed           Code = "METHOD_NOT_ALLOWED"
+	CodeNotFound                   Code = "NOT_FOUND"
+	CodePayloadTooLarge            Code = "PAYLOAD_TOO_LARGE"
+	CodeProviderUnavailable        Code = "PROVIDER_UNAVAILABLE"
+	CodeRateLimited                Code = "RATE_LIMITED"
+	CodeRegistryCapabilityMismatch Code = "REGISTRY_CAPABILITY_MISMATCH"
+	CodeRegistryModelInUse         Code = "REGISTRY_MODEL_IN_USE"
+	CodeRegistryModelNotFound      Code = "REGISTRY_MODEL_NOT_FOUND"
+	CodeRegistryNameTaken          Code = "REGISTRY_NAME_TAKEN"
+	CodeRegistryProviderNotFound   Code = "REGISTRY_PROVIDER_NOT_FOUND"
+	CodeRegistryProviderRejected   Code = "REGISTRY_PROVIDER_REJECTED"
+	CodeRegistryRoleNotAssigned    Code = "REGISTRY_ROLE_NOT_ASSIGNED"
+	CodeRegistrySyncUnsupported    Code = "REGISTRY_SYNC_UNSUPPORTED"
+	CodeUnauthenticated            Code = "UNAUTHENTICATED"
+	CodeValidationFailed           Code = "VALIDATION_FAILED"
 )
 
 const (
-	ErrConflict            NamedError = NamedError(CodeConflict)
-	ErrDependencyTimeout   NamedError = NamedError(CodeDependencyTimeout)
-	ErrForbidden           NamedError = NamedError(CodeForbidden)
-	ErrInternalError       NamedError = NamedError(CodeInternalError)
-	ErrMethodNotAllowed    NamedError = NamedError(CodeMethodNotAllowed)
-	ErrNotFound            NamedError = NamedError(CodeNotFound)
-	ErrPayloadTooLarge     NamedError = NamedError(CodePayloadTooLarge)
-	ErrProviderUnavailable NamedError = NamedError(CodeProviderUnavailable)
-	ErrRateLimited         NamedError = NamedError(CodeRateLimited)
-	ErrUnauthenticated     NamedError = NamedError(CodeUnauthenticated)
-	ErrValidationFailed    NamedError = NamedError(CodeValidationFailed)
+	ErrAuthCsrfInvalid            NamedError = NamedError(CodeAuthCsrfInvalid)
+	ErrAuthInvalidCredentials     NamedError = NamedError(CodeAuthInvalidCredentials)
+	ErrAuthSessionExpired         NamedError = NamedError(CodeAuthSessionExpired)
+	ErrConflict                   NamedError = NamedError(CodeConflict)
+	ErrDependencyTimeout          NamedError = NamedError(CodeDependencyTimeout)
+	ErrForbidden                  NamedError = NamedError(CodeForbidden)
+	ErrInternalError              NamedError = NamedError(CodeInternalError)
+	ErrInternalTokenInvalid       NamedError = NamedError(CodeInternalTokenInvalid)
+	ErrMethodNotAllowed           NamedError = NamedError(CodeMethodNotAllowed)
+	ErrNotFound                   NamedError = NamedError(CodeNotFound)
+	ErrPayloadTooLarge            NamedError = NamedError(CodePayloadTooLarge)
+	ErrProviderUnavailable        NamedError = NamedError(CodeProviderUnavailable)
+	ErrRateLimited                NamedError = NamedError(CodeRateLimited)
+	ErrRegistryCapabilityMismatch NamedError = NamedError(CodeRegistryCapabilityMismatch)
+	ErrRegistryModelInUse         NamedError = NamedError(CodeRegistryModelInUse)
+	ErrRegistryModelNotFound      NamedError = NamedError(CodeRegistryModelNotFound)
+	ErrRegistryNameTaken          NamedError = NamedError(CodeRegistryNameTaken)
+	ErrRegistryProviderNotFound   NamedError = NamedError(CodeRegistryProviderNotFound)
+	ErrRegistryProviderRejected   NamedError = NamedError(CodeRegistryProviderRejected)
+	ErrRegistryRoleNotAssigned    NamedError = NamedError(CodeRegistryRoleNotAssigned)
+	ErrRegistrySyncUnsupported    NamedError = NamedError(CodeRegistrySyncUnsupported)
+	ErrUnauthenticated            NamedError = NamedError(CodeUnauthenticated)
+	ErrValidationFailed           NamedError = NamedError(CodeValidationFailed)
 )
 
 func LookupDefinition(code Code) ErrorDefinition {
 	switch code {
+	case CodeAuthCsrfInvalid:
+		return ErrorDefinition{HTTPStatus: 403, Retryable: false, MessageVI: "Yêu cầu không hợp lệ, vui lòng tải lại trang.", MessageEN: "Invalid request, please reload the page."}
+	case CodeAuthInvalidCredentials:
+		return ErrorDefinition{HTTPStatus: 401, Retryable: false, MessageVI: "Email hoặc mật khẩu không đúng.", MessageEN: "Incorrect email or password."}
+	case CodeAuthSessionExpired:
+		return ErrorDefinition{HTTPStatus: 401, Retryable: false, MessageVI: "Phiên đăng nhập đã hết hạn.", MessageEN: "Your session has expired."}
 	case CodeConflict:
 		return ErrorDefinition{HTTPStatus: 409, Retryable: false, MessageVI: "Dữ liệu bị xung đột với trạng thái hiện tại.", MessageEN: "The request conflicts with the current state."}
 	case CodeDependencyTimeout:
@@ -42,6 +72,8 @@ func LookupDefinition(code Code) ErrorDefinition {
 		return ErrorDefinition{HTTPStatus: 403, Retryable: false, MessageVI: "Bạn không có quyền thực hiện thao tác này.", MessageEN: "You are not allowed to do this."}
 	case CodeInternalError:
 		return ErrorDefinition{HTTPStatus: 500, Retryable: false, MessageVI: "Đã có lỗi xảy ra. Vui lòng thử lại.", MessageEN: "Something went wrong. Please try again."}
+	case CodeInternalTokenInvalid:
+		return ErrorDefinition{HTTPStatus: 401, Retryable: false, MessageVI: "Token dịch vụ không hợp lệ.", MessageEN: "Invalid service token."}
 	case CodeMethodNotAllowed:
 		return ErrorDefinition{HTTPStatus: 405, Retryable: false, MessageVI: "Phương thức không được hỗ trợ.", MessageEN: "This method is not allowed."}
 	case CodeNotFound:
@@ -52,6 +84,22 @@ func LookupDefinition(code Code) ErrorDefinition {
 		return ErrorDefinition{HTTPStatus: 503, Retryable: true, MessageVI: "Dịch vụ bên ngoài đang không khả dụng.", MessageEN: "An upstream provider is unavailable."}
 	case CodeRateLimited:
 		return ErrorDefinition{HTTPStatus: 429, Retryable: true, MessageVI: "Quá nhiều yêu cầu, vui lòng thử lại sau.", MessageEN: "Too many requests, please retry later."}
+	case CodeRegistryCapabilityMismatch:
+		return ErrorDefinition{HTTPStatus: 422, Retryable: false, MessageVI: "Model không có khả năng cần cho vai trò này.", MessageEN: "The model lacks a capability this role requires."}
+	case CodeRegistryModelInUse:
+		return ErrorDefinition{HTTPStatus: 409, Retryable: false, MessageVI: "Model đang được gán cho một vai trò.", MessageEN: "The model is assigned to a role."}
+	case CodeRegistryModelNotFound:
+		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Không tìm thấy model.", MessageEN: "Model not found."}
+	case CodeRegistryNameTaken:
+		return ErrorDefinition{HTTPStatus: 409, Retryable: false, MessageVI: "Tên này đã được dùng.", MessageEN: "This name is already in use."}
+	case CodeRegistryProviderNotFound:
+		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Không tìm thấy provider.", MessageEN: "Provider not found."}
+	case CodeRegistryProviderRejected:
+		return ErrorDefinition{HTTPStatus: 400, Retryable: false, MessageVI: "Provider từ chối key hoặc cấu hình.", MessageEN: "The provider rejected the key or configuration."}
+	case CodeRegistryRoleNotAssigned:
+		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Vai trò này chưa được gán model.", MessageEN: "No model is assigned to this role."}
+	case CodeRegistrySyncUnsupported:
+		return ErrorDefinition{HTTPStatus: 400, Retryable: false, MessageVI: "Provider này chưa hỗ trợ đồng bộ model.", MessageEN: "Model sync is not supported for this provider."}
 	case CodeUnauthenticated:
 		return ErrorDefinition{HTTPStatus: 401, Retryable: false, MessageVI: "Bạn cần đăng nhập.", MessageEN: "You need to sign in."}
 	case CodeValidationFailed:

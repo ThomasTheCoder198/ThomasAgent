@@ -7,6 +7,7 @@ Owns typed config, catalog errors, safe structured logging, tracing, and retry h
 - `config.py`: Config and load_config.
 - `constants.py`: shared HTTP status thresholds used by responses and retries.
 - `errors.py`: AppError and language selection.
+- `error_codes_gen.py`: shared definitions covering authentication, internal service-token validation, and provider/model registry errors.
 - `http_response.py`: success_body, error_response, request_id_of, and exception handlers.
 - `logging.py`, `tracing.py`, `retry.py`: shared infrastructure.
 

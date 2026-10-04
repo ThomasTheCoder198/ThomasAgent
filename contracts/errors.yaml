@@ -44,3 +44,51 @@ errors:
     status: 504
     retryable: true
     message: { vi: "Dịch vụ phụ thuộc phản hồi quá chậm.", en: "A dependency timed out." }
+  - code: AUTH_INVALID_CREDENTIALS
+    status: 401
+    retryable: false
+    message: { vi: "Email hoặc mật khẩu không đúng.", en: "Incorrect email or password." }
+  - code: AUTH_SESSION_EXPIRED
+    status: 401
+    retryable: false
+    message: { vi: "Phiên đăng nhập đã hết hạn.", en: "Your session has expired." }
+  - code: AUTH_CSRF_INVALID
+    status: 403
+    retryable: false
+    message: { vi: "Yêu cầu không hợp lệ, vui lòng tải lại trang.", en: "Invalid request, please reload the page." }
+  - code: INTERNAL_TOKEN_INVALID
+    status: 401
+    retryable: false
+    message: { vi: "Token dịch vụ không hợp lệ.", en: "Invalid service token." }
+  - code: REGISTRY_PROVIDER_NOT_FOUND
+    status: 404
+    retryable: false
+    message: { vi: "Không tìm thấy provider.", en: "Provider not found." }
+  - code: REGISTRY_MODEL_NOT_FOUND
+    status: 404
+    retryable: false
+    message: { vi: "Không tìm thấy model.", en: "Model not found." }
+  - code: REGISTRY_ROLE_NOT_ASSIGNED
+    status: 404
+    retryable: false
+    message: { vi: "Vai trò này chưa được gán model.", en: "No model is assigned to this role." }
+  - code: REGISTRY_CAPABILITY_MISMATCH
+    status: 422
+    retryable: false
+    message: { vi: "Model không có khả năng cần cho vai trò này.", en: "The model lacks a capability this role requires." }
+  - code: REGISTRY_PROVIDER_REJECTED
+    status: 400
+    retryable: false
+    message: { vi: "Provider từ chối key hoặc cấu hình.", en: "The provider rejected the key or configuration." }
+  - code: REGISTRY_SYNC_UNSUPPORTED
+    status: 400
+    retryable: false
+    message: { vi: "Provider này chưa hỗ trợ đồng bộ model.", en: "Model sync is not supported for this provider." }
+  - code: REGISTRY_MODEL_IN_USE
+    status: 409
+    retryable: false
+    message: { vi: "Model đang được gán cho một vai trò.", en: "The model is assigned to a role." }
+  - code: REGISTRY_NAME_TAKEN
+    status: 409
+    retryable: false
+    message: { vi: "Tên này đã được dùng.", en: "This name is already in use." }

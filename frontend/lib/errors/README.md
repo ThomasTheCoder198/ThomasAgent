@@ -5,6 +5,7 @@ Provides the generated shared error definitions for frontend consumers.
 
 ## Entry points
 - `codes.gen.ts`: `ErrorCode` and `errorDefinitions` with `httpStatus`, retryability, and localized messages.
+  Includes authentication, internal service-token validation, and provider/model registry errors.
 - [Glossary](../../../docs/glossary.md): shared error and response terminology.
 
 ## Dependencies

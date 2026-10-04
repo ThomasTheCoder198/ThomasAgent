@@ -38,6 +38,9 @@ func TestMigrate_UpAndDown(t *testing.T) {
 	var n int
 	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM outbox").Scan(&n))
 
+	// Down rolls back one migration at a time: identity/registry first, platform second.
+	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM outbox").Scan(&n), "platform tables survive the first Down")
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	err = pool.QueryRow(ctx, "SELECT count(*) FROM outbox").Scan(&n)
 	require.Error(t, err)
@@ -58,25 +61,46 @@ func TestMigrationStatuses_ReturnsMigrationStates(t *testing.T) {
 	ctx := context.Background()
 	statuses, err := MigrationStatuses(ctx, url, migrations.FS)
 	require.NoError(t, err)
-	require.Len(t, statuses, 1)
+	require.Len(t, statuses, 2)
 	require.EqualValues(t, 20261003000001, statuses[0].Source.Version)
 	require.Equal(t, "20261003000001_platform.sql", statuses[0].Source.Path)
-	require.Equal(t, goose.StatePending, statuses[0].State)
+	require.EqualValues(t, 20261003000002, statuses[1].Source.Version)
+	require.Equal(t, "20261003000002_identity_registry.sql", statuses[1].Source.Path)
+	for _, status := range statuses {
+		require.Equal(t, goose.StatePending, status.State)
+	}
 
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Up))
 	statuses, err = MigrationStatuses(ctx, url, migrations.FS)
 	require.NoError(t, err)
-	require.Len(t, statuses, 1)
-	require.Equal(t, goose.StateApplied, statuses[0].State)
+	require.Len(t, statuses, 2)
+	for _, status := range statuses {
+		require.Equal(t, goose.StateApplied, status.State)
+	}
 
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	statuses, err = MigrationStatuses(ctx, url, migrations.FS)
 	require.NoError(t, err)
-	require.Len(t, statuses, 1)
-	require.Equal(t, goose.StatePending, statuses[0].State)
+	require.Len(t, statuses, 2)
+	require.Equal(t, goose.StateApplied, statuses[0].State)
+	require.Equal(t, goose.StatePending, statuses[1].State)
 }
 
 func TestOpen_FailsFastOnBadURL(t *testing.T) {
 	_, err := Open(context.Background(), "postgres://nobody:nothing@127.0.0.1:1/none?connect_timeout=1")
 	require.Error(t, err)
+}
+
+func TestIdentityRegistryTablesExist(t *testing.T) {
+	url := startPostgres(t)
+	ctx := context.Background()
+	require.NoError(t, Migrate(ctx, url, migrations.FS, Up))
+	pool, err := Open(ctx, url)
+	require.NoError(t, err)
+	defer pool.Close()
+	for _, table := range []string{"users", "sessions", "secrets", "providers", "models", "model_roles"} {
+		var exists bool
+		require.NoError(t, pool.QueryRow(ctx, "SELECT to_regclass($1) IS NOT NULL", table).Scan(&exists))
+		require.True(t, exists, table)
+	}
 }

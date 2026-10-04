@@ -5,6 +5,7 @@ Single source for error codes and shared schemas used by the Go core, Python RAG
 
 ## Entry points
 - `errors.yaml` — authoritative error codes, HTTP statuses, retryability, and VI/EN messages.
+  Includes authentication, internal service-token, and model/provider registry errors.
 - `cmd/errorcodegen` — command invoked by `task gen`.
 - `internal/errorcodegen` — catalog parser and Go, Python, and TypeScript renderers.
 

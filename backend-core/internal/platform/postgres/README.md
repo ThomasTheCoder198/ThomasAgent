@@ -9,6 +9,9 @@ SQL migrations. Business queries remain in their consuming modules.
 - `Migrate(ctx, url, fsys, direction)` runs goose up or down.
 - `Up`, `Down` define supported migration directions.
 - `MigrationStatuses(ctx, url, fsys)` returns goose migration versions, source paths, and states for callers to inspect or display.
+- `DBTX` supplies the query methods shared by pgx pools and transactions.
+- `IsUniqueViolation` and `IsForeignKeyViolation` recognize wrapped Postgres constraint errors, including delete restrictions.
+- `pgtest.Start(t)` supplies a disposable, fully migrated pool to consuming modules' tests.
 
 ## Dependencies
 - Uses: pgx v5, goose v3, and Postgres.
@@ -21,7 +24,7 @@ cd backend-core
 go test ./internal/platform/postgres/... -count=1
 ```
 Docker Desktop must run with Linux containers; tests use postgres:18.6-alpine.
-Tests apply and roll back the platform migration, reject deliberately broken
+Tests apply and roll back both platform and identity/registry migrations, reject deliberately broken
 SQL, verify status transitions from pending to applied and back, and check that connection failure is returned before a pool is exposed.
 
 ## Conventions

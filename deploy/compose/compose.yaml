@@ -1,5 +1,6 @@
 x-core-env: &core-env
   CORE_ENV: dev
+  CORE_VAULT_MASTER_KEY: ${CORE_VAULT_MASTER_KEY}
   CORE_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
   CORE_REDIS_URL: redis://redis:6379/0
   CORE_OTLP_ENDPOINT: http://otel-collector:4318

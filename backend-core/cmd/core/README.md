@@ -38,7 +38,7 @@ probe launched by Docker against the API process.
 
 ```bash
 cd backend-core
-# Export CORE_DATABASE_URL and CORE_REDIS_URL for your local services.
+# Export CORE_DATABASE_URL, CORE_REDIS_URL and CORE_VAULT_MASTER_KEY for your local services.
 go run ./cmd/core migrate up
 go run ./cmd/core migrate status
 go run ./cmd/core migrate down
@@ -81,3 +81,7 @@ printing a second copy. Logger creation rejects unknown log levels.
 - Missing required environment variables or invalid configuration values fail startup.
 - Unreachable Postgres or Redis fails startup or readiness; an occupied HTTP port fails listening.
 - Invalid migration SQL or an unknown migration direction makes `migrate` fail and blocks the Compose API/outbox-relay startup gate.
+
+All commands that load configuration, including `healthcheck`, require the nonempty
+`CORE_VAULT_MASTER_KEY`. Generate a base64 32-byte key with `openssl rand -base64 32`;
+keep it stable to preserve access to stored secrets. `CORE_VAULT_KEY_ID` defaults to `v1`.

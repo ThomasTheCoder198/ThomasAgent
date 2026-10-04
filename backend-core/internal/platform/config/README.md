@@ -36,6 +36,8 @@ Environment variables and defaults:
 | CORE_READ_HEADER_TIMEOUT | 10s |
 | CORE_DATABASE_URL | Required, nonempty |
 | CORE_REDIS_URL | Required, nonempty |
+| CORE_VAULT_MASTER_KEY | Required, nonempty; base64 of exactly 32 bytes for the vault |
+| CORE_VAULT_KEY_ID | v1 |
 | CORE_OTLP_ENDPOINT | Empty; disables export |
 | CORE_LOG_LEVEL | info; debug/info/warn/error |
 | CORE_SERVICE_NAME | thomas-core |
@@ -59,6 +61,7 @@ Log levels are validated through `logging.ParseLevel`, the same parser used to c
 The logger's field contract is defined in the [logging README](../logging/README.md#log-field-contract). `Config.Environment` supplies every logger's deployment environment.
 
 ## Common failures
+- Missing or empty vault master key ? generate with `openssl rand -base64 32` and set CORE_VAULT_MASTER_KEY. Format is checked when constructing the vault cipher.
 - Missing or empty database/Redis URL → set both required variables.
 - Invalid duration or integer → use Go duration syntax or an integer.
 - Unknown log level → choose debug, info, warn, or error.

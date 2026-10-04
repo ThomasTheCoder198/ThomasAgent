@@ -9,6 +9,7 @@ import (
 
 func setRequired(t *testing.T) {
 	t.Helper()
+	t.Setenv("CORE_VAULT_MASTER_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	t.Setenv("CORE_DATABASE_URL", "postgres://u:p@localhost:5432/thomas")
 	t.Setenv("CORE_REDIS_URL", "redis://localhost:6379/0")
 }
@@ -117,4 +118,18 @@ func TestLoad_RejectsNonPositiveHTTPSettings(t *testing.T) {
 			require.ErrorContains(t, err, name)
 		})
 	}
+}
+
+func TestLoad_RequiresVaultMasterKey(t *testing.T) {
+	setRequired(t)
+	t.Setenv("CORE_VAULT_MASTER_KEY", "")
+	_, err := Load()
+	require.ErrorContains(t, err, "CORE_VAULT_MASTER_KEY")
+}
+func TestLoad_DefaultsVaultKeyID(t *testing.T) {
+	setRequired(t)
+	t.Setenv("CORE_VAULT_KEY_ID", "")
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, "v1", cfg.Vault.KeyID)
 }

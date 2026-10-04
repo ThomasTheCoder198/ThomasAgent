@@ -54,7 +54,13 @@ func (c HTTPConfig) validate() []error {
 	return errs
 }
 
+type VaultConfig struct {
+	MasterKey string `env:"MASTER_KEY,required,notEmpty"`
+	KeyID     string `env:"KEY_ID" envDefault:"v1"`
+}
+
 type Config struct {
+	Vault             VaultConfig       `envPrefix:"VAULT_"`
 	HTTP              HTTPConfig        `envPrefix:"HTTP_"`
 	Environment       string            `env:"ENV" envDefault:"dev"`
 	ServiceName       string            `env:"SERVICE_NAME" envDefault:"thomas-core"`

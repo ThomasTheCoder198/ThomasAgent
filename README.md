@@ -1,6 +1,6 @@
 # ThomasAgent
 
-Self-hosted, single-tenant AI workspace: a built-in agent that answers from your Knowledge Base with verifiable citations and acts through Apps, MCP servers and Composio.
+Self-hosted AI workspace (one operator, many tenants): a built-in agent that answers from your Knowledge Base with verifiable citations and acts through Apps, MCP servers and Composio.
 
 - Product truth: `PRODUCT.md` · Design spec: `docs/superpowers/specs/2026-10-03-thomasagent-design.md`
 - Plans: `docs/superpowers/plans/` · Handoffs: `docs/superpowers/handoffs/`

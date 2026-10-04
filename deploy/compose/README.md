@@ -27,3 +27,7 @@ The migration and bootstrap jobs remain one-shot completed-successfully gates.
 
 ## Common failures
 - Startup errors: inspect compose logs and validate environment variables.
+
+The shared `x-core-env` passes `CORE_VAULT_MASTER_KEY` to migration, API and outbox
+processes. Generate it with `openssl rand -base64 32` and put it in `.env` before
+startup. Keep the key stable; changing it prevents decryption of stored secrets.

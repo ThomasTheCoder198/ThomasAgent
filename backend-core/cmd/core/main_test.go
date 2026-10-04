@@ -104,6 +104,7 @@ func TestProcess_ReportsUsageBeforeLoadingConfiguration(t *testing.T) {
 func TestRealMain_LogsDatabaseFailureOnce(t *testing.T) {
 	for _, command := range []string{"migrate", "serve", outboxRelayCommand} {
 		t.Run(command, func(t *testing.T) {
+			setIdentityEnv(t)
 			t.Setenv("CORE_TEST_REAL_MAIN", "1")
 			t.Setenv("CORE_TEST_COMMAND", command)
 			t.Setenv("CORE_DATABASE_URL", "postgres://nobody:secret-password@127.0.0.1:1/none?connect_timeout=1")
@@ -203,6 +204,7 @@ func TestServe_ListeningLogCarriesTraceContext(t *testing.T) {
 }
 
 func TestHealthcheck_DoesNotOpenDependencies(t *testing.T) {
+	setIdentityEnv(t)
 	t.Setenv("CORE_DATABASE_URL", "postgres://invalid:invalid@127.0.0.1:1/none")
 	t.Setenv("CORE_REDIS_URL", "redis://127.0.0.1:1")
 	t.Setenv("CORE_OTLP_ENDPOINT", "")
@@ -225,4 +227,13 @@ func TestHealthcheck_RejectsUnhealthyStatus(t *testing.T) {
 
 func TestSpanNames_UseCoreServicePrefix(t *testing.T) {
 	require.Equal(t, []string{"core.postgres.open", "core.redis.startup", "core.postgres.migrate"}, []string{postgresOpenSpan, redisStartupSpan, postgresMigrateSpan})
+}
+
+// testVaultMasterKey is the base64 of 32 ASCII bytes.
+const testVaultMasterKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+
+// setIdentityEnv sets the variables that config requires on top of the database and Redis URLs.
+func setIdentityEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("CORE_VAULT_MASTER_KEY", testVaultMasterKey)
 }

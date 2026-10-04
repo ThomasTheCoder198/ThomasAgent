@@ -24,11 +24,14 @@ func TestLogAccess_PreservesCommittedStatusAfterPanic(t *testing.T) {
 		_, _ = w.Write([]byte("partial"))
 		panic("after commit")
 	})
-	response := performRequest(r, http.MethodGet, "/partial", "en")
-	require.Equal(t, http.StatusOK, response.Code)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/partial", nil)
+	// The response is committed, so recovery aborts the connection instead of appending an error body.
+	require.PanicsWithValue(t, http.ErrAbortHandler, func() { r.ServeHTTP(rec, req) })
+	require.Equal(t, "partial", rec.Body.String())
 	var entry map[string]any
 	require.NoError(t, json.Unmarshal(logs.Bytes(), &entry))
-	require.EqualValues(t, response.Code, entry["status"])
+	require.EqualValues(t, http.StatusOK, entry["status"])
 }
 
 func TestStatusRecorder_KeepsFirstFinalResponse(t *testing.T) {

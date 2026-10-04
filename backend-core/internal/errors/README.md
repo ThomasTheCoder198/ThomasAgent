@@ -6,6 +6,7 @@ Codes, HTTP statuses, retryability and VI/EN messages come from `contracts/error
 HTTP serialization and boundary logging belong to `platform/httpx` and callers.
 
 ## Entry points
+- `FieldError`, `FieldCodeRequired` and `FieldCodeInvalid` supply validation field details without submitted values.
 - Generated `errors.go`: `ErrNotFound`, other named errors, `Code` constants and `LookupDefinition`.
 - `ErrorDefinition`: explicit `HTTPStatus`, `Retryable`, `MessageVI` and `MessageEN` metadata.
 - `ErrNotFound.WithCause(err)`, `.WithDetails(details)` and `.WithMessage(message)` construct fresh `*AppError` values.

@@ -52,6 +52,11 @@ func WriteSuccess(w http.ResponseWriter, r *http.Request, status int, data any) 
 
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	appErr := errors.ToAppError(err)
+	if ResponseCommitted(w) {
+		// The client already holds part of a response; the failure can only be recorded.
+		logBoundaryError(r, appErr)
+		return
+	}
 	status := appErr.HTTPStatus()
 	body := ErrorDetail{
 		Code:    string(appErr.Code),
@@ -64,11 +69,15 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 		internal := errors.ToAppError(errors.ErrInternalError)
 		body.Code = string(internal.Code)
 		body.Message = internal.LocalizedMessage(errors.LangFromHeader(r.Header.Get(headerAcceptLanguage)))
-		if errorLogger, ok := r.Context().Value(errorLoggerKey{}).(ErrorLogger); ok && errorLogger != nil {
-			errorLogger(r.Context(), appErr)
-		}
+		logBoundaryError(r, appErr)
 	}
 	writeJSON(w, status, errorResponse{Error: body})
+}
+
+func logBoundaryError(r *http.Request, appErr *errors.AppError) {
+	if errorLogger, ok := r.Context().Value(errorLoggerKey{}).(ErrorLogger); ok && errorLogger != nil {
+		errorLogger(r.Context(), appErr)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

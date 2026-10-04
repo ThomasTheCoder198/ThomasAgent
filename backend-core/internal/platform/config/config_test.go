@@ -93,3 +93,28 @@ func TestLoad_RejectsZeroBreakerLimits(t *testing.T) {
 		})
 	}
 }
+
+func TestLoad_AppliesHTTPDefaults(t *testing.T) {
+	setRequired(t)
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.EqualValues(t, 1<<20, cfg.HTTP.MaxBodyBytes)
+	require.Equal(t, 30*time.Second, cfg.HTTP.RequestTimeout)
+	require.Equal(t, 15*time.Second, cfg.HTTP.EventStreamHeartbeat)
+}
+
+func TestLoad_RejectsNonPositiveHTTPSettings(t *testing.T) {
+	tests := map[string]string{
+		"CORE_HTTP_MAX_BODY_BYTES":         "0",
+		"CORE_HTTP_REQUEST_TIMEOUT":        "0s",
+		"CORE_HTTP_EVENT_STREAM_HEARTBEAT": "-1s",
+	}
+	for name, value := range tests {
+		t.Run(name, func(t *testing.T) {
+			setRequired(t)
+			t.Setenv(name, value)
+			_, err := Load()
+			require.ErrorContains(t, err, name)
+		})
+	}
+}

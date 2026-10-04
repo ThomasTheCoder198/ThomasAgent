@@ -151,3 +151,25 @@ func TestMountHealth_ReadinessReportsUnavailableDependency(t *testing.T) {
 	require.Equal(t, errors.CodeProviderUnavailable, logged[0].Code)
 	require.Len(t, logged, 1)
 }
+
+func TestWriteError_AfterCommitOnlyLogs(t *testing.T) {
+	var logged []*errors.AppError
+	r := NewRouter(func(_ context.Context, e *errors.AppError) { logged = append(logged, e) })
+	r.Get("/late", func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("partial"))
+		WriteError(w, req, errors.ErrProviderUnavailable)
+	})
+	rec := performRequest(r, http.MethodGet, "/late", "vi")
+	require.Equal(t, "partial", rec.Body.String())
+	require.Len(t, logged, 1)
+	require.Equal(t, errors.CodeProviderUnavailable, logged[0].Code)
+}
+
+func TestResponseCommitted_SeesThroughWrappers(t *testing.T) {
+	rec := &statusRecorder{ResponseWriter: httptest.NewRecorder(), status: http.StatusOK}
+	require.False(t, ResponseCommitted(rec))
+	rec.WriteHeader(http.StatusOK)
+	require.True(t, ResponseCommitted(rec))
+	require.False(t, ResponseCommitted(httptest.NewRecorder()))
+}

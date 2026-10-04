@@ -6,7 +6,7 @@ Loads typed startup configuration from CORE_ environment variables and validates
 ## Entry points
 - `BreakerConfig` supplies typed provider circuit breaker settings.
 - `Load() (Config, error)` — called during core startup.
-- `Config`, `RetryConfig`, `ConsumerConfig`, `OutboxRelayConfig` — configuration consumed by platform services. `Config.OutboxRelay` retains the `CORE_RELAY_` environment prefix and its existing defaults.
+- `Config`, `HTTPConfig`, `RetryConfig`, `ConsumerConfig`, `OutboxRelayConfig` — configuration consumed by platform services. `Config.OutboxRelay` retains the `CORE_RELAY_` environment prefix and its existing defaults.
 
 ## Dependencies
 - Uses: `github.com/caarlos0/env/v11`, platform logging's `ParseLevel`, and Go standard library.
@@ -29,6 +29,9 @@ Environment variables and defaults:
 |---|---|
 | CORE_ENV | dev |
 | CORE_HTTP_ADDR | :8080 |
+| CORE_HTTP_MAX_BODY_BYTES | 1048576 (1 MiB); must be >= 1 |
+| CORE_HTTP_REQUEST_TIMEOUT | 30s; must be > 0 |
+| CORE_HTTP_EVENT_STREAM_HEARTBEAT | 15s; must be > 0 |
 | CORE_SHUTDOWN_TIMEOUT | 15s |
 | CORE_READ_HEADER_TIMEOUT | 10s |
 | CORE_DATABASE_URL | Required, nonempty |

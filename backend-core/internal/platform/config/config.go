@@ -34,7 +34,28 @@ type OutboxRelayConfig struct {
 	PollInterval time.Duration `env:"POLL_INTERVAL" envDefault:"500ms"`
 }
 
+type HTTPConfig struct {
+	MaxBodyBytes         int64         `env:"MAX_BODY_BYTES" envDefault:"1048576"`
+	RequestTimeout       time.Duration `env:"REQUEST_TIMEOUT" envDefault:"30s"`
+	EventStreamHeartbeat time.Duration `env:"EVENT_STREAM_HEARTBEAT" envDefault:"15s"`
+}
+
+func (c HTTPConfig) validate() []error {
+	var errs []error
+	if c.MaxBodyBytes < 1 {
+		errs = append(errs, errors.New("CORE_HTTP_MAX_BODY_BYTES must be >= 1"))
+	}
+	if c.RequestTimeout <= 0 {
+		errs = append(errs, errors.New("CORE_HTTP_REQUEST_TIMEOUT must be > 0"))
+	}
+	if c.EventStreamHeartbeat <= 0 {
+		errs = append(errs, errors.New("CORE_HTTP_EVENT_STREAM_HEARTBEAT must be > 0"))
+	}
+	return errs
+}
+
 type Config struct {
+	HTTP              HTTPConfig        `envPrefix:"HTTP_"`
 	Environment       string            `env:"ENV" envDefault:"dev"`
 	ServiceName       string            `env:"SERVICE_NAME" envDefault:"thomas-core"`
 	HTTPAddr          string            `env:"HTTP_ADDR" envDefault:":8080"`
@@ -80,5 +101,6 @@ func (c Config) validate() error {
 	if c.Breaker.HalfOpenMaxCalls < 1 {
 		errs = append(errs, errors.New("CORE_BREAKER_HALF_OPEN_MAX_CALLS must be >= 1"))
 	}
+	errs = append(errs, c.HTTP.validate()...)
 	return errors.Join(errs...)
 }

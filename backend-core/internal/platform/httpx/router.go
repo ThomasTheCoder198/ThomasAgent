@@ -23,7 +23,7 @@ func NewRouter(errorLogger ErrorLogger, middlewares ...Middleware) chi.Router {
 	r := chi.NewRouter()
 	r.Use(assignRequestID)
 	r.Use(middlewares...)
-	r.Use(injectErrorLogger(errorLogger), recoverPanics)
+	r.Use(injectErrorLogger(errorLogger), trackCommit, recoverPanics)
 	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
 		WriteError(w, req, errors.ErrNotFound)
 	})
@@ -52,16 +52,33 @@ func injectErrorLogger(errorLogger ErrorLogger) func(http.Handler) http.Handler 
 	}
 }
 
+// trackCommit gives handlers a writer that records whether the response was committed.
+func trackCommit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(&statusRecorder{ResponseWriter: w, status: http.StatusOK}, r)
+	})
+}
+
 func recoverPanics(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				if rec == http.ErrAbortHandler { //nolint:errorlint // net/http named error compared as net/http documents
-					panic(rec)
-				}
-				WriteError(w, r, errors.ErrInternalError.WithCause(fmt.Errorf(panicCauseFormat, rec)))
+				handlePanic(w, r, rec)
 			}
 		}()
 		next.ServeHTTP(w, r)
 	})
+}
+
+func handlePanic(w http.ResponseWriter, r *http.Request, rec any) {
+	if rec == http.ErrAbortHandler { //nolint:errorlint // net/http named error compared as net/http documents
+		panic(rec)
+	}
+	panicErr := errors.ErrInternalError.WithCause(fmt.Errorf(panicCauseFormat, rec))
+	if ResponseCommitted(w) {
+		// A partial response is already on the wire: log, then abort the connection instead of appending JSON.
+		logBoundaryError(r, panicErr)
+		panic(http.ErrAbortHandler)
+	}
+	WriteError(w, r, panicErr)
 }

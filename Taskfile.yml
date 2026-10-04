@@ -5,9 +5,11 @@ vars:
 
 tasks:
   gen:
-    desc: Regenerate code from contracts/
+    desc: Regenerate code and the Postman collection from contracts/
     cmds:
       - go run ./cmd/errorcodegen -in errors.yaml -go ../backend-core/internal/errors/errors.go -py ../ragx/src/thomas_ragx/platform/error_codes_gen.py -ts ../frontend/lib/errors/codes.gen.ts
+      - npm run lint:openapi
+      - npm run gen:postman
     dir: contracts
 
   lint:
@@ -34,10 +36,10 @@ tasks:
       - task: test:ragx
   test:contracts:
     dir: contracts
-    cmds: [go test ./...]
+    cmds: [go test ./..., npm test]
   test:core:
     dir: backend-core
-    cmds: [go test ./... -count=1]
+    cmds: [go test ./... -count=1 -p 2]
   test:ragx:
     dir: ragx
     cmds: [uv run pytest -q]
@@ -55,6 +57,24 @@ tasks:
     desc: Run the core API locally using exported CORE_* environment variables
     dir: backend-core
     cmds: [go run ./cmd/core serve]
+  api-test:
+    desc: Run the Postman collection against the running core API
+    dir: contracts
+    cmds:
+      - |
+        bash -c '
+          set -euo pipefail
+          api_test_email="${CORE_AUTH_OWNER_EMAIL:-}"
+          api_test_password="${CORE_AUTH_OWNER_PASSWORD:-}"
+          if [ -z "$api_test_email" ] || [ -z "$api_test_password" ]; then
+            set -a
+            source ../deploy/compose/.env
+            set +a
+          fi
+          export CORE_AUTH_OWNER_EMAIL="${api_test_email:-$CORE_AUTH_OWNER_EMAIL}"
+          export CORE_AUTH_OWNER_PASSWORD="${api_test_password:-$CORE_AUTH_OWNER_PASSWORD}"
+          node postman/run.mjs
+        '
   smoke:
     desc: Check service health
     cmds: [bash scripts/smoke.sh]

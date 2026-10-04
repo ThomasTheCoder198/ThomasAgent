@@ -1,0 +1,227 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Values come from the approved Metro Wayfinding mockup v3 (.superpowers/brainstorm/…/metro-hifi-v3.html). */
+:root {
+  --ground: #f4f4f1;
+  --paper: #ffffff;
+  --paper-2: #fafaf7;
+  --ink: #151515;
+  --ink-2: #4a4a46;
+  --ink-3: #6e6e68;
+  --rule: #dcdcd6;
+  --rule-2: #e9e9e4;
+  --rule-strong: #cfcfc8;
+  --hover: #e7e7e1;
+  --todo: #c9c9c2;
+  --sign: #141414;
+  --sign-ink: #f4f4f1;
+  --sign-ink-2: #a9a9a2;
+  --sign-rule: #2a2a28;
+  --sign-hover: #1f1f1d;
+  --sign-active: #262624;
+  --kb: #00843d;
+  --kb-tint: #e3f2e9;
+  --on-kb: #ffffff;
+  --mcp: #0072ce;
+  --mcp-tint: #e2eefa;
+  --mcp-rule: #b9d4ee;
+  --mcp-ink: #163c62;
+  --mcp-ink-2: #3d5f80;
+  --on-mcp: #ffffff;
+  --cmp: #ee7f00;
+  --cmp-tint: #fdeedd;
+  --on-cmp: #1f1300;
+  --app: #da291c;
+  --app-tint: #fbe5e3;
+  --on-app: #ffffff;
+  --model: var(--ink);
+  --on-model: var(--ground);
+  --focus: var(--mcp);
+  --pageview: #ebebe6;
+  --page: #ffffff;
+  --page-ink: #2b2b28;
+  --page-hit: var(--kb-tint);
+  --scrim: rgb(10 10 10 / 0.45);
+  --lift: 0 12px 32px -12px rgb(0 0 0 / 0.45);
+  --sheet-lift: 0 -20px 40px -10px rgb(0 0 0 / 0.35);
+  --page-lift: 0 1px 2px rgb(0 0 0 / 0.08), 0 10px 24px -14px rgb(0 0 0 / 0.3);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --ground: #0e1013;
+  --paper: #16191d;
+  --paper-2: #1b1f24;
+  --ink: #eceee9;
+  --ink-2: #b9bcb5;
+  --ink-3: #8f938c;
+  --rule: #262a2f;
+  --rule-2: #1f2328;
+  --rule-strong: #2c3137;
+  --hover: #1f2328;
+  --todo: #3a3f45;
+  --sign: #08090b;
+  --sign-ink: #eceee9;
+  --sign-ink-2: #9a9e97;
+  --sign-rule: #1e2125;
+  --sign-hover: #16191d;
+  --sign-active: #1b1f24;
+  --kb: #2bb673;
+  --kb-tint: #12301f;
+  --on-kb: #06210f;
+  --mcp: #3d95e0;
+  --mcp-tint: #0f2235;
+  --mcp-rule: #1d3f61;
+  --mcp-ink: #cfe0f1;
+  --mcp-ink-2: #8fb6dc;
+  --on-mcp: #04192c;
+  --cmp: #ff9a2e;
+  --cmp-tint: #33210c;
+  --on-cmp: #221200;
+  --app: #ff5a4d;
+  --app-tint: #3a1512;
+  --on-app: #2a0603;
+  --pageview: #0b0d10;
+  --page: #e9e9e4;
+  --page-ink: #22221f;
+  --page-hit: #dff1e6;
+  --scrim: rgb(0 0 0 / 0.6);
+  --lift: 0 12px 32px -12px rgb(0 0 0 / 0.75);
+  --sheet-lift: 0 -20px 40px -10px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-ground: var(--ground);
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-rule-2: var(--rule-2);
+  --color-rule-strong: var(--rule-strong);
+  --color-hover: var(--hover);
+  --color-todo: var(--todo);
+  --color-sign: var(--sign);
+  --color-sign-ink: var(--sign-ink);
+  --color-sign-ink-2: var(--sign-ink-2);
+  --color-sign-rule: var(--sign-rule);
+  --color-sign-hover: var(--sign-hover);
+  --color-sign-active: var(--sign-active);
+  --color-kb: var(--kb);
+  --color-kb-tint: var(--kb-tint);
+  --color-on-kb: var(--on-kb);
+  --color-mcp: var(--mcp);
+  --color-mcp-tint: var(--mcp-tint);
+  --color-mcp-rule: var(--mcp-rule);
+  --color-mcp-ink: var(--mcp-ink);
+  --color-mcp-ink-2: var(--mcp-ink-2);
+  --color-on-mcp: var(--on-mcp);
+  --color-cmp: var(--cmp);
+  --color-cmp-tint: var(--cmp-tint);
+  --color-on-cmp: var(--on-cmp);
+  --color-app: var(--app);
+  --color-app-tint: var(--app-tint);
+  --color-on-app: var(--on-app);
+  --color-model: var(--model);
+  --color-on-model: var(--on-model);
+  --color-pageview: var(--pageview);
+  --color-page: var(--page);
+  --color-page-ink: var(--page-ink);
+  --color-page-hit: var(--page-hit);
+  --color-scrim: var(--scrim);
+  --color-focus: var(--focus);
+  --shadow-lift: var(--lift);
+  --shadow-sheet: var(--sheet-lift);
+  --shadow-page: var(--page-lift);
+  --ease-out-expo: var(--ease-out);
+  --font-sans: var(--font-lexend), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --animate-caret: caret 1s steps(2) infinite;
+  --animate-draw: draw 1.2s var(--ease-out) both;
+
+  @keyframes caret {
+    50% {
+      opacity: 0;
+    }
+  }
+  @keyframes draw {
+    from {
+      clip-path: inset(0 0 100% 0);
+    }
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+}
+
+/* Element defaults live in the base layer so Tailwind utilities (e.g. `outline-none`) can override them. */
+@layer base {
+  html {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background: var(--ground);
+  }
+
+  ::selection {
+    background: var(--kb-tint);
+    color: var(--ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  textarea,
+  input {
+    caret-color: var(--kb);
+  }
+
+  ::placeholder {
+    color: var(--ink-3);
+    opacity: 1;
+  }
+
+  a {
+    text-underline-offset: 3px;
+  }
+
+  * {
+    scrollbar-color: var(--rule) transparent;
+    scrollbar-width: thin;
+  }
+
+  .tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

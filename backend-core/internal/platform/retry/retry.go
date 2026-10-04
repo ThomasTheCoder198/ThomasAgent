@@ -83,7 +83,8 @@ func Do(ctx context.Context, p Policy, op func(context.Context) error) error {
 		delay := Backoff(p, attempt)
 		var ra RetryAfterProvider
 		if stderrors.As(err, &ra) && ra.RetryAfter() > 0 {
-			delay = min(ra.RetryAfter(), p.MaxDelay)
+			// The local backoff cap cannot shorten a provider's requested minimum wait.
+			delay = max(delay, ra.RetryAfter())
 		}
 		if sleepErr := p.Sleep(ctx, delay); sleepErr != nil {
 			return stderrors.Join(err, sleepErr)

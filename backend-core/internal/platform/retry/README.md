@@ -28,7 +28,8 @@ golangci-lint run ./...
 See the [shared naming glossary](../../../../docs/glossary.md) for terms used across services.
 - Load and validate config before calling `NewPolicy`; custom policies must
   supply valid attempts/delays and non-nil sleep/random functions.
-- Positive `RetryAfterProvider` delays override backoff up to `Policy.MaxDelay`.
+- Positive `RetryAfterProvider` delays set a minimum wait; `Policy.MaxDelay`
+  caps generated backoff only.
 - Catalog retryability takes precedence over `RetryAfterProvider` wrappers; a delay
   hint cannot cause non-retryable catalog errors to be retried.
 - Named errors and per-call `*AppError` values share the same retry policy;
@@ -47,5 +48,8 @@ See the [shared naming glossary](../../../../docs/glossary.md) for terms used ac
 - No retry: inspect catalog retryability and whether the error wraps cancellation.
 - Provider unavailable before execution: the breaker is open or half-open capacity
   is exhausted; wait for the configured timeout before a probe.
-- Long wait: positive provider Retry-After takes precedence over jitter but is
-  capped at the configured maximum delay.
+- Long wait: provider Retry-After may exceed the backoff cap; cancellation or the
+  request deadline interrupts the wait.
+  Provider `Retry-After` sets a minimum wait, even when it exceeds the local
+  backoff cap; cancellation and the enclosing request deadline still interrupt
+  that wait. Retryability remains controlled by the shared error catalog.

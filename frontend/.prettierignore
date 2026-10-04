@@ -1,0 +1,7 @@
+.next
+node_modules
+lib/errors/codes.gen.ts
+package-lock.json
+playwright-report
+test-results
+next-env.d.ts

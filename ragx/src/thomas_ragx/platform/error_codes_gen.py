@@ -8,6 +8,7 @@ class ErrorCode(StrEnum):
     AUTH_CSRF_INVALID = "AUTH_CSRF_INVALID"
     AUTH_INVALID_CREDENTIALS = "AUTH_INVALID_CREDENTIALS"
     AUTH_SESSION_EXPIRED = "AUTH_SESSION_EXPIRED"
+    CLIENT_NETWORK_ERROR = "CLIENT_NETWORK_ERROR"
     CONFLICT = "CONFLICT"
     DEPENDENCY_TIMEOUT = "DEPENDENCY_TIMEOUT"
     FORBIDDEN = "FORBIDDEN"
@@ -42,6 +43,7 @@ ERROR_DEFINITIONS: Final[dict[ErrorCode, ErrorDefinition]] = {
     ErrorCode.AUTH_CSRF_INVALID: ErrorDefinition(http_status=403, retryable=False, message_vi="Yêu cầu không hợp lệ, vui lòng tải lại trang.", message_en="Invalid request, please reload the page."),
     ErrorCode.AUTH_INVALID_CREDENTIALS: ErrorDefinition(http_status=401, retryable=False, message_vi="Email hoặc mật khẩu không đúng.", message_en="Incorrect email or password."),
     ErrorCode.AUTH_SESSION_EXPIRED: ErrorDefinition(http_status=401, retryable=False, message_vi="Phiên đăng nhập đã hết hạn.", message_en="Your session has expired."),
+    ErrorCode.CLIENT_NETWORK_ERROR: ErrorDefinition(http_status=503, retryable=True, message_vi="Không kết nối được tới máy chủ.", message_en="Could not reach the server."),
     ErrorCode.CONFLICT: ErrorDefinition(http_status=409, retryable=False, message_vi="Dữ liệu bị xung đột với trạng thái hiện tại.", message_en="The request conflicts with the current state."),
     ErrorCode.DEPENDENCY_TIMEOUT: ErrorDefinition(http_status=504, retryable=True, message_vi="Dịch vụ phụ thuộc phản hồi quá chậm.", message_en="A dependency timed out."),
     ErrorCode.FORBIDDEN: ErrorDefinition(http_status=403, retryable=False, message_vi="Bạn không có quyền thực hiện thao tác này.", message_en="You are not allowed to do this."),

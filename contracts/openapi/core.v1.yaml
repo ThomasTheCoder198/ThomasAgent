@@ -1,0 +1,529 @@
+openapi: 3.1.0
+info:
+  title: ThomasAgent Core API
+  version: 1.0.0
+  description: All responses use the shared response format {data, meta} or {error}. Error codes come from contracts/errors.yaml.
+servers:
+  - url: "{baseUrl}"
+    variables:
+      baseUrl: { default: http://localhost:8080 }
+tags:
+  - name: Health
+  - name: Auth
+  - name: Providers
+  - name: Models
+  - name: Model roles
+  - name: Internal
+security:
+  - sessionCookie: []
+    csrfHeader: []
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      operationId: healthz
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/Status" }
+  /readyz:
+    get:
+      tags: [Health]
+      operationId: readyz
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/Status" }
+        "503": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+            example: { email: "{{ownerEmail}}", password: "{{ownerPassword}}" }
+      responses:
+        "200":
+          description: Signed in; sets thomas_session and thomas_csrf cookies.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginSuccessResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      operationId: me
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Current user.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/SuccessResponse" }
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          { user: { $ref: "#/components/schemas/User" } }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      responses:
+        "200": { $ref: "#/components/responses/Status" }
+        "403": { $ref: "#/components/responses/Error" }
+  /api/v1/providers:
+    get:
+      tags: [Providers]
+      operationId: listProviders
+      responses:
+        "200": { $ref: "#/components/responses/ProviderList" }
+    post:
+      tags: [Providers]
+      operationId: createProvider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProviderInput" }
+            example:
+              {
+                kind: openrouter,
+                name: "OpenRouter {{$randomInt}}",
+                baseUrl: "http://127.0.0.1:1",
+              }
+      responses:
+        "201": { $ref: "#/components/responses/Provider" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/providers/{providerId}:
+    parameters:
+      - {
+          name: providerId,
+          in: path,
+          required: true,
+          schema: { type: string, format: uuid },
+          example: "{{providerId}}",
+        }
+    patch:
+      tags: [Providers]
+      operationId: updateProvider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProviderInput" }
+            example: { enabled: true }
+      responses:
+        "200": { $ref: "#/components/responses/Provider" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Providers]
+      operationId: deleteProvider
+      responses:
+        "200": { $ref: "#/components/responses/Status" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/providers/{providerId}/test:
+    parameters:
+      - {
+          name: providerId,
+          in: path,
+          required: true,
+          schema: { type: string, format: uuid },
+          example: "{{providerId}}",
+        }
+    post:
+      tags: [Providers]
+      operationId: testProvider
+      responses:
+        "200": { $ref: "#/components/responses/Status" }
+        "400": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /api/v1/providers/{providerId}/sync:
+    parameters:
+      - {
+          name: providerId,
+          in: path,
+          required: true,
+          schema: { type: string, format: uuid },
+          example: "{{providerId}}",
+        }
+    post:
+      tags: [Providers]
+      operationId: syncProvider
+      responses:
+        "200":
+          description: Sync counts.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/SuccessResponse" }
+                  - {
+                      type: object,
+                      properties:
+                        { data: { $ref: "#/components/schemas/SyncResult" } },
+                    }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/models:
+    get:
+      tags: [Models]
+      operationId: listModels
+      parameters:
+        - {
+            name: providerId,
+            in: query,
+            schema: { type: string, format: uuid },
+          }
+        - {
+            name: capability,
+            in: query,
+            schema: { $ref: "#/components/schemas/Capability" },
+          }
+      responses:
+        "200": { $ref: "#/components/responses/ModelList" }
+    post:
+      tags: [Models]
+      operationId: createModel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModelInput" }
+            example:
+              {
+                providerId: "{{providerId}}",
+                modelRef: "openai/gpt-5-mini",
+                displayName: "GPT-5 mini",
+                capabilities: [chat],
+              }
+      responses:
+        "201": { $ref: "#/components/responses/Model" }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/models/{modelId}:
+    parameters:
+      - {
+          name: modelId,
+          in: path,
+          required: true,
+          schema: { type: string, format: uuid },
+          example: "{{modelId}}",
+        }
+    delete:
+      tags: [Models]
+      operationId: deleteModel
+      responses:
+        "200": { $ref: "#/components/responses/Status" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/model-roles:
+    get:
+      tags: [Model roles]
+      operationId: listModelRoles
+      responses:
+        "200":
+          description: Role assignments.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/SuccessResponse" }
+                  - {
+                      type: object,
+                      properties:
+                        {
+                          data:
+                            {
+                              type: array,
+                              items:
+                                { $ref: "#/components/schemas/RoleAssignment" },
+                            },
+                        },
+                    }
+  /api/v1/model-roles/{role}:
+    parameters:
+      - {
+          name: role,
+          in: path,
+          required: true,
+          schema: { $ref: "#/components/schemas/Role" },
+          example: chat.fast,
+        }
+    put:
+      tags: [Model roles]
+      operationId: assignModelRole
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                type: object,
+                required: [modelId],
+                properties: { modelId: { type: string, format: uuid } },
+              }
+            example: { modelId: "{{modelId}}" }
+      responses:
+        "200": { $ref: "#/components/responses/Status" }
+        "422": { $ref: "#/components/responses/Error" }
+  /internal/models/resolve:
+    get:
+      tags: [Internal]
+      operationId: resolveModel
+      security: [{ serviceToken: [] }]
+      parameters:
+        - {
+            name: role,
+            in: query,
+            required: true,
+            schema: { $ref: "#/components/schemas/Role" },
+            example: chat.fast,
+          }
+      responses:
+        "200":
+          description: Resolved model including the decrypted API key (service-to-service only).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/SuccessResponse" }
+                  - {
+                      type: object,
+                      properties:
+                        {
+                          data: { $ref: "#/components/schemas/ResolvedModel" },
+                        },
+                    }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: thomas_session }
+    csrfHeader: { type: apiKey, in: header, name: X-CSRF-Token }
+    serviceToken: { type: http, scheme: bearer }
+  responses:
+    Status:
+      description: SuccessResponse with a small status object.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/SuccessResponse" }
+    Error:
+      description: Error response.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Provider:
+      description: One provider.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/SuccessResponse" }
+              - {
+                  type: object,
+                  properties:
+                    { data: { $ref: "#/components/schemas/Provider" } },
+                }
+    ProviderList:
+      description: Providers.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/SuccessResponse" }
+              - {
+                  type: object,
+                  properties:
+                    {
+                      data:
+                        {
+                          type: array,
+                          items: { $ref: "#/components/schemas/Provider" },
+                        },
+                    },
+                }
+    Model:
+      description: One model.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/SuccessResponse" }
+              - {
+                  type: object,
+                  properties: { data: { $ref: "#/components/schemas/Model" } },
+                }
+    ModelList:
+      description: Models.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/SuccessResponse" }
+              - {
+                  type: object,
+                  properties:
+                    {
+                      data:
+                        {
+                          type: array,
+                          items: { $ref: "#/components/schemas/Model" },
+                        },
+                    },
+                }
+  schemas:
+    Meta:
+      type: object
+      required: [requestId]
+      properties: { requestId: { type: string } }
+    SuccessResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data: {}
+        meta: { $ref: "#/components/schemas/Meta" }
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              {
+                type: string,
+                description: "UPPER_SNAKE code from contracts/errors.yaml",
+              }
+            message: { type: string }
+            details: { type: object }
+            traceId: { type: string }
+    User:
+      type: object
+      properties:
+        {
+          id: { type: string, format: uuid },
+          email: { type: string },
+          displayName: { type: string },
+        }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        {
+          email: { type: string, format: email },
+          password: { type: string, format: password },
+        }
+    LoginSuccessResponse:
+      allOf:
+        - { $ref: "#/components/schemas/SuccessResponse" }
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                user: { $ref: "#/components/schemas/User" }
+                csrfToken: { type: string }
+                expiresAt: { type: string, format: date-time }
+    ProviderKind:
+      type: string
+      enum:
+        [
+          openrouter,
+          openai,
+          anthropic,
+          google,
+          azure,
+          ollama,
+          openai_compatible,
+          cohere,
+          voyage,
+          jina,
+          typesafe,
+        ]
+    Capability:
+      type: string
+      enum: [chat, tools, vision, reasoning, embedding, rerank, decision]
+    Role:
+      type: string
+      enum: [chat.default, chat.fast, vision, embedding, rerank, decision]
+    Provider:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind: { $ref: "#/components/schemas/ProviderKind" }
+        name: { type: string }
+        baseUrl: { type: string }
+        hasApiKey: { type: boolean }
+        enabled: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ProviderInput:
+      type: object
+      properties:
+        kind: { $ref: "#/components/schemas/ProviderKind" }
+        name: { type: string }
+        baseUrl: { type: string }
+        apiKey:
+          {
+            type: [string, "null"],
+            writeOnly: true,
+            description: "null/absent = unchanged, empty string = remove",
+          }
+        enabled: { type: boolean }
+    Model:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        providerId: { type: string, format: uuid }
+        modelRef: { type: string }
+        displayName: { type: string }
+        capabilities:
+          { type: array, items: { $ref: "#/components/schemas/Capability" } }
+        contextWindow: { type: integer }
+        embeddingDims: { type: integer }
+        inputPricePerMTok: { type: number }
+        outputPricePerMTok: { type: number }
+        source: { type: string, enum: [manual, sync] }
+    ModelInput:
+      type: object
+      required: [providerId, modelRef]
+      properties:
+        providerId: { type: string, format: uuid }
+        modelRef: { type: string }
+        displayName: { type: string }
+        capabilities:
+          { type: array, items: { $ref: "#/components/schemas/Capability" } }
+        contextWindow: { type: integer }
+        embeddingDims: { type: integer }
+        inputPricePerMTok: { type: number }
+        outputPricePerMTok: { type: number }
+    RoleAssignment:
+      type: object
+      properties:
+        {
+          role: { $ref: "#/components/schemas/Role" },
+          modelId: { type: string, format: uuid },
+        }
+    SyncResult:
+      type: object
+      properties: { added: { type: integer }, updated: { type: integer } }
+    ResolvedModel:
+      type: object
+      properties:
+        role: { $ref: "#/components/schemas/Role" }
+        fallbackFrom: { $ref: "#/components/schemas/Role" }
+        providerKind: { $ref: "#/components/schemas/ProviderKind" }
+        baseUrl: { type: string }
+        apiKey: { type: string }
+        modelRef: { type: string }
+        capabilities:
+          { type: array, items: { $ref: "#/components/schemas/Capability" } }
+        embeddingDims: { type: integer }

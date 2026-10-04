@@ -12,16 +12,17 @@ belong in `internal/`; this folder owns process startup and shutdown.
 code. The work is divided by responsibility so startup can be read without
 mixing it with HTTP, migration or worker logic.
 
-| File | Responsibility |
-| --- | --- |
-| `main.go` | Enter the executable and return its exit code after cleanup finishes. |
-| `command.go` | `runProcess` handles signals and exit errors; `executeCommand` validates and dispatches the CLI command. |
-| `application.go` | `newApplication` assembles config, logger and telemetry; `shutdownTelemetry` bounds cleanup by the configured timeout. |
-| `connections.go` | `openPostgres` and `openRedis` open clients; `recordDependencyFailure` sanitizes diagnostics and logs failures once. |
-| `server.go` | `serveHTTP` starts the API, mounts health routes and shuts HTTP down; `readinessChecks` supplies dependency pings. |
-| `migrate.go` | `applyMigrations` applies or rolls back migrations; `reportMigrationStatus` logs each returned status row. |
-| `outbox_relay.go` | `runOutboxRelay` starts the worker that publishes committed outbox events to Redis Streams. |
-| `healthcheck.go` | `checkHTTPHealth` checks the local HTTP liveness endpoint for Docker. |
+| File              | Responsibility                                                                                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `main.go`         | Enter the executable and return its exit code after cleanup finishes.                                                                                               |
+| `command.go`      | `runProcess` handles signals and exit errors; `executeCommand` validates and dispatches the CLI command.                                                            |
+| `application.go`  | `newApplication` assembles config, logger and telemetry; `shutdownTelemetry` bounds cleanup by the configured timeout.                                              |
+| `connections.go`  | `openPostgres` and `openRedis` open clients; `recordDependencyFailure` sanitizes diagnostics and logs failures once.                                                |
+| `server.go`       | `serveHTTP` starts the API, mounts health routes and shuts HTTP down; `readinessChecks` supplies dependency pings.                                                  |
+| `router.go`       | Mounts authentication, protected Registry APIs, internal resolve and health routes. Ordinary routes carry request deadlines; future stream routes mount separately. |
+| `migrate.go`      | `applyMigrations` applies or rolls back migrations; `reportMigrationStatus` logs each returned status row.                                                          |
+| `outbox_relay.go` | `runOutboxRelay` starts the worker that publishes committed outbox events to Redis Streams.                                                                         |
+| `healthcheck.go`  | `checkHTTPHealth` checks the local HTTP liveness endpoint for Docker.                                                                                               |
 
 The same compiled `core` executable serves three roles in Compose: `migrate`
 exits after preparing the database, `serve` runs the API, and `outbox-relay` runs the
@@ -85,3 +86,14 @@ printing a second copy. Logger creation rejects unknown log levels.
 All commands that load configuration, including `healthcheck`, require the nonempty
 `CORE_VAULT_MASTER_KEY`. Generate a base64 32-byte key with `openssl rand -base64 32`;
 keep it stable to preserve access to stored secrets. `CORE_VAULT_KEY_ID` defaults to `v1`.
+
+Core startup configures M0.2 platform-scoped modules. Their data belongs to the [Platform tenant](../../../docs/glossary.md) (`default`). M1 business tenancy must derive `tenant_id` from trusted context, never client or model parameters.
+
+All config-loading commands also require nonempty CORE_SERVICE_TOKEN. The identity test fixtures supply it explicitly.
+
+`serve` validates the vault key before dependency access, bootstraps the owner,
+then injects the guarded provider catalog into the Registry. The route coverage
+test checks every mounted method/path against the shared OpenAPI contract.
+The generated Postman collection runs against a live HTTP server backed by
+disposable migrated Postgres and Redis in `TestAPI_GeneratedPostmanCollection`.
+Its fixtures never change the existing platform roles or read real credentials.

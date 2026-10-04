@@ -18,3 +18,5 @@ check langfuse      http://localhost:3002/api/public/health
 
 body="$(curl -sS http://localhost:8080/does-not-exist)"
 echo "$body" | grep -q '"code":"NOT_FOUND"' && echo "ok   error-response-404" || { echo "FAIL error-response-404: $body"; exit 1; }
+
+uv run --directory ragx python ../scripts/smoke_identity.py

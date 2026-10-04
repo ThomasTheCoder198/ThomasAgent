@@ -8,6 +8,7 @@ const (
 	CodeAuthCsrfInvalid            Code = "AUTH_CSRF_INVALID"
 	CodeAuthInvalidCredentials     Code = "AUTH_INVALID_CREDENTIALS"
 	CodeAuthSessionExpired         Code = "AUTH_SESSION_EXPIRED"
+	CodeClientNetworkError         Code = "CLIENT_NETWORK_ERROR"
 	CodeConflict                   Code = "CONFLICT"
 	CodeDependencyTimeout          Code = "DEPENDENCY_TIMEOUT"
 	CodeForbidden                  Code = "FORBIDDEN"
@@ -34,6 +35,7 @@ const (
 	ErrAuthCsrfInvalid            NamedError = NamedError(CodeAuthCsrfInvalid)
 	ErrAuthInvalidCredentials     NamedError = NamedError(CodeAuthInvalidCredentials)
 	ErrAuthSessionExpired         NamedError = NamedError(CodeAuthSessionExpired)
+	ErrClientNetworkError         NamedError = NamedError(CodeClientNetworkError)
 	ErrConflict                   NamedError = NamedError(CodeConflict)
 	ErrDependencyTimeout          NamedError = NamedError(CodeDependencyTimeout)
 	ErrForbidden                  NamedError = NamedError(CodeForbidden)
@@ -64,6 +66,8 @@ func LookupDefinition(code Code) ErrorDefinition {
 		return ErrorDefinition{HTTPStatus: 401, Retryable: false, MessageVI: "Email hoặc mật khẩu không đúng.", MessageEN: "Incorrect email or password."}
 	case CodeAuthSessionExpired:
 		return ErrorDefinition{HTTPStatus: 401, Retryable: false, MessageVI: "Phiên đăng nhập đã hết hạn.", MessageEN: "Your session has expired."}
+	case CodeClientNetworkError:
+		return ErrorDefinition{HTTPStatus: 503, Retryable: true, MessageVI: "Không kết nối được tới máy chủ.", MessageEN: "Could not reach the server."}
 	case CodeConflict:
 		return ErrorDefinition{HTTPStatus: 409, Retryable: false, MessageVI: "Dữ liệu bị xung đột với trạng thái hiện tại.", MessageEN: "The request conflicts with the current state."}
 	case CodeDependencyTimeout:

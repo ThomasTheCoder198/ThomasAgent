@@ -1,0 +1,10 @@
+extends:
+  - recommended
+rules:
+  # Examples carry Postman variables such as {{providerId}}, which cannot satisfy uuid/email formats.
+  no-invalid-media-type-examples: off
+  no-invalid-parameter-examples: off
+  operation-summary: warn
+  tag-description: off
+  info-license: off
+  operation-4xx-response: warn

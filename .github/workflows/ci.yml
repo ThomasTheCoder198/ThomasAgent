@@ -18,11 +18,18 @@ jobs:
           cache-dependency-path: contracts/go.sum
       - uses: go-task/setup-task@v2
         with: { version: "3.54.0" }
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24.21.0"
+          cache: npm
+          cache-dependency-path: contracts/package-lock.json
+      - run: npm ci
+        working-directory: contracts
       - run: task test:contracts
       - name: Generated code is up to date
         run: |
           task gen
-          git diff --exit-code -- backend-core ragx frontend
+          git diff --exit-code -- backend-core ragx frontend contracts/postman/thomasagent.postman_collection.json
 
   core:
     runs-on: ubuntu-latest
@@ -32,6 +39,15 @@ jobs:
         with:
           go-version: "1.27.1"
           cache-dependency-path: backend-core/go.sum
+      - uses: go-task/setup-task@v2
+        with: { version: "3.54.0" }
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24.21.0"
+          cache: npm
+          cache-dependency-path: contracts/package-lock.json
+      - run: npm ci
+        working-directory: contracts
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.14.0
@@ -40,7 +56,7 @@ jobs:
       - name: Format and lint
         run: golangci-lint fmt ./... && golangci-lint run ./...
         working-directory: backend-core
-      - run: go test ./... -race -count=1
+      - run: go test ./... -race -count=1 -p 2
         working-directory: backend-core
 
   rag:

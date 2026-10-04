@@ -111,9 +111,13 @@ func TestDo_HonorsRetryAfter(t *testing.T) {
 	require.Equal(t, []time.Duration{3 * time.Second}, s.got)
 }
 
-func TestDo_CapsRetryAfterAtMaxDelay(t *testing.T) {
+func TestDo_ProviderDelayRemainsContextCancellable(t *testing.T) {
 	s := &recordedSleeps{}
 	p := testPolicy(s)
+	p.Sleep = func(_ context.Context, delay time.Duration) error {
+		s.got = append(s.got, delay)
+		return context.Canceled
+	}
 	calls := 0
 	err := Do(context.Background(), p, func(context.Context) error {
 		calls++
@@ -122,8 +126,25 @@ func TestDo_CapsRetryAfterAtMaxDelay(t *testing.T) {
 		}
 		return nil
 	})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, 1, calls)
+	require.Equal(t, []time.Duration{time.Hour}, s.got)
+}
+
+func TestDo_HonorsRetryAfterBeyondBackoffCap(t *testing.T) {
+	sleeps := &recordedSleeps{}
+	policy := testPolicy(sleeps)
+	calls := 0
+	err := Do(t.Context(), policy, func(context.Context) error {
+		calls++
+		if calls == 1 {
+			return retryAfterErr{d: time.Minute}
+		}
+		return nil
+	})
 	require.NoError(t, err)
-	require.Equal(t, []time.Duration{p.MaxDelay}, s.got)
+	require.Equal(t, 2, calls)
+	require.Equal(t, []time.Duration{time.Minute}, sleeps.got)
 }
 
 func TestBackoff_IsCappedAndJittered(t *testing.T) {

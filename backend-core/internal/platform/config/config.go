@@ -8,6 +8,7 @@ import (
 	"github.com/caarlos0/env/v11"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
 )
 
 type RetryConfig struct {
@@ -59,25 +60,60 @@ type VaultConfig struct {
 	KeyID     string `env:"KEY_ID" envDefault:"v1"`
 }
 
+type AuthConfig struct {
+	OwnerEmail        string        `env:"OWNER_EMAIL"`
+	OwnerPassword     string        `env:"OWNER_PASSWORD"`
+	SessionTTL        time.Duration `env:"SESSION_TTL" envDefault:"720h"`
+	CookieSecure      bool          `env:"COOKIE_SECURE" envDefault:"false"`
+	LoginMaxAttempts  int           `env:"LOGIN_MAX_ATTEMPTS" envDefault:"10"`
+	LoginWindow       time.Duration `env:"LOGIN_WINDOW" envDefault:"15m"`
+	MinPasswordLength int           `env:"MIN_PASSWORD_LENGTH" envDefault:"12"`
+}
+
+func (c AuthConfig) validate() []error {
+	var errs []error
+	if c.SessionTTL <= 0 {
+		errs = append(errs, errors.New("CORE_AUTH_SESSION_TTL must be > 0"))
+	}
+	if c.MinPasswordLength < 1 {
+		errs = append(errs, errors.New("CORE_AUTH_MIN_PASSWORD_LENGTH must be >= 1"))
+	}
+	if c.LoginWindow <= 0 {
+		errs = append(errs, errors.New("CORE_AUTH_LOGIN_WINDOW must be > 0"))
+	}
+	if c.LoginMaxAttempts < 1 {
+		errs = append(errs, errors.New("CORE_AUTH_LOGIN_MAX_ATTEMPTS must be >= 1"))
+	}
+	return errs
+}
+
 type Config struct {
-	Vault             VaultConfig       `envPrefix:"VAULT_"`
-	HTTP              HTTPConfig        `envPrefix:"HTTP_"`
-	Environment       string            `env:"ENV" envDefault:"dev"`
-	ServiceName       string            `env:"SERVICE_NAME" envDefault:"thomas-core"`
-	HTTPAddr          string            `env:"HTTP_ADDR" envDefault:":8080"`
-	ShutdownTimeout   time.Duration     `env:"SHUTDOWN_TIMEOUT" envDefault:"15s"`
-	ReadHeaderTimeout time.Duration     `env:"READ_HEADER_TIMEOUT" envDefault:"10s"`
-	DatabaseURL       string            `env:"DATABASE_URL,required,notEmpty"`
-	RedisURL          string            `env:"REDIS_URL,required,notEmpty"`
-	OTLPEndpoint      string            `env:"OTLP_ENDPOINT"`
-	LogLevel          string            `env:"LOG_LEVEL" envDefault:"info"`
-	Retry             RetryConfig       `envPrefix:"RETRY_"`
-	Breaker           BreakerConfig     `envPrefix:"BREAKER_"`
-	Stream            ConsumerConfig    `envPrefix:"STREAM_"`
-	OutboxRelay       OutboxRelayConfig `envPrefix:"RELAY_"`
+	ProviderHTTPTimeout      time.Duration     `env:"PROVIDER_HTTP_TIMEOUT" envDefault:"20s"`
+	ProviderBreaker          BreakerConfig     `envPrefix:"PROVIDER_BREAKER_"`
+	ProviderMaxResponseBytes int64             `env:"PROVIDER_MAX_RESPONSE_BYTES" envDefault:"8388608"`
+	ProviderPrivateAllowlist []string          `env:"PROVIDER_PRIVATE_ALLOWLIST" envSeparator:","`
+	Auth                     AuthConfig        `envPrefix:"AUTH_"`
+	ServiceToken             string            `env:"SERVICE_TOKEN,required,notEmpty"`
+	Vault                    VaultConfig       `envPrefix:"VAULT_"`
+	HTTP                     HTTPConfig        `envPrefix:"HTTP_"`
+	Environment              string            `env:"ENV" envDefault:"dev"`
+	ServiceName              string            `env:"SERVICE_NAME" envDefault:"thomas-core"`
+	HTTPAddr                 string            `env:"HTTP_ADDR" envDefault:":8080"`
+	ShutdownTimeout          time.Duration     `env:"SHUTDOWN_TIMEOUT" envDefault:"15s"`
+	ReadHeaderTimeout        time.Duration     `env:"READ_HEADER_TIMEOUT" envDefault:"10s"`
+	DatabaseURL              string            `env:"DATABASE_URL,required,notEmpty"`
+	RedisURL                 string            `env:"REDIS_URL,required,notEmpty"`
+	OTLPEndpoint             string            `env:"OTLP_ENDPOINT"`
+	LogLevel                 string            `env:"LOG_LEVEL" envDefault:"info"`
+	Retry                    RetryConfig       `envPrefix:"RETRY_"`
+	Breaker                  BreakerConfig     `envPrefix:"BREAKER_"`
+	Stream                   ConsumerConfig    `envPrefix:"STREAM_"`
+	OutboxRelay              OutboxRelayConfig `envPrefix:"RELAY_"`
 }
 
 const envPrefix = "CORE_"
+
+const DefaultProviderMaxResponseBytes int64 = 8388608
 
 func Load() (Config, error) {
 	cfg, err := env.ParseAsWithOptions[Config](env.Options{Prefix: envPrefix})
@@ -108,5 +144,30 @@ func (c Config) validate() error {
 		errs = append(errs, errors.New("CORE_BREAKER_HALF_OPEN_MAX_CALLS must be >= 1"))
 	}
 	errs = append(errs, c.HTTP.validate()...)
+	errs = append(errs, c.Auth.validate()...)
+	errs = append(errs, c.validateProvider()...)
 	return errors.Join(errs...)
+}
+
+func (c Config) validateProvider() []error {
+	var errs []error
+	if c.ProviderHTTPTimeout <= 0 {
+		errs = append(errs, errors.New("CORE_PROVIDER_HTTP_TIMEOUT must be > 0"))
+	}
+	if c.ProviderMaxResponseBytes < 1 {
+		errs = append(errs, errors.New("CORE_PROVIDER_MAX_RESPONSE_BYTES must be >= 1"))
+	}
+	if c.ProviderBreaker.FailureThreshold < 1 {
+		errs = append(errs, errors.New("CORE_PROVIDER_BREAKER_FAILURE_THRESHOLD must be >= 1"))
+	}
+	if c.ProviderBreaker.HalfOpenMaxCalls < 1 {
+		errs = append(errs, errors.New("CORE_PROVIDER_BREAKER_HALF_OPEN_MAX_CALLS must be >= 1"))
+	}
+	if c.ProviderBreaker.OpenTimeout <= 0 {
+		errs = append(errs, errors.New("CORE_PROVIDER_BREAKER_OPEN_TIMEOUT must be > 0"))
+	}
+	if err := outbound.ValidatePrivateAllowlist(c.ProviderPrivateAllowlist); err != nil {
+		errs = append(errs, fmt.Errorf("CORE_PROVIDER_PRIVATE_ALLOWLIST: %w", err))
+	}
+	return errs
 }

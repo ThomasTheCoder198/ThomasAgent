@@ -44,6 +44,10 @@ errors:
     status: 504
     retryable: true
     message: { vi: "Dịch vụ phụ thuộc phản hồi quá chậm.", en: "A dependency timed out." }
+  - code: CLIENT_NETWORK_ERROR
+    status: 503
+    retryable: true
+    message: { vi: "Không kết nối được tới máy chủ.", en: "Could not reach the server." }
   - code: AUTH_INVALID_CREDENTIALS
     status: 401
     retryable: false

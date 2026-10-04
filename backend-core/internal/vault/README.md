@@ -22,7 +22,7 @@ Docker Desktop is required for PostgreSQL integration tests.
 ## Conventions
 The secret UUID bytes are AAD, so copying encrypted values into another row fails authentication. Every seal uses a fresh random nonce. Key IDs are stored as metadata; key rotation needs a future re-encrypt job. Never log plaintext or master keys. Store errors are returned for callers to handle at the boundary.
 
-Secrets are scoped to the [Platform tenant](../../../../docs/glossary.md#thomasagent-glossary) (`default`). M0.2 relies on the database column default; from M1, repositories take `tenant_id` from context. `Get` and `Replace` return `ErrSecretNotFound` for a missing row; `Delete` is idempotent.
+Secrets are scoped to the [Platform tenant](../../../docs/glossary.md#thomasagent-glossary) (`default`). M0.2 relies on the database column default; from M1, repositories take `tenant_id` from context. `Get` and `Replace` return `ErrSecretNotFound` for a missing row; `Delete` is idempotent.
 
 ## Common failures
 - Invalid master key: generate a base64 32-byte value with `openssl rand -base64 32`.

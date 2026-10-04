@@ -22,7 +22,9 @@ import (
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tracing"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/migrations"
 )
 
 func TestApplication_DatabaseFailuresRecordDiagnosticsOnce(t *testing.T) {
@@ -178,6 +180,7 @@ func TestServe_ListeningLogCarriesTraceContext(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, database.Terminate(context.Background())) })
 	databaseURL, err := database.ConnectionString(ctx, "sslmode=disable")
 	require.NoError(t, err)
+	require.NoError(t, postgres.Migrate(ctx, databaseURL, migrations.FS, postgres.Up))
 	redis, err := tcredis.Run(ctx, "redis:8.10.2")
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, redis.Terminate(context.Background())) })
@@ -193,7 +196,15 @@ func TestServe_ListeningLogCarriesTraceContext(t *testing.T) {
 	log, err := logging.NewLogger(output, "info", "core-test", "test", nil)
 	require.NoError(t, err)
 	a := &application{
-		cfg: config.Config{DatabaseURL: databaseURL, RedisURL: redisURL, HTTPAddr: "127.0.0.1:0", ShutdownTimeout: time.Second},
+		cfg: config.Config{
+			DatabaseURL: databaseURL, RedisURL: redisURL, HTTPAddr: "127.0.0.1:0", ShutdownTimeout: time.Second,
+			Vault:        config.VaultConfig{KeyID: "v1", MasterKey: testVaultMasterKey},
+			Auth:         config.AuthConfig{OwnerEmail: "owner@example.com", OwnerPassword: "correct horse battery", SessionTTL: time.Hour, LoginMaxAttempts: 10, LoginWindow: time.Minute, MinPasswordLength: 12},
+			HTTP:         config.HTTPConfig{MaxBodyBytes: 1 << 10, RequestTimeout: time.Second},
+			ServiceToken: "test-token", ProviderHTTPTimeout: time.Second,
+			ProviderMaxResponseBytes: config.DefaultProviderMaxResponseBytes,
+			ProviderBreaker:          config.BreakerConfig{FailureThreshold: 5, OpenTimeout: time.Second, HalfOpenMaxCalls: 1},
+		},
 		log: log, startupTracer: provider.Tracer("core-test"),
 	}
 	require.NoError(t, a.serveHTTP(ctx))
@@ -236,4 +247,5 @@ const testVaultMasterKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 func setIdentityEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("CORE_VAULT_MASTER_KEY", testVaultMasterKey)
+	t.Setenv("CORE_SERVICE_TOKEN", "test-token")
 }

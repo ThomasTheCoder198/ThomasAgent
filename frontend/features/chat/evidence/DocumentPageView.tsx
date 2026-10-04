@@ -51,7 +51,7 @@ export function DocumentPageView({ page, citations, selected, onSelect }: Props)
             ref={hit ? hitRef : undefined}
             className={cn(
               "outline-kb relative mb-2 rounded-[3px] transition-[background-color,outline-color] duration-300",
-              hit && "bg-page-hit outline-2",
+              hit && "bg-page-hit animate-hit outline-2",
             )}
           >
             {tags.length > 0 && (

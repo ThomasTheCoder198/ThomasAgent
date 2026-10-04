@@ -48,11 +48,11 @@ export function LoginForm({ next }: { next: string }) {
         required
       />
       {error && (
-        <p role="alert" className="text-app text-sm font-medium">
+        <p role="alert" className="text-app animate-rise text-sm font-medium">
           {error}
         </p>
       )}
-      <Button type="submit" disabled={pending} className="mt-2 py-2.5 text-[15px]">
+      <Button type="submit" disabled={pending} pending={pending} className="mt-2 py-2.5 text-[15px]">
         {pending ? t("submitting") : t("submit")}
       </Button>
     </form>

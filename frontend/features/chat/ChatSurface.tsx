@@ -4,6 +4,7 @@ import { RotateCcw } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/cn";
 import type { ModelChoice } from "@/features/registry/types";
 
 import { AssistantMessage, UserMessage } from "./components/AssistantMessage";
@@ -31,6 +32,12 @@ export type ChatSurfaceProps = {
 const PENDING_REPLY: ChatMessage = { id: "pending", role: "assistant", parts: [] };
 const noop = () => undefined;
 
+/**
+ * Thread and composer share one fluid column that grows with the window. On very wide screens it anchors
+ * left (the run line's side) instead of floating as a centred strip; prose keeps its own 75ch measure.
+ */
+const CHAT_COLUMN = "mx-auto w-full max-w-240 2xl:mr-auto 2xl:ml-[clamp(2.5rem,6vw,8rem)] 2xl:max-w-288";
+
 type Session = ReturnType<typeof useChatSession>;
 type Evidence = ReturnType<typeof useEvidence>;
 
@@ -39,7 +46,7 @@ function Thread({ session, evidence }: { session: Session; evidence: Evidence })
   const { messages, busy, status } = session;
   const awaitingFirstChunk = status === "submitted" && messages.at(-1)?.role === "user";
   return (
-    <div className="mx-auto max-w-190 px-4 md:px-8">
+    <div className={cn(CHAT_COLUMN, "px-4 md:px-8")}>
       {messages.length === 0 && <NewChatIntro />}
       {messages.map((message, index) =>
         message.role === "user" ? (
@@ -104,8 +111,9 @@ export function ChatSurface({
         >
           <Thread session={session} evidence={evidence} />
         </div>
-        <div className="from-ground/0 to-ground bg-gradient-to-b from-0% to-30% px-4 pt-3.5 pb-4.5 md:px-8">
-          <div className="mx-auto max-w-174">
+        <div className="from-ground/0 to-ground bg-gradient-to-b from-0% to-30% pt-3.5 pb-4.5">
+          {/* Same column and same inner padding as the thread, so composer and messages share both edges. */}
+          <div className={cn(CHAT_COLUMN, "px-4 md:px-8")}>
             <Composer
               busy={session.busy}
               onSend={session.send}

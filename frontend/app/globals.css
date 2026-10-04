@@ -21,6 +21,8 @@
   --sign-rule: #2a2a28;
   --sign-hover: #1f1f1d;
   --sign-active: #262624;
+  /* Full-width sign bands (Agent header). Same enamel black by day; lifted at night so the band still reads. */
+  --sign-band: var(--sign);
   --kb: #00843d;
   --kb-tint: #e3f2e9;
   --on-kb: #ffffff;
@@ -48,6 +50,8 @@
   --sheet-lift: 0 -20px 40px -10px rgb(0 0 0 / 0.35);
   --page-lift: 0 1px 2px rgb(0 0 0 / 0.08), 0 10px 24px -14px rgb(0 0 0 / 0.3);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Delay step between items that enter together (list rows, stations). */
+  --stagger: 45ms;
   color-scheme: light;
 }
 
@@ -69,6 +73,7 @@
   --sign-rule: #1e2125;
   --sign-hover: #16191d;
   --sign-active: #1b1f24;
+  --sign-band: #1d2127;
   --kb: #2bb673;
   --kb-tint: #12301f;
   --on-kb: #06210f;
@@ -112,6 +117,7 @@
   --color-sign-rule: var(--sign-rule);
   --color-sign-hover: var(--sign-hover);
   --color-sign-active: var(--sign-active);
+  --color-sign-band: var(--sign-band);
   --color-kb: var(--kb);
   --color-kb-tint: var(--kb-tint);
   --color-on-kb: var(--on-kb);
@@ -143,18 +149,73 @@
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --animate-caret: caret 1s steps(2) infinite;
   --animate-draw: draw 1.2s var(--ease-out) both;
+  --animate-draw-x: draw-x 1.1s var(--ease-out) 0.15s both;
+  --animate-rise: rise 0.45s var(--ease-out) both;
+  --animate-fade: fade 0.25s var(--ease-out) both;
+  --animate-pop: pop 0.4s var(--ease-out) both;
+  --animate-stem: stem 0.5s var(--ease-out) both;
+  --animate-depart: depart 1.1s var(--ease-out) infinite;
+  --animate-hit: hit 0.9s var(--ease-out);
 
   @keyframes caret {
     50% {
       opacity: 0;
     }
   }
+  /* A vertical stem growing downward from its station. */
   @keyframes draw {
     from {
       clip-path: inset(0 0 100% 0);
     }
     to {
       clip-path: inset(0 0 0 0);
+    }
+  }
+  /* A route strip being drawn left to right, like a line on a network map. */
+  @keyframes draw-x {
+    from {
+      clip-path: inset(0 100% 0 0);
+    }
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+  /* Starts already readable: content is never hidden waiting for its entrance. */
+  @keyframes rise {
+    from {
+      opacity: 0.6;
+      transform: translateY(6px);
+    }
+  }
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+  }
+  @keyframes stem {
+    from {
+      transform: scaleY(0);
+    }
+  }
+  /* The "train leaving" bar under a button while its request is in flight. */
+  @keyframes depart {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(250%);
+    }
+  }
+  /* One flash on the cited block when its roundel is chosen. */
+  @keyframes hit {
+    30% {
+      background-color: color-mix(in srgb, var(--kb) 28%, var(--page-hit));
     }
   }
 }
@@ -221,7 +282,9 @@
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
   }
 }

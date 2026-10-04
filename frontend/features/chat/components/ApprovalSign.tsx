@@ -1,13 +1,13 @@
 "use client";
 
-import { Plug } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 
 import type { ToolStation } from "../run-view";
-import { LineBadge } from "./LineBadge";
+import { LineBadge } from "@/components/metro/LineBadge";
+import { lineIcons } from "@/components/metro/lineIcons";
 
 export type ApprovalDecision = { approvalId: string; approved: boolean; always?: boolean };
 
@@ -30,10 +30,12 @@ export function ApprovalSign({ station, onDecide, disabled }: Props) {
   return (
     <section
       aria-label={t("approvalTitle")}
-      className={cn("border-mcp-rule bg-mcp-tint mt-2 max-w-[62ch] rounded-xl border px-4 py-3.5")}
+      className={cn(
+        "border-mcp-rule bg-mcp-tint animate-rise mt-2 max-w-[62ch] rounded-xl border px-4 py-3.5",
+      )}
     >
       <header className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-sm">
-        <LineBadge line={station.line} icon={Plug}>
+        <LineBadge line={station.line} icon={lineIcons[station.line]}>
           {station.source}
         </LineBadge>
         <b className="font-semibold">{station.title}</b>

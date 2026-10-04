@@ -11,7 +11,9 @@ no business data; everything comes from Go core through the same-origin `/api/v1
 - `app/login/page.tsx` — owner sign-in.
 - `app/(workspace)/layout.tsx` — session check (`requireUser`), sidebar, recents.
 - `app/(workspace)/chat/page.tsx`, `chat/[id]/page.tsx` — chat surface (`features/chat`).
-- `app/(workspace)/{agents,knowledge-bases,tools,usage}` — designed empty states until their milestones.
+- `app/(workspace)/agents`, `agents/[id]` — Agents list and tabbed Agent settings (`features/agents`).
+- `app/(workspace)/{knowledge-bases,tools,usage}` — designed empty states until their milestones.
+- `app/(workspace)/template.tsx` — route-change fade; the sidebar rail state comes from the `thomas_sidebar` cookie.
 - `proxy.ts` — redirects to `/login` without a `thomas_session` cookie; forwards the path as `x-pathname`.
 - `app/globals.css` — Metro tokens for light (station white) and dark (platform night).
 

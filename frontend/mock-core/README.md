@@ -15,7 +15,9 @@ All content it serves is **synthetic**.
 - `catalog.ts` — models and role assignments in the documented M0.2 shapes.
 - `conversations.ts` — in-memory conversation store; the seeded refund conversation is replayed from the same script the live chat streams.
 - `chat/` — `POST /api/v1/chat`: phase one (reasoning → KB search → read → sources → answer → Linear approval request), phase two after the owner approves or denies.
-- `fixtures/` — the synthetic refund-policy documents and citations.
+- `agents.ts` — `GET /api/v1/agents`, `GET|PATCH /api/v1/agents/{id}`, `GET /api/v1/knowledge-bases` (in-memory). Patches are checked like core must: another org's KB → `FORBIDDEN`, unknown KB or model id → `VALIDATION_FAILED`.
+- `POST /__mock/reset[?agent=id]` — fake-core only (outside `/api/v1`, so the web app cannot reach it); e2e restores seeded Agents before each test.
+- `fixtures/` — the synthetic refund-policy documents and citations, and three synthetic Agents with their KBs and tool sources.
 
 ## Dependencies
 
@@ -35,8 +37,9 @@ Sign in with `owner@thomas.local` / `metro-wayfinding` (override with `MOCK_CORE
 ## Switching to real core
 
 Nothing in `app/`, `features/` or `lib/` knows this module exists. Point `WEB_CORE_URL` at core
-(`http://localhost:8080`, or `http://core:8080` in compose) and run `npm run dev`. The provisional chat
-endpoints (`/api/v1/chat`, `/chat/scope`, `/conversations`, `/documents/{id}/pages/{n}`) must be
+(`http://localhost:8080`, or `http://core:8080` in compose) and run `npm run dev`. The provisional
+endpoints (`/api/v1/chat`, `/chat/scope`, `/conversations`, `/documents/{id}/pages/{n}`, `/agents`,
+`/knowledge-bases`) must be
 specified in `contracts/openapi/core.v1.yaml` during M2; update `features/chat/contract.ts` to the
 generated types and delete this module when core serves them.
 

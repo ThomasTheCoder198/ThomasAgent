@@ -9,7 +9,8 @@ catalog code, maps network failures and non-JSON bodies to `CLIENT_NETWORK_ERROR
 ## Entry points
 
 - `client.ts` — `apiFetch` (browser), `parseResponse`, `mutationHeaders` (also used by the chat transport), `ApiError`.
-- `server.ts` — `serverFetch` for server components; calls `WEB_CORE_URL` directly and forwards the browser's cookies.
+- `server.ts` — `serverFetch` for server components; calls `WEB_CORE_URL` directly and forwards the browser's cookies. `serverFetchOptional` (404 → fallback) is only for endpoints core may not serve yet where "empty" is a true answer (e.g. the Agent list); `serverFetchResult` returns a `Loaded<T>` so any other failure is rendered as an error state instead of an empty list.
+- `loaded.ts` — the `Loaded<T>` type and `loadedOr`, shared by server loaders and client components.
 
 ## Dependencies
 

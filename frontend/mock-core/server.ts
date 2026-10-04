@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 
 import { CHAT_PATHS } from "../features/chat/contract.ts";
 import { ErrorCode } from "../lib/errors/codes.gen.ts";
+import { getAgent, listAgents, listKnowledgeBases, patchAgent, resetAgents } from "./agents.ts";
 import { guard, login, logout, me } from "./auth.ts";
 import { models, roles } from "./catalog.ts";
 import { chat } from "./chat/handler.ts";
@@ -15,11 +16,33 @@ type Route = { method: string; pattern: RegExp; handler: Handler; public?: boole
 
 const routes: Route[] = [
   { method: "POST", pattern: /^\/api\/v1\/auth\/login$/, handler: login, public: true },
+  // Fake-core only, outside /api/v1 so the web app can never reach it: e2e restores seeded state per test.
+  {
+    method: "POST",
+    pattern: /^\/__mock\/reset$/,
+    handler: (req, res) => {
+      resetAgents(new URL(req.url ?? "/", "http://mock-core").searchParams.get("agent") ?? undefined);
+      sendData(res, { status: "reset" });
+    },
+    public: true,
+  },
   { method: "GET", pattern: /^\/api\/v1\/auth\/me$/, handler: me },
   { method: "POST", pattern: /^\/api\/v1\/auth\/logout$/, handler: logout },
   { method: "GET", pattern: /^\/api\/v1\/models$/, handler: (_q, res) => sendData(res, models) },
   { method: "GET", pattern: /^\/api\/v1\/model-roles$/, handler: (_q, res) => sendData(res, roles) },
   { method: "GET", pattern: /^\/api\/v1\/chat\/scope$/, handler: (_q, res) => sendData(res, defaultScope) },
+  { method: "GET", pattern: /^\/api\/v1\/agents$/, handler: listAgents },
+  {
+    method: "GET",
+    pattern: /^\/api\/v1\/agents\/([^/]+)$/,
+    handler: (req, res, [id]) => getAgent(req, res, id ?? ""),
+  },
+  {
+    method: "PATCH",
+    pattern: /^\/api\/v1\/agents\/([^/]+)$/,
+    handler: (req, res, [id]) => patchAgent(req, res, id ?? ""),
+  },
+  { method: "GET", pattern: /^\/api\/v1\/knowledge-bases$/, handler: listKnowledgeBases },
   { method: "POST", pattern: new RegExp(`^${CHAT_PATHS.chat}$`), handler: chat },
   {
     method: "GET",

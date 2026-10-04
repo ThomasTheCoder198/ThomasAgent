@@ -2,13 +2,14 @@
 
 import { LibraryBig, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, type ReactNode } from "react";
+import { useCallback } from "react";
 
 import { IconButton } from "@/components/ui/Button";
+import { tabPanelId, Tabs, type TabItem } from "@/components/ui/Tabs";
 import { useDismiss } from "@/components/ui/useDismiss";
 import { cn } from "@/lib/cn";
 
-import { LineBadge } from "../components/LineBadge";
+import { LineBadge } from "@/components/metro/LineBadge";
 import type { RunUsage } from "../contract";
 import type { Citation, Station } from "../run-view";
 import { DocumentPageView } from "./DocumentPageView";
@@ -39,21 +40,24 @@ function SignHeader({ citation, onClose }: { citation: Citation | undefined; onC
   const locator = citation?.locator;
   return (
     <header className="bg-sign text-sign-ink px-4.5 pt-3.5 pb-3">
+      {/* The file is the sign's heading; the KB name plate rides in the meta row with page and section. */}
       <div className="flex items-center gap-2">
-        <LineBadge line="kb" icon={LibraryBig}>
-          KB{locator ? ` · ${locator.kbName}` : ""}
-        </LineBadge>
-        <IconButton tone="sign" label={t("close")} onClick={onClose} className="ml-auto size-7">
+        <h2 className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.005em]">
+          {citation?.fileName ?? t("region")}
+        </h2>
+        <IconButton tone="sign" label={t("close")} onClick={onClose} className="size-7">
           <X aria-hidden className="size-4" />
         </IconButton>
       </div>
-      <h2 className="mt-2 truncate text-[15px] font-semibold tracking-[-0.005em]">
-        {citation?.fileName ?? t("region")}
-      </h2>
       {locator && (
-        <p className="tabular text-sign-ink-2 mt-0.5 truncate text-xs">
-          {t("page", { page: locator.page, total: locator.pageCount })}
-          {locator.section && ` · ${locator.section}`}
+        <p className="text-sign-ink-2 mt-1.5 flex min-w-0 items-center gap-2 text-xs">
+          <LineBadge line="kb" icon={LibraryBig}>
+            {locator.kbName}
+          </LineBadge>
+          <span className="tabular truncate">
+            {t("page", { page: locator.page, total: locator.pageCount })}
+            {locator.section && ` · ${locator.section}`}
+          </span>
         </p>
       )}
     </header>
@@ -103,7 +107,9 @@ function LoadedPage({
   );
 }
 
-function Tabs({
+const TABS_ID = "evidence";
+
+function EvidenceTabs({
   tab,
   onTab,
   sourceCount,
@@ -113,7 +119,7 @@ function Tabs({
   sourceCount: number;
 }) {
   const t = useTranslations("evidence");
-  const tabs: Array<{ id: EvidenceTab; label: ReactNode }> = [
+  const tabs: Array<TabItem<EvidenceTab>> = [
     { id: "evidence", label: t("tabEvidence") },
     {
       id: "sources",
@@ -126,20 +132,14 @@ function Tabs({
     { id: "inspector", label: t("tabInspector") },
   ];
   return (
-    <div role="tablist" className="border-rule bg-paper flex gap-0.5 border-b px-3">
-      {tabs.map(({ id, label }) => (
-        <button
-          key={id}
-          type="button"
-          role="tab"
-          aria-selected={tab === id}
-          onClick={() => onTab(id)}
-          className="text-ink-3 hover:text-ink aria-selected:border-ink aria-selected:text-ink -mb-px border-b-2 border-transparent px-2.5 py-2.75 text-[13px] aria-selected:font-semibold"
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+    <Tabs
+      items={tabs}
+      value={tab}
+      onChange={onTab}
+      idPrefix={TABS_ID}
+      label={t("region")}
+      className="border-rule bg-paper border-b px-3"
+    />
   );
 }
 
@@ -161,7 +161,7 @@ export function EvidencePanel(props: Props) {
         className={cn(
           "bg-paper z-40 flex min-h-0 flex-col overflow-hidden",
           "max-md:shadow-sheet max-md:border-rule fixed inset-x-0 bottom-0 h-[78dvh] rounded-t-[22px] max-md:border-t",
-          "md:border-rule md:shadow-lift md:inset-y-0 md:right-0 md:left-auto md:h-auto md:w-101 md:rounded-none md:border-l",
+          "md:border-rule md:shadow-lift md:inset-y-0 md:right-0 md:left-auto md:h-auto md:w-[clamp(22rem,30vw,30rem)] md:rounded-none md:border-l",
           "xl:static xl:shadow-none",
           "ease-out-expo transition-transform duration-300",
           open ? "translate-0" : "max-md:translate-y-full md:translate-x-full xl:hidden",
@@ -172,9 +172,11 @@ export function EvidencePanel(props: Props) {
           className="bg-rule-strong mx-auto mt-2 mb-1 h-1.25 w-10 shrink-0 rounded-full md:hidden"
         />
         <SignHeader citation={citation} onClose={onClose} />
-        <Tabs tab={tab} onTab={onTab} sourceCount={citations.length} />
+        <EvidenceTabs tab={tab} onTab={onTab} sourceCount={citations.length} />
         <div
           role="tabpanel"
+          id={tabPanelId(TABS_ID, tab)}
+          aria-labelledby={`${TABS_ID}-tab-${tab}`}
           className={cn("min-h-0 flex-1 overflow-y-auto", tab === "evidence" && "bg-pageview")}
         >
           {tab === "evidence" && (

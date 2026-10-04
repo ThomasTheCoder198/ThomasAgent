@@ -21,6 +21,7 @@ export type RoleAssignment = { role: Role; modelId: string };
 export type ModelChoice = { models: Model[]; defaultModelId: string | undefined };
 
 export const REGISTRY_PATHS = {
+  models: "/api/v1/models",
   chatModels: "/api/v1/models?capability=chat",
   roles: "/api/v1/model-roles",
 } as const;

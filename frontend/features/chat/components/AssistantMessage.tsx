@@ -2,6 +2,8 @@
 
 import { useId, useState } from "react";
 
+import { cn } from "@/lib/cn";
+
 import type { ChatMessage } from "../contract";
 import { isAwaitingApproval, toRunView, travelled, type Segment, type Station } from "../run-view";
 import { Answer } from "./Answer";
@@ -80,8 +82,18 @@ export function AssistantMessage({
                 onToggle={() => setExpanded((v) => !v)}
                 controls={stepsId}
               />
-              <div id={stepsId} hidden={!expanded}>
-                <RunLine stations={segment.stations} onDecide={onDecide} />
+              {/* Unfolds by animating grid rows 0fr → 1fr; `inert` keeps folded stations out of tab order. */}
+              <div
+                id={stepsId}
+                inert={!expanded}
+                className={cn(
+                  "ease-out-expo grid transition-[grid-template-rows,opacity] duration-300",
+                  expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+                )}
+              >
+                <div className="min-h-0 overflow-hidden">
+                  <RunLine stations={segment.stations} onDecide={onDecide} />
+                </div>
               </div>
             </div>
           );
@@ -106,7 +118,7 @@ export function AssistantMessage({
 export function UserMessage({ message }: { message: ChatMessage }) {
   const text = message.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n");
   return (
-    <div className="mb-5.5 flex justify-end">
+    <div className="animate-rise mb-5.5 flex justify-end">
       <p className="border-rule bg-paper max-w-[78%] rounded-[14px_14px_4px_14px] border px-3.75 py-2.75 whitespace-pre-wrap">
         {text}
       </p>

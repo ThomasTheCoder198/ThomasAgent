@@ -6,7 +6,11 @@ import { RUN_TIMEOUT, signIn } from "./helpers";
 const out = "../.impeccable/review";
 const desktop = { width: 1440, height: 900 };
 const mobile = { width: 390, height: 844 };
+const wide = { width: 1920, height: 1080 };
 const SETTLE_MS = 600;
+
+// Stills cannot show motion; reduced motion makes every capture deterministic and exercises that path too.
+test.use({ reducedMotion: "reduce" });
 
 async function theme(page: Page, value: "light" | "dark") {
   await page.evaluate((t) => {
@@ -72,4 +76,37 @@ test("@screens capture", async ({ page }) => {
   await page.setViewportSize(desktop);
   await page.goto("/knowledge-bases");
   await shot(page, "empty-kb-desktop-light");
+
+  await page.request.post(`${process.env.MOCK_CORE_URL ?? "http://localhost:8787"}/__mock/reset`);
+  await page.goto("/agents");
+  await shot(page, "agents-list-desktop-light");
+  await page.goto("/agents/agent-phap-che?tab=overview");
+  await shot(page, "agent-savebar-hidden-desktop-light");
+  await page.getByRole("textbox", { name: "Tên" }).fill(" ");
+  await shot(page, "agent-empty-name-desktop-light");
+  await page.getByRole("button", { name: "Hoàn tác" }).click();
+  await page.goto("/agents/agent-nhap-khau?tab=knowledge");
+  await shot(page, "agent-unknown-kb-desktop-light");
+  await page.goto("/agents/agent-phap-che?tab=tools");
+  await shot(page, "agent-tools-desktop-light");
+  await page
+    .getByRole("group", { name: "Chính sách cho Huỷ hoá đơn" })
+    .getByRole("radio", { name: "Hỏi trước" })
+    .check({ force: true });
+  await shot(page, "agent-unsaved-desktop-light");
+  await page.getByRole("button", { name: "Hoàn tác" }).click();
+  await theme(page, "dark");
+  await page.goto("/agents/agent-phap-che?tab=models");
+  await shot(page, "agent-models-desktop-dark");
+  await theme(page, "light");
+  await page.setViewportSize(mobile);
+  await page.goto("/agents/agent-phap-che?tab=tools");
+  await shot(page, "agent-tools-mobile-light");
+
+  await page.setViewportSize(wide);
+  await page.goto("/chat/c-hoan-tien-2026");
+  await shot(page, "chat-done-wide-light");
+  await page.getByRole("button", { name: /Thu gọn sidebar/ }).click();
+  await shot(page, "chat-rail-wide-light");
+  await page.getByRole("button", { name: /Mở rộng sidebar/ }).click();
 });

@@ -1,10 +1,10 @@
 "use client";
 
-import type { LucideIcon } from "lucide-react";
-import { BookOpen, Boxes, Brain, LibraryBig, Plug, Workflow } from "lucide-react";
+import { BookOpen, Brain } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 
-import { lineBg, type Line, type ToolLine } from "@/components/metro/lines";
+import { lineIcons } from "@/components/metro/lineIcons";
+import { lineBg, type Line } from "@/components/metro/lines";
 import { cn } from "@/lib/cn";
 import { formatSeconds } from "@/lib/format";
 
@@ -13,8 +13,6 @@ import type { Station, ToolStation } from "../run-view";
 import { ApprovalSign, type ApprovalDecision } from "./ApprovalSign";
 import { ReasoningBody, ToolBody, ToolLabel } from "./StationContent";
 import { StationMarker } from "./StationMarker";
-
-const lineIcons: Record<ToolLine, LucideIcon> = { kb: LibraryBig, mcp: Plug, cmp: Workflow, app: Boxes };
 
 function stationLine(station: Station): Line {
   return station.kind === "tool" ? station.line : "model";
@@ -80,11 +78,15 @@ export function RunLine({ stations, liveId, onDecide, deciding }: RunLineProps) 
         const live = isLive(station, liveId);
         const last = index === stations.length - 1;
         return (
-          <li key={station.id} className={cn("relative", last ? "pb-1" : "pb-4")}>
+          <li key={station.id} className={cn("animate-rise relative", last ? "pb-1" : "pb-4")}>
             {!last && (
+              // The stem grows down to the next station when that station arrives.
               <span
                 aria-hidden
-                className={cn("absolute top-5 -bottom-0.5 -left-6 w-[3px] rounded-sm", lineBg[line])}
+                className={cn(
+                  "animate-stem absolute top-5 -bottom-0.5 -left-6 w-[3px] origin-top rounded-sm",
+                  lineBg[line],
+                )}
               />
             )}
             <span className={cn("absolute", live ? "-top-[3px] -left-9" : "top-0.5 -left-[31px]")}>

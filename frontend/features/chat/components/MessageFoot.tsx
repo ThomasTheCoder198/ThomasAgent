@@ -24,7 +24,7 @@ export function MessageFoot({ text, usage, onInspect }: Props) {
     setTimeout(() => setCopied(false), COPIED_RESET_MS);
   }
   return (
-    <div className="text-ink-3 mt-1.5 flex flex-wrap items-center gap-0.5">
+    <div className="text-ink-3 animate-fade mt-1.5 flex flex-wrap items-center gap-0.5">
       <IconButton label={copied ? t("copied") : t("copy")} onClick={copy}>
         {copied ? <Check aria-hidden className="size-4" /> : <Copy aria-hidden className="size-4" />}
       </IconButton>

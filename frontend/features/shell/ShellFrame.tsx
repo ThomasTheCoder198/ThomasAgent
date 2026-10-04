@@ -1,43 +1,35 @@
 "use client";
 
 import { X } from "lucide-react";
-import { usePathname } from "next/navigation";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { BrandMark } from "@/components/metro/BrandMark";
 import { IconButton } from "@/components/ui/Button";
-import { useDismiss } from "@/components/ui/useDismiss";
 import { cn } from "@/lib/cn";
 
 import { MenuButton } from "./MenuButton";
-import { OWN_HEADER_PREFIX, ShellMenuContext } from "./shell-menu";
+import { pageOwnsHeader, ShellMenuContext } from "./shell-menu";
+import { useShellState } from "./useShellState";
 
-type Props = { sidebar: ReactNode; labels: { openMenu: string; closeMenu: string }; children: ReactNode };
+type Props = {
+  sidebar: ReactNode;
+  initialCollapsed: boolean;
+  labels: { openMenu: string; closeMenu: string; collapse: string; expand: string };
+  children: ReactNode;
+};
 
 /**
- * Desktop: the sign sits fixed on the left. Below `md` it becomes an off-canvas drawer. Pages with their
- * own header (chat) put the menu button in it; other pages get a slim sign bar.
+ * Desktop: the sign sits on the left, full or folded to an icon rail. Below `md` it becomes an off-canvas
+ * drawer; pages with their own header (chat) carry the menu button, other pages get a slim sign bar.
+ * The sidebar reads `data-collapsed` through the `group/shell` variant.
  */
-export function ShellFrame({ sidebar, labels, children }: Props) {
-  const [open, setOpen] = useState(false);
-  const pathname = usePathname() ?? "";
-  const [shownPath, setShownPath] = useState(pathname);
-  const close = useCallback(() => setOpen(false), []);
-  useDismiss(open, close);
-  // Navigating from inside the drawer should land on the page, not leave the drawer covering it.
-  if (pathname !== shownPath) {
-    setShownPath(pathname);
-    setOpen(false);
-  }
-  const menu = useMemo(
-    () => ({ open: () => setOpen(true), label: labels.openMenu, expanded: open }),
-    [labels.openMenu, open],
-  );
-  const pageOwnsHeader = pathname.startsWith(OWN_HEADER_PREFIX);
+export function ShellFrame({ sidebar, initialCollapsed, labels, children }: Props) {
+  const { open, close, collapsed, pathname, menu } = useShellState(initialCollapsed, labels);
+  const ownsHeader = pageOwnsHeader(pathname);
 
   return (
     <ShellMenuContext.Provider value={menu}>
-      <div className="flex h-dvh overflow-hidden">
+      <div className="group/shell flex h-dvh overflow-hidden" data-collapsed={collapsed}>
         <div
           id="workspace-sidebar"
           className={cn(
@@ -57,9 +49,11 @@ export function ShellFrame({ sidebar, labels, children }: Props) {
             </IconButton>
           )}
         </div>
-        {open && <div className="bg-scrim fixed inset-0 z-30 md:hidden" aria-hidden onClick={close} />}
+        {open && (
+          <div className="bg-scrim animate-fade fixed inset-0 z-30 md:hidden" aria-hidden onClick={close} />
+        )}
         <div className="flex min-w-0 flex-1 flex-col">
-          {!pageOwnsHeader && (
+          {!ownsHeader && (
             <div className="bg-sign text-sign-ink flex h-12 shrink-0 items-center gap-2 px-2 md:hidden">
               <MenuButton tone="sign" />
               <BrandMark label="ThomasAgent" className="scale-90" />

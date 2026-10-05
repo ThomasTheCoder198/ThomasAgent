@@ -5,8 +5,8 @@ Owns JSON responses, request IDs and chi error boundaries.
 TraceRequests and structured logger setup are injected by the application.
 
 ## Entry points
-- `DecodeJSON` reads one size-limited JSON value and maps invalid bodies to catalog errors.
-- `EventStream` commits SSE headers and serializes flushed data and heartbeat frames.
+- `DecodeJSON` requires `application/json`, rejects unknown fields, reads one size-limited JSON value and maps invalid bodies to catalog errors. Missing, malformed or other media types return `UNSUPPORTED_MEDIA_TYPE` (415); malformed JSON and unknown fields return `VALIDATION_FAILED` (400). Requiring JSON and rejecting unknown fields are breaking changes for permissive callers; JSON charset parameters remain supported.
+- `EventStream` commits SSE headers and serializes flushed data and heartbeat frames. `NewEventStream` requires typed heartbeat and positive per-write timeout settings. Deadlines also bound the initial header flush; write failures close `Done` so producers stop. Request cancellation closes `Done` independently of an in-progress heartbeat write through `context.AfterFunc`. `Close` unregisters this callback.
 - `ResponseCommitted` checks whether the status line has been sent.
 - `LimitRequestDuration` sets the context deadline for ordinary routes.
 - `NewRouter` registers assignRequestID → caller middleware → injectErrorLogger → trackCommit → recoverPanics.
@@ -61,5 +61,11 @@ Access logging preserves the first final response status, including implicit com
 - Ordinary routes use `LimitRequestDuration`; stream routes are mounted in a group without it. The stream lifetime is the agent runtime run deadline (spec §7.1, five minutes).
 - CORS is intentionally absent: the browser talks to its own origin and Next.js rewrites `/api/v1/*` to core (M0.3). Revisit only if spike S8 finds the rewrite cannot carry streams.
 - Handlers must `defer stream.Close()` to stop heartbeats before returning.
+
+Writers that expose flushing but hide write deadlines (including wrapped `http.ErrNotSupported`)
+can stream without deadlines. Production middleware should expose `Unwrap` or forward
+`SetWriteDeadline` so slow clients retain the configured network write bound. Supported
+writers retain deadlines for both the initial header flush and every data/heartbeat frame;
+other deadline errors still fail construction or stop the stream.
 
 `EventStream.Send` rejects CR and LF before writing so a payload cannot introduce extra SSE lines or frames. Recorder flushing forwards through `ResponseController`, preserving unsupported-flush and `FlushError` failures where the underlying writer exposes them. The installed otelhttp legacy `Flush` interface cannot transmit flush errors it discards.

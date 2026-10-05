@@ -3,11 +3,14 @@ package httpx
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
@@ -30,7 +33,8 @@ type safeRecorder struct {
 
 func newSafeRecorder() *safeRecorder { return &safeRecorder{header: http.Header{}} }
 
-func (s *safeRecorder) Header() http.Header { return s.header }
+func (s *safeRecorder) Header() http.Header              { return s.header }
+func (s *safeRecorder) SetWriteDeadline(time.Time) error { return nil }
 func (s *safeRecorder) WriteHeader(code int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -56,7 +60,7 @@ func newStream(t *testing.T, heartbeat time.Duration) (*EventStream, *safeRecord
 	t.Helper()
 	rec := newSafeRecorder()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil)
-	stream, err := NewEventStream(rec, req, heartbeat)
+	stream, err := NewEventStream(rec, req, config.HTTPConfig{EventStreamHeartbeat: heartbeat, EventStreamWriteTimeout: time.Second})
 	require.NoError(t, err)
 	t.Cleanup(stream.Close)
 	return stream, rec
@@ -99,7 +103,7 @@ func TestEventStream_SendAfterCloseFails(t *testing.T) {
 func TestEventStream_DoneClosesWhenClientIsGone(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	rec := newSafeRecorder()
-	stream, err := NewEventStream(rec, httptest.NewRequestWithContext(ctx, http.MethodPost, "/", nil), time.Hour)
+	stream, err := NewEventStream(rec, httptest.NewRequestWithContext(ctx, http.MethodPost, "/", nil), config.HTTPConfig{EventStreamHeartbeat: time.Hour, EventStreamWriteTimeout: time.Second})
 	require.NoError(t, err)
 	defer stream.Close()
 	cancel()
@@ -120,7 +124,7 @@ func TestEventStream_CloseStopsHeartbeat(t *testing.T) {
 
 func TestNewEventStream_RejectsNonPositiveHeartbeat(t *testing.T) {
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil)
-	_, err := NewEventStream(newSafeRecorder(), req, 0)
+	_, err := NewEventStream(newSafeRecorder(), req, config.HTTPConfig{EventStreamWriteTimeout: time.Second})
 	require.Error(t, err)
 }
 
@@ -131,5 +135,68 @@ func TestEventStream_SendRejectsCarriageReturnPayload(t *testing.T) {
 			require.Error(t, stream.Send([]byte(payload)))
 			require.Empty(t, rec.Body())
 		})
+	}
+}
+
+type wrappedStreamWriter struct{ recorder *safeRecorder }
+
+func (w wrappedStreamWriter) Header() http.Header            { return w.recorder.Header() }
+func (w wrappedStreamWriter) WriteHeader(code int)           { w.recorder.WriteHeader(code) }
+func (w wrappedStreamWriter) Write(data []byte) (int, error) { return w.recorder.Write(data) }
+func (w wrappedStreamWriter) Flush()                         { w.recorder.Flush() }
+
+type unsupportedDeadlineWriter struct{ wrappedStreamWriter }
+
+func (w unsupportedDeadlineWriter) SetWriteDeadline(time.Time) error {
+	return fmt.Errorf("wrapper deadline: %w", http.ErrNotSupported)
+}
+
+func TestEventStream_WrappedWriterWithoutDeadlineStillStreams(t *testing.T) {
+	for _, wrappedError := range []bool{false, true} {
+		t.Run(fmt.Sprint(wrappedError), func(t *testing.T) {
+			recorder := newSafeRecorder()
+			var writer http.ResponseWriter = wrappedStreamWriter{recorder: recorder}
+			if wrappedError {
+				writer = unsupportedDeadlineWriter{wrappedStreamWriter{recorder: recorder}}
+			}
+			stream, err := NewEventStream(writer, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil), config.HTTPConfig{EventStreamHeartbeat: time.Hour, EventStreamWriteTimeout: time.Second})
+			require.NoError(t, err)
+			defer stream.Close()
+			require.NoError(t, stream.Send([]byte("ready")))
+			require.Equal(t, "data: ready\n\n", recorder.Body())
+		})
+	}
+}
+
+type stalledHeartbeatWriter struct {
+	*safeRecorder
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (w *stalledHeartbeatWriter) Write(data []byte) (int, error) {
+	close(w.entered)
+	<-w.release
+	return w.safeRecorder.Write(data)
+}
+
+func TestEventStream_CancellationSignalsDoneDuringBlockedHeartbeat(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	writer := &stalledHeartbeatWriter{safeRecorder: newSafeRecorder(), entered: make(chan struct{}), release: make(chan struct{})}
+	stream, err := NewEventStream(writer, httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil), config.HTTPConfig{EventStreamHeartbeat: time.Millisecond, EventStreamWriteTimeout: time.Second})
+	require.NoError(t, err)
+	defer stream.Close()
+	defer close(writer.release)
+	select {
+	case <-writer.entered:
+	case <-time.After(time.Second):
+		t.Fatal("heartbeat did not start")
+	}
+	cancel()
+	select {
+	case <-stream.Done():
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Done must signal cancellation without waiting for a blocked heartbeat write")
 	}
 }

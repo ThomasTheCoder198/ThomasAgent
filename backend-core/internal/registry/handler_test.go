@@ -22,6 +22,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
 const (
@@ -35,15 +36,34 @@ func newRouter(t *testing.T, logs *bytes.Buffer) (chi.Router, *Service) {
 	log, err := logging.NewLogger(logs, "debug", "test", "test", nil)
 	require.NoError(t, err)
 	r := httpx.NewRouter(httpx.NewSlogErrorLogger(log), registryTestTracing(t), httpx.TraceRequests("registry-test"), httpx.LogAccess(log))
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(platformContext(r.Context())))
+		})
+	})
 	NewHandler(s, testMaxBodyBytes).Mount(r)
 	MountInternal(r, s, serviceToken)
 	return r, s
 }
 
+func TestServiceTokenSetsExplicitPlatformTenant(t *testing.T) {
+	handler := requireServiceToken(serviceToken)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, err := tenant.ID(r.Context())
+		require.NoError(t, err)
+		require.Equal(t, "default", got)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	request := httptest.NewRequest(http.MethodGet, "/internal/probe", nil)
+	request.Header.Set("Authorization", "Bearer "+serviceToken)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request.WithContext(tenant.WithID(request.Context(), "untrusted")))
+	require.Equal(t, http.StatusNoContent, response.Code)
+}
+
 func registryTestTracing(t *testing.T) httpx.Middleware {
 	t.Helper()
 	provider := sdktrace.NewTracerProvider()
-	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(platformContext(context.Background()))) })
 	tracer := provider.Tracer("registry-test")
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
@@ -68,6 +88,19 @@ func TestServiceToken_RejectsMissingBearerPrefixAndEmptyConfiguration(t *testing
 	}
 }
 
+func TestServiceTokenAcceptsMixedCaseBearerAndNeverCaches(t *testing.T) {
+	router := httpx.NewRouter(nil)
+	router.With(requireServiceToken(serviceToken)).Get("/probe", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	for _, fixture := range []struct {
+		header string
+		status int
+	}{{"bEaReR " + serviceToken, 204}, {"Bearer wrong", 401}} {
+		response := send(router, http.MethodGet, "/probe", "", map[string]string{"Authorization": fixture.header})
+		require.Equal(t, fixture.status, response.Code)
+		require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	}
+}
+
 func TestRegistryHTTP_RejectsInvalidPathsQueriesAndSecretBodies(t *testing.T) {
 	router := httpx.NewRouter(func(context.Context, *errors.AppError) {})
 	NewHandler(nil, 128).Mount(router)
@@ -89,12 +122,21 @@ func TestRegistryHTTP_RejectsInvalidPathsQueriesAndSecretBodies(t *testing.T) {
 	}
 }
 
+func TestAssignRoleRequiresModelIDField(t *testing.T) {
+	router := httpx.NewRouter(nil)
+	NewHandler(nil, 128).Mount(router)
+	response := send(router, http.MethodPut, "/api/v1/model-roles/chat.fast", `{}`, nil)
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Contains(t, response.Body.String(), `"modelId"`)
+	require.Contains(t, response.Body.String(), `"REQUIRED"`)
+}
+
 func registryRedis(t *testing.T) *redis.Client {
 	t.Helper()
-	container, err := tcredis.Run(t.Context(), "redis:8.10.2")
+	container, err := tcredis.Run(platformContext(t.Context()), "redis:8.10.2")
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, container.Terminate(context.Background())) })
-	redisURL, err := container.ConnectionString(t.Context())
+	t.Cleanup(func() { require.NoError(t, container.Terminate(platformContext(context.Background()))) })
+	redisURL, err := container.ConnectionString(platformContext(t.Context()))
 	require.NoError(t, err)
 	opts, err := redis.ParseURL(redisURL)
 	require.NoError(t, err)
@@ -108,7 +150,7 @@ func TestRegistryHTTP_RealLoginSessionAndCSRF(t *testing.T) {
 	router, svc := newRouter(t, &logs)
 	authCfg := config.AuthConfig{OwnerEmail: "owner@example.com", OwnerPassword: "strong-test-password", SessionTTL: time.Hour, MinPasswordLength: 12}
 	authSvc := auth.NewService(auth.NewRepository(svc.pool), svc.pool, authCfg, time.Now)
-	require.NoError(t, authSvc.EnsureOwner(t.Context()))
+	require.NoError(t, authSvc.EnsureOwner(platformContext(t.Context())))
 	auth.NewHandler(authSvc, auth.NewLimiter(registryRedis(t), 10, time.Minute), false).Mount(router)
 	logger, err := logging.NewLogger(&logs, "debug", "registry-test", "test", nil)
 	require.NoError(t, err)
@@ -183,7 +225,7 @@ func TestRegistryHTTP_CRUDRoutesAndWriteOnlyKeyUpdates(t *testing.T) {
 	removedKey := send(router, http.MethodPatch, providerPath, `{"apiKey":""}`, nil)
 	require.Equal(t, http.StatusOK, removedKey.Code)
 	require.Contains(t, removedKey.Body.String(), `"hasApiKey":false`)
-	syncModels, err := svc.ListModels(t.Context(), &providerResponse.Data.ID, nil)
+	syncModels, err := svc.ListModels(platformContext(t.Context()), &providerResponse.Data.ID, nil)
 	require.NoError(t, err)
 	var removableID uuid.UUID
 	for _, model := range syncModels {
@@ -195,20 +237,23 @@ func TestRegistryHTTP_CRUDRoutesAndWriteOnlyKeyUpdates(t *testing.T) {
 	deletedModel := send(router, http.MethodDelete, "/api/v1/models/"+removableID.String(), "", nil)
 	require.Equal(t, http.StatusOK, deletedModel.Code)
 	require.Contains(t, deletedModel.Body.String(), `"deleted":true`)
-	emptyProvider, err := svc.CreateProvider(t.Context(), ProviderInput{Kind: KindOpenRouter, Name: "Empty"})
+	emptyProvider, err := svc.CreateProvider(platformContext(t.Context()), ProviderInput{Kind: KindOpenRouter, Name: "Empty"})
 	require.NoError(t, err)
 	deletedProvider := send(router, http.MethodDelete, "/api/v1/providers/"+emptyProvider.ID.String(), "", nil)
 	require.Equal(t, http.StatusOK, deletedProvider.Code)
 	require.NotContains(t, logs.String(), secretKey)
 	require.NotContains(t, logs.String(), "replacement-secret")
 	var metadata string
-	require.NoError(t, svc.pool.QueryRow(t.Context(), "SELECT string_agg(metadata::text, ' ') FROM audit_events").Scan(&metadata))
+	require.NoError(t, svc.pool.QueryRow(platformContext(t.Context()), "SELECT string_agg(metadata::text, ' ') FROM audit_events").Scan(&metadata))
 	require.NotContains(t, metadata, secretKey)
 	require.NotContains(t, metadata, "replacement-secret")
 }
 
 func send(r http.Handler, method, path, body string, headers map[string]string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -233,7 +278,7 @@ func TestProviderKeyNeverLeaks(t *testing.T) {
 	require.NotContains(t, list.Body.String(), secretKey)
 
 	var auditMeta string
-	require.NoError(t, s.pool.QueryRow(context.Background(), "SELECT string_agg(metadata::text, ' ') FROM audit_events").Scan(&auditMeta))
+	require.NoError(t, s.pool.QueryRow(platformContext(context.Background()), "SELECT string_agg(metadata::text, ' ') FROM audit_events").Scan(&auditMeta))
 	require.NotContains(t, auditMeta, secretKey)
 	require.NotContains(t, logs.String(), secretKey)
 }
@@ -252,7 +297,7 @@ func TestRoleAssignmentOverHTTP(t *testing.T) {
 	var logs bytes.Buffer
 	r, s := newRouter(t, &logs)
 	p := seedProvider(t, s)
-	m, err := s.CreateModel(context.Background(), ModelInput{ProviderID: p.ID, ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []Capability{CapChat}})
+	m, err := s.CreateModel(platformContext(context.Background()), ModelInput{ProviderID: p.ID, ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []Capability{CapChat}})
 	require.NoError(t, err)
 
 	bad := send(r, http.MethodPut, "/api/v1/model-roles/chat.default", `{"modelId":"`+m.ID.String()+`"}`, nil)
@@ -261,7 +306,8 @@ func TestRoleAssignmentOverHTTP(t *testing.T) {
 	ok := send(r, http.MethodPut, "/api/v1/model-roles/chat.fast", `{"modelId":"`+m.ID.String()+`"}`, nil)
 	require.Equal(t, http.StatusOK, ok.Code)
 
-	resolved := send(r, http.MethodGet, "/internal/models/resolve?role=chat.fast", "", map[string]string{"Authorization": "Bearer " + serviceToken})
+	resolved := send(r, http.MethodGet, "/internal/models/resolve?role=chat.fast", "", map[string]string{"Authorization": "bEaReR " + serviceToken})
+	require.Equal(t, "no-store", resolved.Header().Get("Cache-Control"))
 	require.Equal(t, http.StatusOK, resolved.Code)
 	require.Contains(t, resolved.Body.String(), secretKey, "only the internal endpoint returns the key")
 }

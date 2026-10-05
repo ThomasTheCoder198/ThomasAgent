@@ -24,6 +24,7 @@ export const ErrorCode = {
   REGISTRY_ROLE_NOT_ASSIGNED: "REGISTRY_ROLE_NOT_ASSIGNED",
   REGISTRY_SYNC_UNSUPPORTED: "REGISTRY_SYNC_UNSUPPORTED",
   UNAUTHENTICATED: "UNAUTHENTICATED",
+  UNSUPPORTED_MEDIA_TYPE: "UNSUPPORTED_MEDIA_TYPE",
   VALIDATION_FAILED: "VALIDATION_FAILED",
 } as const;
 
@@ -53,5 +54,6 @@ export const errorDefinitions: Record<ErrorCode, { httpStatus: number; retryable
   REGISTRY_ROLE_NOT_ASSIGNED: { httpStatus: 404, retryable: false, message: { vi: "Vai trò này chưa được gán model.", en: "No model is assigned to this role." } },
   REGISTRY_SYNC_UNSUPPORTED: { httpStatus: 400, retryable: false, message: { vi: "Provider này chưa hỗ trợ đồng bộ model.", en: "Model sync is not supported for this provider." } },
   UNAUTHENTICATED: { httpStatus: 401, retryable: false, message: { vi: "Bạn cần đăng nhập.", en: "You need to sign in." } },
+  UNSUPPORTED_MEDIA_TYPE: { httpStatus: 415, retryable: false, message: { vi: "Kiểu nội dung yêu cầu không được hỗ trợ.", en: "The request content type is not supported." } },
   VALIDATION_FAILED: { httpStatus: 400, retryable: false, message: { vi: "Dữ liệu gửi lên không hợp lệ.", en: "The request data is invalid." } },
 };

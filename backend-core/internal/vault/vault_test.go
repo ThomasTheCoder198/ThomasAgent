@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/binary"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
 func randomKey(t *testing.T) string {
@@ -56,11 +58,27 @@ func TestOpenFailsWithWrongAADOrKey(t *testing.T) {
 	require.ErrorIs(t, err, ErrDecrypt)
 	_, err = c2.Open(sealed, []byte("row-1"))
 	require.ErrorIs(t, err, ErrDecrypt)
+	c3, err := NewCipher("v2", randomKey(t))
+	require.NoError(t, err)
+	_, err = c3.Open(sealed, []byte("row-1"))
+	require.ErrorIs(t, err, ErrDecrypt)
+}
+
+func TestOpenRejectsMismatchedKeyIDWithSameKeyBytes(t *testing.T) {
+	key := randomKey(t)
+	first, err := NewCipher("v1", key)
+	require.NoError(t, err)
+	second, err := NewCipher("v2", key)
+	require.NoError(t, err)
+	sealed, err := first.Seal([]byte("secret"), []byte("row"))
+	require.NoError(t, err)
+	_, err = second.Open(sealed, []byte("row"))
+	require.ErrorIs(t, err, ErrDecrypt)
 }
 
 func TestStorePersistsEncrypted(t *testing.T) {
 	pool := pgtest.Start(t)
-	ctx := context.Background()
+	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
 	c, err := NewCipher("v1", randomKey(t))
 	require.NoError(t, err)
 	s := NewStore(c)
@@ -81,19 +99,98 @@ func TestStorePersistsEncrypted(t *testing.T) {
 	require.ErrorIs(t, err, ErrSecretNotFound)
 }
 
+func TestStoreUpgradesLegacyAADWithoutLosingSecret(t *testing.T) {
+	pool := pgtest.Start(t)
+	cipher, err := NewCipher("v1", randomKey(t))
+	require.NoError(t, err)
+	id := uuid.New()
+	legacy, err := cipher.Seal([]byte("existing-provider-key"), id[:])
+	require.NoError(t, err)
+	_, err = pool.Exec(tenant.WithID(t.Context(), tenant.PlatformID), `INSERT INTO secrets (tenant_id,id,key_id,nonce,ciphertext) VALUES ('default',$1,$2,$3,$4)`, id, legacy.KeyID, legacy.Nonce, legacy.Ciphertext)
+	require.NoError(t, err)
+	value, err := NewStore(cipher).Get(tenant.WithID(t.Context(), tenant.PlatformID), pool, id)
+	require.NoError(t, err)
+	require.Equal(t, "existing-provider-key", value)
+	var upgraded Sealed
+	require.NoError(t, pool.QueryRow(tenant.WithID(t.Context(), tenant.PlatformID), `SELECT key_id,nonce,ciphertext FROM secrets WHERE id=$1`, id).Scan(&upgraded.KeyID, &upgraded.Nonce, &upgraded.Ciphertext))
+	// Independently encode the v3 wire format, rather than call secretAAD.
+	var aad []byte
+	for _, field := range []string{"default", id.String(), "v1"} {
+		var prefix [binary.MaxVarintLen64]byte
+		length := binary.PutUvarint(prefix[:], uint64(len(field)))
+		aad = append(aad, prefix[:length]...)
+		aad = append(aad, field...)
+	}
+	plain, err := cipher.Open(upgraded, aad)
+	require.NoError(t, err)
+	require.Equal(t, "existing-provider-key", string(plain))
+	_, err = cipher.Open(upgraded, []byte("default:"+id.String()+":v1"))
+	require.ErrorIs(t, err, ErrDecrypt)
+	_, err = cipher.Open(upgraded, id[:])
+	require.ErrorIs(t, err, ErrDecrypt)
+}
+
+func TestStoreScopesAndAuthenticatesTenant(t *testing.T) {
+	pool := pgtest.Start(t)
+	cipher, err := NewCipher("v1", randomKey(t))
+	require.NoError(t, err)
+	store := NewStore(cipher)
+	otherCtx := tenant.WithID(t.Context(), "other")
+	id, err := store.Put(otherCtx, pool, "other-secret")
+	require.NoError(t, err)
+	_, err = store.Get(tenant.WithID(t.Context(), tenant.PlatformID), pool, id)
+	require.ErrorIs(t, err, ErrSecretNotFound)
+	require.ErrorIs(t, store.Replace(tenant.WithID(t.Context(), tenant.PlatformID), pool, id, "wrong"), ErrSecretNotFound)
+	require.ErrorIs(t, store.Delete(tenant.WithID(t.Context(), tenant.PlatformID), pool, id), ErrSecretNotFound)
+	value, err := store.Get(otherCtx, pool, id)
+	require.NoError(t, err)
+	require.Equal(t, "other-secret", value)
+	_, err = pool.Exec(tenant.WithID(t.Context(), tenant.PlatformID), `UPDATE secrets SET tenant_id='default' WHERE id=$1`, id)
+	require.NoError(t, err)
+	_, err = store.Get(tenant.WithID(t.Context(), tenant.PlatformID), pool, id)
+	require.ErrorIs(t, err, ErrDecrypt)
+}
+
+func TestStoreRejectsMissingTenant(t *testing.T) {
+	pool := pgtest.Start(t)
+	cipher, err := NewCipher("v1", randomKey(t))
+	require.NoError(t, err)
+	store := NewStore(cipher)
+	_, err = store.Put(t.Context(), pool, "secret")
+	require.ErrorIs(t, err, tenant.ErrMissingTenant, "missing tenant must not insert in the platform scope")
+	_, err = store.Get(t.Context(), pool, uuid.New())
+	require.ErrorIs(t, err, tenant.ErrMissingTenant)
+	require.ErrorIs(t, store.Replace(t.Context(), pool, uuid.New(), "secret"), tenant.ErrMissingTenant)
+	require.ErrorIs(t, store.Delete(t.Context(), pool, uuid.New()), tenant.ErrMissingTenant)
+}
+
+func TestStoreDeleteCannotCrossTenants(t *testing.T) {
+	pool := pgtest.Start(t)
+	cipher, err := NewCipher("v1", randomKey(t))
+	require.NoError(t, err)
+	store := NewStore(cipher)
+	otherCtx := tenant.WithID(t.Context(), "other")
+	id, err := store.Put(otherCtx, pool, "other-secret")
+	require.NoError(t, err)
+	require.ErrorIs(t, store.Delete(tenant.WithID(t.Context(), tenant.PlatformID), pool, id), ErrSecretNotFound)
+	value, err := store.Get(otherCtx, pool, id)
+	require.NoError(t, err)
+	require.Equal(t, "other-secret", value)
+}
+
 func TestStore_GetMissingSecret(t *testing.T) {
 	pool := pgtest.Start(t)
 	c, err := NewCipher("v1", randomKey(t))
 	require.NoError(t, err)
 	store := NewStore(c)
 
-	_, err = store.Get(context.Background(), pool, uuid.New())
+	_, err = store.Get(tenant.WithID(context.Background(), tenant.PlatformID), pool, uuid.New())
 	require.ErrorIs(t, err, ErrSecretNotFound)
 }
 
 func TestStore_ReplaceMissingSecret(t *testing.T) {
 	pool := pgtest.Start(t)
-	ctx := context.Background()
+	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
 	c, err := NewCipher("v1", randomKey(t))
 	require.NoError(t, err)
 	store := NewStore(c)
@@ -112,7 +209,7 @@ func TestStore_DeleteMissingSecret(t *testing.T) {
 	require.NoError(t, err)
 	store := NewStore(c)
 
-	require.NoError(t, store.Delete(context.Background(), pool, uuid.New()))
+	require.ErrorIs(t, store.Delete(tenant.WithID(context.Background(), tenant.PlatformID), pool, uuid.New()), ErrSecretNotFound)
 }
 
 func TestSealUsesFreshNonce(t *testing.T) {
@@ -151,7 +248,7 @@ func TestOpenRejectsTamperedOrMalformedSealed(t *testing.T) {
 }
 func TestStoreRejectsCiphertextCopiedToAnotherRow(t *testing.T) {
 	pool := pgtest.Start(t)
-	ctx := context.Background()
+	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
 	c, err := NewCipher("v1", randomKey(t))
 	require.NoError(t, err)
 	store := NewStore(c)
@@ -169,7 +266,7 @@ func TestStoreRejectsCiphertextCopiedToAnotherRow(t *testing.T) {
 }
 func TestStoreSupportsTransactionRollback(t *testing.T) {
 	pool := pgtest.Start(t)
-	ctx := context.Background()
+	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
 	c, err := NewCipher("v1", randomKey(t))
 	require.NoError(t, err)
 	store := NewStore(c)
@@ -191,4 +288,47 @@ func TestStoreSupportsTransactionRollback(t *testing.T) {
 	require.Equal(t, "original", got)
 	_, err = store.Get(ctx, pool, created)
 	require.Error(t, err)
+}
+
+func TestSecretAAD_ColonFieldsCannotCollide(t *testing.T) {
+	id := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	a := secretAAD("org:"+id.String()+":team", id, "v1")
+	b := secretAAD("org", id, "team:"+id.String()+":v1")
+	require.NotEqual(t, a, b, "tenant and key boundaries must be authenticated unambiguously")
+	cipher, err := NewCipher("v1", randomKey(t))
+	require.NoError(t, err)
+	sealed, err := cipher.Seal([]byte("secret"), a)
+	require.NoError(t, err)
+	_, err = cipher.Open(sealed, b)
+	require.ErrorIs(t, err, ErrDecrypt)
+}
+
+func TestStore_UpgradesPreviousBoundAAD(t *testing.T) {
+	pool := pgtest.Start(t)
+	ctx := tenant.WithID(t.Context(), "org:team")
+	cipher, err := NewCipher("key:v1", randomKey(t))
+	require.NoError(t, err)
+	id := uuid.New()
+	old, err := cipher.Seal([]byte("old-bound-secret"), []byte("org:team:"+id.String()+":key:v1"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO secrets (tenant_id,id,key_id,nonce,ciphertext,aad_version) VALUES ($1,$2,$3,$4,$5,2)`, "org:team", id, old.KeyID, old.Nonce, old.Ciphertext)
+	require.NoError(t, err)
+	store := NewStore(cipher)
+	value, err := store.Get(ctx, pool, id)
+	require.NoError(t, err)
+	require.Equal(t, "old-bound-secret", value)
+	var version int
+	var upgraded Sealed
+	require.NoError(t, pool.QueryRow(ctx, `SELECT aad_version,key_id,nonce,ciphertext FROM secrets WHERE id=$1`, id).Scan(&version, &upgraded.KeyID, &upgraded.Nonce, &upgraded.Ciphertext))
+	require.Equal(t, 3, version)
+	require.NotEqual(t, old.Nonce, upgraded.Nonce)
+	require.NotEqual(t, old.Ciphertext, upgraded.Ciphertext)
+	_, err = cipher.Open(upgraded, []byte("org:team:"+id.String()+":key:v1"))
+	require.ErrorIs(t, err, ErrDecrypt)
+	value, err = store.Get(ctx, pool, id)
+	require.NoError(t, err)
+	require.Equal(t, "old-bound-secret", value)
+	var secondNonce []byte
+	require.NoError(t, pool.QueryRow(ctx, `SELECT nonce FROM secrets WHERE id=$1`, id).Scan(&secondNonce))
+	require.Equal(t, upgraded.Nonce, secondNonce, "current envelopes must not be resealed on every read")
 }

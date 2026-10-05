@@ -201,7 +201,7 @@ func TestServe_ListeningLogCarriesTraceContext(t *testing.T) {
 			Vault:        config.VaultConfig{KeyID: "v1", MasterKey: testVaultMasterKey},
 			Auth:         config.AuthConfig{OwnerEmail: "owner@example.com", OwnerPassword: "correct horse battery", SessionTTL: time.Hour, LoginMaxAttempts: 10, LoginWindow: time.Minute, MinPasswordLength: 12},
 			HTTP:         config.HTTPConfig{MaxBodyBytes: 1 << 10, RequestTimeout: time.Second},
-			ServiceToken: "test-token", ProviderHTTPTimeout: time.Second,
+			ServiceToken: "test-service-token-with-at-least-32-characters", ProviderHTTPTimeout: time.Second,
 			ProviderMaxResponseBytes: config.DefaultProviderMaxResponseBytes,
 			ProviderBreaker:          config.BreakerConfig{FailureThreshold: 5, OpenTimeout: time.Second, HalfOpenMaxCalls: 1},
 		},
@@ -247,5 +247,5 @@ const testVaultMasterKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 func setIdentityEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("CORE_VAULT_MASTER_KEY", testVaultMasterKey)
-	t.Setenv("CORE_SERVICE_TOKEN", "test-token")
+	t.Setenv("CORE_SERVICE_TOKEN", "test-service-token-with-at-least-32-characters")
 }

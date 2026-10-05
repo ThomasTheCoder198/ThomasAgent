@@ -50,3 +50,5 @@ Never edit `errors.go` manually or log here; log once at the caller's boundary.
 - Missing named error: add its definition to `contracts/errors.yaml` and run `task gen`.
 - Import name conflict: alias the standard library package to `stderrors` when both are needed.
 - A custom 5xx message must remain private: serialize via `httpx.WriteError`.
+
+UNSUPPORTED_MEDIA_TYPE maps strict JSON content-type failures to HTTP 415. Cancellation while waiting for password-hash capacity uses retryable DEPENDENCY_TIMEOUT; retry cancellation uses PROVIDER_UNAVAILABLE and retains the context cause.

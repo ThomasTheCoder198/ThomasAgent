@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
 const (
@@ -25,6 +26,7 @@ const (
 )
 
 type Message struct {
+	TenantID      string
 	OutboxID      string
 	StreamEntryID string
 	Stream        string
@@ -103,6 +105,8 @@ func (c *Consumer) handleEntries(ctx context.Context, msgs []redis.XMessage, han
 func (c *Consumer) handle(ctx context.Context, raw redis.XMessage, handler Handler) {
 	parent, _ := raw.Values[StreamFieldTraceParent].(string)
 	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier{StreamFieldTraceParent: parent})
+	tenantID, _ := raw.Values[StreamFieldTenantID].(string)
+	ctx = tenant.WithID(ctx, tenantID)
 	ctx, span := otel.Tracer(jobsTracerName).Start(ctx, handleSpan, trace.WithSpanKind(trace.SpanKindConsumer))
 	defer span.End()
 	deliveries, err := c.deliveries(ctx, raw.ID)
@@ -148,6 +152,7 @@ func (c *Consumer) deadLetter(ctx context.Context, m Message, cause error) {
 	values := map[string]any{
 		StreamFieldPayload: string(m.Payload), StreamFieldTraceParent: m.TraceParent, StreamFieldError: cause.Error(),
 		StreamFieldDeliveries: m.Deliveries, StreamFieldOriginalID: m.StreamEntryID, StreamFieldOutboxID: m.OutboxID,
+		StreamFieldTenantID: m.TenantID,
 	}
 	if err := c.Redis.XAdd(ctx, &redis.XAddArgs{Stream: c.Stream + DeadLetterSuffix, Values: values}).Err(); err != nil {
 		c.Log.ErrorContext(ctx, "dead-letter failed; leaving message pending", "id", m.StreamEntryID, "error_code", errors.CodeOf(err))
@@ -161,5 +166,6 @@ func toMessage(stream string, raw redis.XMessage, deliveries int64) Message {
 	payload, _ := raw.Values[StreamFieldPayload].(string)
 	traceParent, _ := raw.Values[StreamFieldTraceParent].(string)
 	outboxID, _ := raw.Values[StreamFieldOutboxID].(string)
-	return Message{OutboxID: outboxID, StreamEntryID: raw.ID, Stream: stream, Payload: []byte(payload), TraceParent: traceParent, Deliveries: deliveries}
+	tenantID, _ := raw.Values[StreamFieldTenantID].(string)
+	return Message{TenantID: tenantID, OutboxID: outboxID, StreamEntryID: raw.ID, Stream: stream, Payload: []byte(payload), TraceParent: traceParent, Deliveries: deliveries}
 }

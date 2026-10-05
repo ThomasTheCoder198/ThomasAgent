@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
@@ -109,7 +111,7 @@ func accessLogEntries(logs *lockedBuffer) []map[string]any {
 func TestStreamChain_DeliversFramesIncrementally(t *testing.T) {
 	release := make(chan struct{})
 	server, _ := newChainServer(t, func(w http.ResponseWriter, r *http.Request) {
-		stream, err := NewEventStream(w, r, time.Hour)
+		stream, err := NewEventStream(w, r, config.HTTPConfig{EventStreamHeartbeat: time.Hour, EventStreamWriteTimeout: time.Second})
 		if err != nil {
 			return
 		}
@@ -142,7 +144,7 @@ func TestStreamChain_DeliversFramesIncrementally(t *testing.T) {
 
 func TestStreamChain_AccessLogRecordsStreamOnce(t *testing.T) {
 	server, logs := newChainServer(t, func(w http.ResponseWriter, r *http.Request) {
-		stream, err := NewEventStream(w, r, time.Hour)
+		stream, err := NewEventStream(w, r, config.HTTPConfig{EventStreamHeartbeat: time.Hour, EventStreamWriteTimeout: time.Second})
 		if err != nil {
 			return
 		}
@@ -162,7 +164,7 @@ func TestStreamChain_AccessLogRecordsStreamOnce(t *testing.T) {
 func TestStreamChain_ClientDisconnectCancelsHandler(t *testing.T) {
 	cancelled := make(chan struct{})
 	server, _ := newChainServer(t, func(w http.ResponseWriter, r *http.Request) {
-		stream, err := NewEventStream(w, r, time.Hour)
+		stream, err := NewEventStream(w, r, config.HTTPConfig{EventStreamHeartbeat: time.Hour, EventStreamWriteTimeout: time.Second})
 		if err != nil {
 			return
 		}
@@ -186,7 +188,7 @@ func TestStreamChain_ClientDisconnectCancelsHandler(t *testing.T) {
 
 func TestStreamChain_PanicAfterFirstFrameAbortsWithoutJSON(t *testing.T) {
 	server, logs := newChainServer(t, func(w http.ResponseWriter, r *http.Request) {
-		stream, err := NewEventStream(w, r, time.Hour)
+		stream, err := NewEventStream(w, r, config.HTTPConfig{EventStreamHeartbeat: time.Hour, EventStreamWriteTimeout: time.Second})
 		if err != nil {
 			return
 		}
@@ -212,7 +214,7 @@ func TestStreamChain_PanicAfterFirstFrameAbortsWithoutJSON(t *testing.T) {
 
 func TestStreamChain_IdleStreamSendsHeartbeats(t *testing.T) {
 	server, _ := newChainServer(t, func(w http.ResponseWriter, r *http.Request) {
-		stream, err := NewEventStream(w, r, chainHeartbeat)
+		stream, err := NewEventStream(w, r, config.HTTPConfig{EventStreamHeartbeat: chainHeartbeat, EventStreamWriteTimeout: time.Second})
 		if err != nil {
 			return
 		}

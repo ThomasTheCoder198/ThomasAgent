@@ -31,7 +31,7 @@ func TestAPI_GeneratedPostmanCollection(t *testing.T) {
 	t.Setenv("CORE_REDIS_URL", redisURL)
 	t.Setenv("CORE_AUTH_OWNER_EMAIL", "api-test@example.com")
 	t.Setenv("CORE_AUTH_OWNER_PASSWORD", "fixture-password-collection")
-	t.Setenv("CORE_SERVICE_TOKEN", "fixture-api-service-token")
+	t.Setenv("CORE_SERVICE_TOKEN", "fixture-api-service-token-with-at-least-32-characters")
 	cfg, err := config.Load()
 	require.NoError(t, err)
 	provider := sdktrace.NewTracerProvider()
@@ -53,8 +53,10 @@ func runCollection(t *testing.T, baseURL string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
-	command := exec.CommandContext(ctx, "task", "api-test")
-	command.Dir = "../../.."
+	nodePath, err := exec.LookPath("node")
+	require.NoError(t, err)
+	command := exec.CommandContext(ctx, nodePath, "postman/run.mjs")
+	command.Dir = "../../../contracts"
 	command.Env = append(os.Environ(), "CORE_API_TEST_BASE_URL="+baseURL)
 	output, err := command.CombinedOutput()
 	t.Log(string(output))

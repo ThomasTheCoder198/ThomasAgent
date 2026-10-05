@@ -19,6 +19,7 @@ type decodeTarget struct {
 func decodeBody(t *testing.T, body string, limit int64) (decodeTarget, error) {
 	t.Helper()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	var target decodeTarget
 	err := DecodeJSON(httptest.NewRecorder(), req, &target, limit)
 	return target, err
@@ -28,6 +29,28 @@ func TestDecodeJSON_AcceptsOneValue(t *testing.T) {
 	target, err := decodeBody(t, `{"name":"a"}`, 64)
 	require.NoError(t, err)
 	require.Equal(t, "a", target.Name)
+}
+
+func TestDecodeJSON_RejectsUnknownFields(t *testing.T) {
+	_, err := decodeBody(t, `{"name":"a","extra":true}`, 64)
+	require.Error(t, err)
+	require.Equal(t, errors.CodeValidationFailed, errors.ToAppError(err).Code)
+}
+
+func TestDecodeJSON_RequiresJSONContentType(t *testing.T) {
+	for _, contentType := range []string{"", "text/plain", "application/json-invalid", "application/json; charset"} {
+		t.Run(contentType, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"a"}`))
+			req.Header.Set("Content-Type", contentType)
+			var target decodeTarget
+			err := DecodeJSON(httptest.NewRecorder(), req, &target, 64)
+			require.Error(t, err)
+			rec := httptest.NewRecorder()
+			WriteError(rec, req, err)
+			require.Equal(t, http.StatusUnsupportedMediaType, rec.Code)
+			require.Contains(t, rec.Body.String(), `"code":"UNSUPPORTED_MEDIA_TYPE"`)
+		})
+	}
 }
 
 func TestDecodeJSON_RejectsBadInput(t *testing.T) {

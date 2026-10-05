@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
+	"strings"
 	"time"
 
 	"github.com/caarlos0/env/v11"
@@ -36,9 +38,10 @@ type OutboxRelayConfig struct {
 }
 
 type HTTPConfig struct {
-	MaxBodyBytes         int64         `env:"MAX_BODY_BYTES" envDefault:"1048576"`
-	RequestTimeout       time.Duration `env:"REQUEST_TIMEOUT" envDefault:"30s"`
-	EventStreamHeartbeat time.Duration `env:"EVENT_STREAM_HEARTBEAT" envDefault:"15s"`
+	MaxBodyBytes            int64         `env:"MAX_BODY_BYTES" envDefault:"1048576"`
+	RequestTimeout          time.Duration `env:"REQUEST_TIMEOUT" envDefault:"30s"`
+	EventStreamHeartbeat    time.Duration `env:"EVENT_STREAM_HEARTBEAT" envDefault:"15s"`
+	EventStreamWriteTimeout time.Duration `env:"EVENT_STREAM_WRITE_TIMEOUT" envDefault:"10s"`
 }
 
 func (c HTTPConfig) validate() []error {
@@ -52,6 +55,9 @@ func (c HTTPConfig) validate() []error {
 	if c.EventStreamHeartbeat <= 0 {
 		errs = append(errs, errors.New("CORE_HTTP_EVENT_STREAM_HEARTBEAT must be > 0"))
 	}
+	if c.EventStreamWriteTimeout <= 0 {
+		errs = append(errs, errors.New("CORE_HTTP_EVENT_STREAM_WRITE_TIMEOUT must be > 0"))
+	}
 	return errs
 }
 
@@ -61,19 +67,58 @@ type VaultConfig struct {
 }
 
 type AuthConfig struct {
-	OwnerEmail        string        `env:"OWNER_EMAIL"`
-	OwnerPassword     string        `env:"OWNER_PASSWORD"`
-	SessionTTL        time.Duration `env:"SESSION_TTL" envDefault:"720h"`
-	CookieSecure      bool          `env:"COOKIE_SECURE" envDefault:"false"`
-	LoginMaxAttempts  int           `env:"LOGIN_MAX_ATTEMPTS" envDefault:"10"`
-	LoginWindow       time.Duration `env:"LOGIN_WINDOW" envDefault:"15m"`
-	MinPasswordLength int           `env:"MIN_PASSWORD_LENGTH" envDefault:"12"`
+	OwnerEmail            string             `env:"OWNER_EMAIL"`
+	OwnerPassword         string             `env:"OWNER_PASSWORD"`
+	SessionTTL            time.Duration      `env:"SESSION_TTL" envDefault:"720h"`
+	CookieSecure          bool               `env:"COOKIE_SECURE" envDefault:"false"`
+	LoginMaxAttempts      int                `env:"LOGIN_MAX_ATTEMPTS" envDefault:"10"`
+	LoginEmailMaxAttempts int                `env:"LOGIN_EMAIL_MAX_ATTEMPTS" envDefault:"20"`
+	LoginIPMaxAttempts    int                `env:"LOGIN_IP_MAX_ATTEMPTS" envDefault:"100"`
+	LoginWindow           time.Duration      `env:"LOGIN_WINDOW" envDefault:"15m"`
+	MinPasswordLength     int                `env:"MIN_PASSWORD_LENGTH" envDefault:"12"`
+	TrustedProxyHeader    string             `env:"TRUSTED_PROXY_HEADER"`
+	TrustedProxyCIDRs     []string           `env:"TRUSTED_PROXY_CIDRS" envSeparator:","`
+	SessionPurgeInterval  time.Duration      `env:"SESSION_PURGE_INTERVAL" envDefault:"1h"`
+	SessionTouchInterval  time.Duration      `env:"SESSION_TOUCH_INTERVAL" envDefault:"5m"`
+	PasswordHash          PasswordHashConfig `envPrefix:"PASSWORD_HASH_"`
+}
+
+type PasswordHashConfig struct {
+	Iterations     uint32 `env:"ITERATIONS" envDefault:"2"`
+	MemoryKiB      uint32 `env:"MEMORY_KIB" envDefault:"65536"`
+	MaxConcurrency int    `env:"MAX_CONCURRENCY" envDefault:"4"`
+	Parallelism    uint8  `env:"PARALLELISM" envDefault:"1"`
+	SaltLength     uint32 `env:"SALT_LENGTH" envDefault:"16"`
+	KeyLength      uint32 `env:"KEY_LENGTH" envDefault:"32"`
 }
 
 func (c AuthConfig) validate() []error {
+	errs := c.validateSessionAndLogin()
+	errs = append(errs, c.PasswordHash.validate()...)
+	for _, cidr := range c.TrustedProxyCIDRs {
+		if _, err := netip.ParsePrefix(cidr); err != nil {
+			errs = append(errs, errors.New("CORE_AUTH_TRUSTED_PROXY_CIDRS must contain valid CIDRs"))
+		}
+	}
+	return errs
+}
+
+func (c AuthConfig) validateSessionAndLogin() []error {
 	var errs []error
+	if c.SessionTouchInterval <= 0 {
+		errs = append(errs, errors.New("CORE_AUTH_SESSION_TOUCH_INTERVAL must be > 0"))
+	}
+	if c.LoginEmailMaxAttempts < 1 {
+		errs = append(errs, errors.New("CORE_AUTH_LOGIN_EMAIL_MAX_ATTEMPTS must be >= 1"))
+	}
+	if c.LoginIPMaxAttempts < 1 {
+		errs = append(errs, errors.New("CORE_AUTH_LOGIN_IP_MAX_ATTEMPTS must be >= 1"))
+	}
 	if c.SessionTTL <= 0 {
 		errs = append(errs, errors.New("CORE_AUTH_SESSION_TTL must be > 0"))
+	}
+	if c.SessionPurgeInterval <= 0 {
+		errs = append(errs, errors.New("CORE_AUTH_SESSION_PURGE_INTERVAL must be > 0"))
 	}
 	if c.MinPasswordLength < 1 {
 		errs = append(errs, errors.New("CORE_AUTH_MIN_PASSWORD_LENGTH must be >= 1"))
@@ -87,10 +132,35 @@ func (c AuthConfig) validate() []error {
 	return errs
 }
 
+func (c PasswordHashConfig) validate() []error {
+	var errs []error
+	if c.Parallelism < 1 {
+		errs = append(errs, errors.New("CORE_AUTH_PASSWORD_HASH_PARALLELISM must be >= 1"))
+	}
+	if c.SaltLength < MinimumArgonSaltLength {
+		errs = append(errs, errors.New("CORE_AUTH_PASSWORD_HASH_SALT_LENGTH must be >= 8"))
+	}
+	if c.KeyLength < MinimumArgonKeyLength {
+		errs = append(errs, errors.New("CORE_AUTH_PASSWORD_HASH_KEY_LENGTH must be >= 16"))
+	}
+	if c.Iterations < MinimumArgonIterations {
+		errs = append(errs, errors.New("CORE_AUTH_PASSWORD_HASH_ITERATIONS must be >= 2"))
+	}
+	if c.MemoryKiB != ArgonMemoryKiB {
+		errs = append(errs, errors.New("CORE_AUTH_PASSWORD_HASH_MEMORY_KIB must equal 65536"))
+	}
+	if c.MaxConcurrency < 1 {
+		errs = append(errs, errors.New("CORE_AUTH_PASSWORD_HASH_MAX_CONCURRENCY must be >= 1"))
+	}
+	return errs
+}
+
 type Config struct {
+	ProviderMaxRemoteModels  int               `env:"PROVIDER_MAX_REMOTE_MODELS" envDefault:"1000"`
+	ProviderMaxBreakers      int               `env:"PROVIDER_MAX_BREAKERS" envDefault:"256"`
 	ProviderHTTPTimeout      time.Duration     `env:"PROVIDER_HTTP_TIMEOUT" envDefault:"20s"`
 	ProviderBreaker          BreakerConfig     `envPrefix:"PROVIDER_BREAKER_"`
-	ProviderMaxResponseBytes int64             `env:"PROVIDER_MAX_RESPONSE_BYTES" envDefault:"8388608"`
+	ProviderMaxResponseBytes int64             `env:"PROVIDER_MAX_RESPONSE_BYTES"`
 	ProviderPrivateAllowlist []string          `env:"PROVIDER_PRIVATE_ALLOWLIST" envSeparator:","`
 	Auth                     AuthConfig        `envPrefix:"AUTH_"`
 	ServiceToken             string            `env:"SERVICE_TOKEN,required,notEmpty"`
@@ -106,7 +176,6 @@ type Config struct {
 	OTLPEndpoint             string            `env:"OTLP_ENDPOINT"`
 	LogLevel                 string            `env:"LOG_LEVEL" envDefault:"info"`
 	Retry                    RetryConfig       `envPrefix:"RETRY_"`
-	Breaker                  BreakerConfig     `envPrefix:"BREAKER_"`
 	Stream                   ConsumerConfig    `envPrefix:"STREAM_"`
 	OutboxRelay              OutboxRelayConfig `envPrefix:"RELAY_"`
 }
@@ -115,8 +184,26 @@ const envPrefix = "CORE_"
 
 const DefaultProviderMaxResponseBytes int64 = 8388608
 
+const (
+	MinimumArgonIterations         uint32 = 2
+	ArgonMemoryKiB                 uint32 = 65536
+	DefaultArgonConcurrency               = 4
+	MinimumServiceTokenLength             = 32
+	DefaultLoginEmailMaxAttempts          = 20
+	DefaultLoginIPMaxAttempts             = 100
+	DefaultArgonParallelism        uint8  = 1
+	DefaultArgonSaltLength         uint32 = 16
+	DefaultArgonKeyLength          uint32 = 32
+	MinimumArgonSaltLength         uint32 = 8
+	MinimumArgonKeyLength          uint32 = 16
+	DefaultSessionTouchInterval           = 5 * time.Minute
+	DefaultProviderMaxRemoteModels        = 1000
+	DefaultProviderMaxBreakers            = 256
+)
+
 func Load() (Config, error) {
-	cfg, err := env.ParseAsWithOptions[Config](env.Options{Prefix: envPrefix})
+	cfg := Config{ProviderMaxResponseBytes: DefaultProviderMaxResponseBytes}
+	err := env.ParseWithOptions(&cfg, env.Options{Prefix: envPrefix})
 	if err != nil {
 		return Config{}, fmt.Errorf("load config: %w", err)
 	}
@@ -137,20 +224,32 @@ func (c Config) validate() error {
 	if c.Retry.MaxAttempts < 1 || c.Stream.MaxDeliveries < 1 {
 		errs = append(errs, errors.New("CORE_RETRY_MAX_ATTEMPTS and CORE_STREAM_MAX_DELIVERIES must be >= 1"))
 	}
-	if c.Breaker.FailureThreshold < 1 {
-		errs = append(errs, errors.New("CORE_BREAKER_FAILURE_THRESHOLD must be >= 1"))
-	}
-	if c.Breaker.HalfOpenMaxCalls < 1 {
-		errs = append(errs, errors.New("CORE_BREAKER_HALF_OPEN_MAX_CALLS must be >= 1"))
-	}
 	errs = append(errs, c.HTTP.validate()...)
 	errs = append(errs, c.Auth.validate()...)
+	errs = append(errs, c.validateServiceToken()...)
 	errs = append(errs, c.validateProvider()...)
 	return errors.Join(errs...)
 }
 
+func (c Config) validateServiceToken() []error {
+	var errs []error
+	if len(c.ServiceToken) < MinimumServiceTokenLength {
+		errs = append(errs, errors.New("CORE_SERVICE_TOKEN must be at least 32 characters"))
+	}
+	if !strings.EqualFold(c.Environment, "dev") && strings.HasPrefix(strings.ToLower(c.ServiceToken), "change-me") {
+		errs = append(errs, errors.New("CORE_SERVICE_TOKEN must not use a change-me value outside dev"))
+	}
+	return errs
+}
+
 func (c Config) validateProvider() []error {
 	var errs []error
+	if c.ProviderMaxRemoteModels < 1 {
+		errs = append(errs, errors.New("CORE_PROVIDER_MAX_REMOTE_MODELS must be >= 1"))
+	}
+	if c.ProviderMaxBreakers < 1 {
+		errs = append(errs, errors.New("CORE_PROVIDER_MAX_BREAKERS must be >= 1"))
+	}
 	if c.ProviderHTTPTimeout <= 0 {
 		errs = append(errs, errors.New("CORE_PROVIDER_HTTP_TIMEOUT must be > 0"))
 	}

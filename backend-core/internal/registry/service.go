@@ -12,6 +12,8 @@ import (
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/audit"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/vault"
 )
 
@@ -26,13 +28,18 @@ const (
 )
 
 type Service struct {
-	pool    *pgxpool.Pool
-	secrets *vault.Store
-	catalog Catalog
+	pool            *pgxpool.Pool
+	secrets         *vault.Store
+	catalog         Catalog
+	maxRemoteModels int
 }
 
-func NewService(pool *pgxpool.Pool, secrets *vault.Store, catalog Catalog) *Service {
-	return &Service{pool: pool, secrets: secrets, catalog: catalog}
+func NewService(pool *pgxpool.Pool, secrets *vault.Store, catalog Catalog, maxRemoteModels ...int) *Service {
+	limit := config.DefaultProviderMaxRemoteModels
+	if len(maxRemoteModels) > 0 {
+		limit = maxRemoteModels[0]
+	}
+	return &Service{pool: pool, secrets: secrets, catalog: catalog, maxRemoteModels: limit}
 }
 
 func (s *Service) inTx(ctx context.Context, fn func(pgx.Tx) error) error {
@@ -70,7 +77,7 @@ func normalizeProvider(in *ProviderInput) error {
 
 func validateBaseURL(value string) error {
 	u, err := url.Parse(value)
-	if err != nil || u.Host == "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" || (u.Scheme != "https" && u.Scheme != "http") {
+	if err != nil || u.Host == "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" || !outbound.IsSupportedScheme(u.Scheme) {
 		return fieldError("baseUrl", validationInvalid)
 	}
 	return nil
@@ -119,7 +126,7 @@ func (s *Service) UpdateProvider(ctx context.Context, id uuid.UUID, in ProviderI
 		if in.Enabled != nil {
 			enabled = *in.Enabled
 		}
-		secretID, err := s.applyKey(ctx, tx, cur.secretID, in.APIKey)
+		secretID, err := s.providerUpdateSecret(ctx, tx, cur, merged.BaseURL, in.APIKey)
 		if err != nil {
 			return err
 		}
@@ -132,6 +139,16 @@ func (s *Service) UpdateProvider(ctx context.Context, id uuid.UUID, in ProviderI
 			TargetID: id.String(), Metadata: map[string]any{"keyChanged": in.APIKey != nil}})
 	})
 	return out, err
+}
+
+func (s *Service) providerUpdateSecret(ctx context.Context, tx pgx.Tx, current providerRow, nextBaseURL string, nextKey *string) (*uuid.UUID, error) {
+	if nextKey == nil && nextBaseURL != current.BaseURL && current.secretID != nil {
+		if err := s.secrets.Delete(ctx, tx, *current.secretID); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+	return s.applyKey(ctx, tx, current.secretID, nextKey)
 }
 
 func (s *Service) applyKey(ctx context.Context, tx pgx.Tx, current *uuid.UUID, next *string) (*uuid.UUID, error) {
@@ -177,7 +194,7 @@ func (s *Service) TestProvider(ctx context.Context, id uuid.UUID) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	models, err := s.catalog.ListModels(ctx, p.Kind, p.BaseURL, key)
+	models, err := s.catalog.ListModels(ctx, p.ID, p.Kind, p.BaseURL, key)
 	if err != nil {
 		return 0, err
 	}
@@ -217,6 +234,7 @@ const (
 type SyncResult struct {
 	Added   int `json:"added"`
 	Updated int `json:"updated"`
+	Skipped int `json:"skipped"`
 }
 
 func validateModel(in *ModelInput) error {
@@ -294,32 +312,61 @@ func (s *Service) SyncModels(ctx context.Context, providerID uuid.UUID) (SyncRes
 	if p.Kind != KindOpenRouter {
 		return SyncResult{}, errors.New(errors.CodeRegistrySyncUnsupported)
 	}
-	remote, err := s.catalog.ListModels(ctx, p.Kind, p.BaseURL, key)
+	remote, err := s.catalog.ListModels(ctx, p.ID, p.Kind, p.BaseURL, key)
 	if err != nil {
 		return SyncResult{}, err
 	}
 	var res SyncResult
+	if s.maxRemoteModels <= 0 {
+		return SyncResult{}, errors.ErrInternalError
+	}
+	snapshotComplete := len(remote) > 0 && len(remote) <= s.maxRemoteModels
+	if len(remote) > s.maxRemoteModels {
+		res.Skipped = len(remote) - s.maxRemoteModels
+		remote = remote[:s.maxRemoteModels]
+	}
 	err = s.inTx(ctx, func(tx pgx.Tx) error {
-		for _, r := range remote {
-			in := ModelInput{ProviderID: providerID, ModelRef: r.ModelRef, DisplayName: r.DisplayName, Capabilities: r.Capabilities,
-				ContextWindow: r.ContextWindow, InputPricePerMTok: r.InputPricePerMTok, OutputPricePerMTok: r.OutputPricePerMTok}
-			if err := validateModel(&in); err != nil {
+		kept, err := syncRemoteModels(ctx, tx, providerID, remote, &res)
+		if err != nil {
+			return err
+		}
+		// A truncated catalog cannot establish that an omitted row is stale.
+		if snapshotComplete {
+			if err := deleteStaleSyncModels(ctx, tx, providerID, kept); err != nil {
 				return err
-			}
-			_, inserted, err := upsertModel(ctx, tx, in, sourceSync)
-			if err != nil {
-				return err
-			}
-			if inserted {
-				res.Added++
-			} else {
-				res.Updated++
 			}
 		}
 		return audit.Record(ctx, tx, audit.Event{Actor: actorOwner, Action: actionModelSync, TargetType: targetProvider,
-			TargetID: providerID.String(), Metadata: map[string]any{"added": res.Added, "updated": res.Updated}})
+			TargetID: providerID.String(), Metadata: map[string]any{"added": res.Added, "updated": res.Updated, "skipped": res.Skipped}})
 	})
 	return res, err
+}
+
+func syncRemoteModels(ctx context.Context, tx pgx.Tx, providerID uuid.UUID, remote []RemoteModel, result *SyncResult) ([]uuid.UUID, error) {
+	kept := make([]uuid.UUID, 0, len(remote))
+	for _, remoteModel := range remote {
+		input := ModelInput{ProviderID: providerID, ModelRef: remoteModel.ModelRef, DisplayName: remoteModel.DisplayName,
+			Capabilities: remoteModel.Capabilities, ContextWindow: remoteModel.ContextWindow,
+			InputPricePerMTok: remoteModel.InputPricePerMTok, OutputPricePerMTok: remoteModel.OutputPricePerMTok}
+		if err := validateModel(&input); err != nil {
+			return nil, errors.ErrRegistryProviderRejected.WithCause(err)
+		}
+		model, inserted, err := upsertModel(ctx, tx, input, sourceSync)
+		if err != nil {
+			if errors.ToAppError(err).Code == errors.CodeRegistryNameTaken {
+				result.Skipped++
+				continue
+			}
+			return nil, err
+		}
+		if inserted {
+			result.Added++
+		} else {
+			result.Updated++
+		}
+		kept = append(kept, model.ID)
+	}
+	return kept, nil
 }
 
 func satisfies(m Model, role Role) bool {

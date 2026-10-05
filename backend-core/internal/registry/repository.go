@@ -9,9 +9,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
-
-const platformTenantID = "default"
 
 const providerColumns = `id, kind, name, base_url, api_key_secret_id IS NOT NULL, enabled, created_at, updated_at`
 
@@ -33,9 +32,13 @@ func scanProvider(row pgx.Row) (Provider, error) {
 }
 
 func insertProvider(ctx context.Context, db postgres.DBTX, in ProviderInput, secretID *uuid.UUID) (Provider, error) {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return Provider{}, err
+	}
 	enabled := in.Enabled == nil || *in.Enabled
 	p, err := scanProvider(db.QueryRow(ctx, `INSERT INTO providers (tenant_id, kind, name, base_url, api_key_secret_id, enabled)
-		VALUES ($6, $1, $2, $3, $4, $5) RETURNING `+providerColumns, in.Kind, in.Name, in.BaseURL, secretID, enabled, platformTenantID))
+		VALUES ($6, $1, $2, $3, $4, $5) RETURNING `+providerColumns, in.Kind, in.Name, in.BaseURL, secretID, enabled, tenantID))
 	if postgres.IsUniqueViolation(err) {
 		return Provider{}, errNameTaken()
 	}
@@ -43,8 +46,12 @@ func insertProvider(ctx context.Context, db postgres.DBTX, in ProviderInput, sec
 }
 
 func getProvider(ctx context.Context, db postgres.DBTX, id uuid.UUID) (providerRow, error) {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return providerRow{}, err
+	}
 	var r providerRow
-	err := db.QueryRow(ctx, `SELECT `+providerColumns+`, api_key_secret_id FROM providers WHERE id = $1 AND tenant_id = $2`, id, platformTenantID).
+	err = db.QueryRow(ctx, `SELECT `+providerColumns+`, api_key_secret_id FROM providers WHERE id = $1 AND tenant_id = $2`, id, tenantID).
 		Scan(&r.ID, &r.Kind, &r.Name, &r.BaseURL, &r.HasAPIKey, &r.Enabled, &r.CreatedAt, &r.UpdatedAt, &r.secretID)
 	if stderrors.Is(err, pgx.ErrNoRows) {
 		return providerRow{}, errProviderNotFound()
@@ -56,8 +63,12 @@ func getProvider(ctx context.Context, db postgres.DBTX, id uuid.UUID) (providerR
 }
 
 func updateProvider(ctx context.Context, db postgres.DBTX, id uuid.UUID, name, baseURL string, enabled bool, secretID *uuid.UUID) (Provider, error) {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return Provider{}, err
+	}
 	p, err := scanProvider(db.QueryRow(ctx, `UPDATE providers SET name = $2, base_url = $3, enabled = $4,
-		api_key_secret_id = $5, updated_at = now() WHERE id = $1 AND tenant_id = $6 RETURNING `+providerColumns, id, name, baseURL, enabled, secretID, platformTenantID))
+		api_key_secret_id = $5, updated_at = now() WHERE id = $1 AND tenant_id = $6 RETURNING `+providerColumns, id, name, baseURL, enabled, secretID, tenantID))
 	if postgres.IsUniqueViolation(err) {
 		return Provider{}, errNameTaken()
 	}
@@ -65,8 +76,12 @@ func updateProvider(ctx context.Context, db postgres.DBTX, id uuid.UUID, name, b
 }
 
 func deleteProvider(ctx context.Context, db postgres.DBTX, id uuid.UUID) (*uuid.UUID, error) {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var secretID *uuid.UUID
-	err := db.QueryRow(ctx, `DELETE FROM providers WHERE id = $1 AND tenant_id = $2 RETURNING api_key_secret_id`, id, platformTenantID).Scan(&secretID)
+	err = db.QueryRow(ctx, `DELETE FROM providers WHERE id = $1 AND tenant_id = $2 RETURNING api_key_secret_id`, id, tenantID).Scan(&secretID)
 	if stderrors.Is(err, pgx.ErrNoRows) {
 		return nil, errProviderNotFound()
 	}
@@ -80,7 +95,11 @@ func deleteProvider(ctx context.Context, db postgres.DBTX, id uuid.UUID) (*uuid.
 }
 
 func listProviders(ctx context.Context, db postgres.DBTX) ([]Provider, error) {
-	rows, err := db.Query(ctx, `SELECT `+providerColumns+` FROM providers WHERE tenant_id = $1 ORDER BY name`, platformTenantID)
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(ctx, `SELECT `+providerColumns+` FROM providers WHERE tenant_id = $1 ORDER BY name`, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("list providers: %w", err)
 	}
@@ -127,6 +146,10 @@ func capStrings(caps []Capability) []string {
 
 // upsertModel reports whether the row was inserted (true) or updated (false); xmax = 0 marks a fresh insert.
 func upsertModel(ctx context.Context, db postgres.DBTX, in ModelInput, source string) (Model, bool, error) {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return Model{}, false, err
+	}
 	if _, err := getProvider(ctx, db, in.ProviderID); err != nil {
 		return Model{}, false, err
 	}
@@ -138,15 +161,19 @@ func upsertModel(ctx context.Context, db postgres.DBTX, in ModelInput, source st
 			capabilities = EXCLUDED.capabilities, context_window = EXCLUDED.context_window,
 			embedding_dims = EXCLUDED.embedding_dims, input_price_per_mtok = EXCLUDED.input_price_per_mtok,
 			output_price_per_mtok = EXCLUDED.output_price_per_mtok, updated_at = now()
+		WHERE models.source = 'sync' AND EXCLUDED.source = 'sync' AND models.tenant_id = EXCLUDED.tenant_id
 		RETURNING `+modelColumns+`, (xmax = 0)`,
 		in.ProviderID, in.ModelRef, in.DisplayName, capStrings(in.Capabilities), in.ContextWindow, in.EmbeddingDims,
-		in.InputPricePerMTok, in.OutputPricePerMTok, source, platformTenantID)
+		in.InputPricePerMTok, in.OutputPricePerMTok, source, tenantID)
 	var m Model
 	var caps []string
-	err := row.Scan(&m.ID, &m.ProviderID, &m.ModelRef, &m.DisplayName, &caps, &m.ContextWindow, &m.EmbeddingDims,
+	err = row.Scan(&m.ID, &m.ProviderID, &m.ModelRef, &m.DisplayName, &caps, &m.ContextWindow, &m.EmbeddingDims,
 		&m.InputPricePerMTok, &m.OutputPricePerMTok, &m.Source, &inserted)
 	if postgres.IsForeignKeyViolation(err) {
 		return Model{}, false, errProviderNotFound()
+	}
+	if stderrors.Is(err, pgx.ErrNoRows) {
+		return Model{}, false, errNameTaken()
 	}
 	if err != nil {
 		return Model{}, false, fmt.Errorf("upsert model: %w", err)
@@ -158,11 +185,34 @@ func upsertModel(ctx context.Context, db postgres.DBTX, in ModelInput, source st
 	return m, inserted, nil
 }
 
+func deleteStaleSyncModels(ctx context.Context, db postgres.DBTX, providerID uuid.UUID, keep []uuid.UUID) error {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(ctx, `DELETE FROM models m WHERE m.tenant_id = $1 AND m.provider_id = $2 AND m.source = 'sync'
+		AND NOT (m.id = ANY($3::uuid[])) AND NOT EXISTS (
+			SELECT 1 FROM model_roles mr WHERE mr.model_id = m.id
+		)`, tenantID, providerID, keep)
+	if err != nil {
+		return fmt.Errorf("delete stale synced models: %w", err)
+	}
+	return nil
+}
+
 func getModel(ctx context.Context, db postgres.DBTX, id uuid.UUID) (Model, error) {
-	return scanModel(db.QueryRow(ctx, `SELECT `+modelColumns+` FROM models WHERE id = $1 AND tenant_id = $2`, id, platformTenantID))
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return Model{}, err
+	}
+	return scanModel(db.QueryRow(ctx, `SELECT `+modelColumns+` FROM models WHERE id = $1 AND tenant_id = $2`, id, tenantID))
 }
 
 func listModels(ctx context.Context, db postgres.DBTX, providerID *uuid.UUID, capability *Capability) ([]Model, error) {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var capFilter *string
 	if capability != nil {
 		c := string(*capability)
@@ -170,7 +220,7 @@ func listModels(ctx context.Context, db postgres.DBTX, providerID *uuid.UUID, ca
 	}
 	rows, err := db.Query(ctx, `SELECT `+modelColumns+` FROM models
 		WHERE tenant_id = $3 AND ($1::uuid IS NULL OR provider_id = $1) AND ($2::text IS NULL OR $2 = ANY(capabilities))
-		ORDER BY display_name`, providerID, capFilter, platformTenantID)
+		ORDER BY display_name`, providerID, capFilter, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("list models: %w", err)
 	}
@@ -187,7 +237,11 @@ func listModels(ctx context.Context, db postgres.DBTX, providerID *uuid.UUID, ca
 }
 
 func deleteModel(ctx context.Context, db postgres.DBTX, id uuid.UUID) error {
-	tag, err := db.Exec(ctx, `DELETE FROM models WHERE id = $1 AND tenant_id = $2`, id, platformTenantID)
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return err
+	}
+	tag, err := db.Exec(ctx, `DELETE FROM models WHERE id = $1 AND tenant_id = $2`, id, tenantID)
 	if postgres.IsForeignKeyViolation(err) {
 		return errModelInUse()
 	}
@@ -201,8 +255,12 @@ func deleteModel(ctx context.Context, db postgres.DBTX, id uuid.UUID) error {
 }
 
 func upsertRole(ctx context.Context, db postgres.DBTX, role Role, modelID uuid.UUID) error {
-	_, err := db.Exec(ctx, `INSERT INTO model_roles (tenant_id, role, model_id) VALUES ($3, $1, $2)
-		ON CONFLICT (tenant_id, role) DO UPDATE SET model_id = EXCLUDED.model_id, updated_at = now()`, role, modelID, platformTenantID)
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(ctx, `INSERT INTO model_roles (tenant_id, role, model_id) VALUES ($3, $1, $2)
+		ON CONFLICT (tenant_id, role) DO UPDATE SET model_id = EXCLUDED.model_id, updated_at = now()`, role, modelID, tenantID)
 	if err != nil {
 		return fmt.Errorf("assign role: %w", err)
 	}
@@ -210,7 +268,11 @@ func upsertRole(ctx context.Context, db postgres.DBTX, role Role, modelID uuid.U
 }
 
 func listRoles(ctx context.Context, db postgres.DBTX) ([]RoleAssignment, error) {
-	rows, err := db.Query(ctx, `SELECT role, model_id FROM model_roles WHERE tenant_id = $1 ORDER BY role`, platformTenantID)
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(ctx, `SELECT role, model_id FROM model_roles WHERE tenant_id = $1 ORDER BY role`, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("list roles: %w", err)
 	}
@@ -227,8 +289,12 @@ func listRoles(ctx context.Context, db postgres.DBTX) ([]RoleAssignment, error) 
 }
 
 func roleModelID(ctx context.Context, db postgres.DBTX, role Role) (uuid.UUID, bool, error) {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return uuid.Nil, false, err
+	}
 	var id uuid.UUID
-	err := db.QueryRow(ctx, `SELECT model_id FROM model_roles WHERE role = $1 AND tenant_id = $2`, role, platformTenantID).Scan(&id)
+	err = db.QueryRow(ctx, `SELECT model_id FROM model_roles WHERE role = $1 AND tenant_id = $2`, role, tenantID).Scan(&id)
 	if stderrors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, false, nil
 	}
@@ -239,13 +305,21 @@ func roleModelID(ctx context.Context, db postgres.DBTX, role Role) (uuid.UUID, b
 }
 
 func getProviderForUpdate(ctx context.Context, db postgres.DBTX, id uuid.UUID) (providerRow, error) {
-	if _, err := db.Exec(ctx, `SELECT id FROM providers WHERE id=$1 AND tenant_id=$2 FOR UPDATE`, id, platformTenantID); err != nil {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return providerRow{}, err
+	}
+	if _, err = db.Exec(ctx, `SELECT id FROM providers WHERE id=$1 AND tenant_id=$2 FOR UPDATE`, id, tenantID); err != nil {
 		return providerRow{}, fmt.Errorf("lock provider: %w", err)
 	}
 	return getProvider(ctx, db, id)
 }
 func getModelForShare(ctx context.Context, db postgres.DBTX, id uuid.UUID) (Model, error) {
-	if _, err := db.Exec(ctx, `SELECT id FROM models WHERE id=$1 AND tenant_id=$2 FOR SHARE`, id, platformTenantID); err != nil {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return Model{}, err
+	}
+	if _, err = db.Exec(ctx, `SELECT id FROM models WHERE id=$1 AND tenant_id=$2 FOR SHARE`, id, tenantID); err != nil {
 		return Model{}, fmt.Errorf("lock model: %w", err)
 	}
 	return getModel(ctx, db, id)

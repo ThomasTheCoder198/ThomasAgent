@@ -10,11 +10,13 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
 const (
 	StreamFieldPayload     = "payload"
 	StreamFieldTraceParent = "traceparent"
+	StreamFieldTenantID    = "tenant_id"
 	StreamFieldOutboxID    = "outbox_id"
 	StreamFieldError       = "error"
 	StreamFieldDeliveries  = "deliveries"
@@ -29,14 +31,18 @@ type Execer interface {
 func EnqueueOutbox(ctx context.Context, q Execer, stream string, payload any) error {
 	ctx, span := otel.Tracer(jobsTracerName).Start(ctx, enqueueOutboxSpan)
 	defer span.End()
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return err
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return errors.ToAppError(fmt.Errorf("marshal outbox payload: %w", err))
 	}
 	carrier := propagation.MapCarrier{}
 	otel.GetTextMapPropagator().Inject(ctx, carrier)
-	_, err = q.Exec(ctx, `INSERT INTO outbox (topic, payload, trace_parent) VALUES ($1, $2, $3)`,
-		stream, body, carrier.Get(StreamFieldTraceParent))
+	_, err = q.Exec(ctx, `INSERT INTO outbox (tenant_id, topic, payload, trace_parent) VALUES ($1, $2, $3, $4)`,
+		tenantID, stream, body, carrier.Get(StreamFieldTraceParent))
 	if err != nil {
 		return errors.ToAppError(fmt.Errorf("insert outbox: %w", err))
 	}

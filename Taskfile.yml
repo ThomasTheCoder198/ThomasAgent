@@ -39,7 +39,7 @@ tasks:
     cmds: [go test ./..., npm test]
   test:core:
     dir: backend-core
-    cmds: [go test ./... -count=1 -p 2]
+    cmds: [go test ./... -count=1 -p 1]
   test:ragx:
     dir: ragx
     cmds: [uv run pytest -q]

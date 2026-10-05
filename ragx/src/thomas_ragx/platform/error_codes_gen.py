@@ -28,6 +28,7 @@ class ErrorCode(StrEnum):
     REGISTRY_ROLE_NOT_ASSIGNED = "REGISTRY_ROLE_NOT_ASSIGNED"
     REGISTRY_SYNC_UNSUPPORTED = "REGISTRY_SYNC_UNSUPPORTED"
     UNAUTHENTICATED = "UNAUTHENTICATED"
+    UNSUPPORTED_MEDIA_TYPE = "UNSUPPORTED_MEDIA_TYPE"
     VALIDATION_FAILED = "VALIDATION_FAILED"
 
 
@@ -63,5 +64,6 @@ ERROR_DEFINITIONS: Final[dict[ErrorCode, ErrorDefinition]] = {
     ErrorCode.REGISTRY_ROLE_NOT_ASSIGNED: ErrorDefinition(http_status=404, retryable=False, message_vi="Vai trò này chưa được gán model.", message_en="No model is assigned to this role."),
     ErrorCode.REGISTRY_SYNC_UNSUPPORTED: ErrorDefinition(http_status=400, retryable=False, message_vi="Provider này chưa hỗ trợ đồng bộ model.", message_en="Model sync is not supported for this provider."),
     ErrorCode.UNAUTHENTICATED: ErrorDefinition(http_status=401, retryable=False, message_vi="Bạn cần đăng nhập.", message_en="You need to sign in."),
+    ErrorCode.UNSUPPORTED_MEDIA_TYPE: ErrorDefinition(http_status=415, retryable=False, message_vi="Kiểu nội dung yêu cầu không được hỗ trợ.", message_en="The request content type is not supported."),
     ErrorCode.VALIDATION_FAILED: ErrorDefinition(http_status=400, retryable=False, message_vi="Dữ liệu gửi lên không hợp lệ.", message_en="The request data is invalid."),
 }

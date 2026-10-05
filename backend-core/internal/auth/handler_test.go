@@ -9,9 +9,12 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/redis/go-redis/v9"
@@ -55,7 +58,7 @@ const probeFrameGap = 300 * time.Millisecond
 
 // streamProbe emits three frames with a pause between them so a test can tell incremental delivery from buffering.
 func streamProbe(w http.ResponseWriter, r *http.Request) {
-	stream, err := httpx.NewEventStream(w, r, time.Hour)
+	stream, err := httpx.NewEventStream(w, r, config.HTTPConfig{EventStreamHeartbeat: time.Hour, EventStreamWriteTimeout: time.Second})
 	if err != nil {
 		return
 	}
@@ -87,6 +90,7 @@ func login(t *testing.T, h http.Handler, email, password string) *httptest.Respo
 	t.Helper()
 	body := `{"email":"` + email + `","password":"` + password + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	req.RemoteAddr = "10.0.0.1:1234"
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -137,9 +141,12 @@ func TestMutationWithoutCSRFIsForbidden(t *testing.T) {
 }
 
 func TestExpiredSessionIsRejectedOverHTTP(t *testing.T) {
-	h, c := newServer(t, 10)
+	service, _ := newService(t)
+	h := httpx.NewRouter(nil)
+	NewHandler(service, NewLimiter(startRedis(t), 10, time.Minute), false).Mount(h)
 	rec := login(t, h, ownerEmail, ownerPassword)
-	c.t = c.t.Add(2 * time.Hour)
+	_, err := service.db.Exec(t.Context(), `UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1`, hashToken(cookie(rec, CookieSession).Value))
+	require.NoError(t, err)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
 	req.AddCookie(cookie(rec, CookieSession))
 	out := httptest.NewRecorder()
@@ -156,6 +163,43 @@ func TestLoginIsRateLimited(t *testing.T) {
 	rec := login(t, h, ownerEmail, ownerPassword)
 	require.Equal(t, http.StatusTooManyRequests, rec.Code)
 	require.Equal(t, "RATE_LIMITED", errCode(t, rec))
+	require.NotEmpty(t, rec.Header().Get("Retry-After"))
+}
+
+func TestLoginSuccessResetsFailedAttemptBudget(t *testing.T) {
+	h, _ := newServer(t, 2)
+	for range 2 {
+		require.Equal(t, http.StatusUnauthorized, login(t, h, ownerEmail, "incorrect-password").Code)
+		rec := login(t, h, ownerEmail, ownerPassword)
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+	}
+}
+
+func TestLoginLimiterSeparatesForwardedIPsAndEmails(t *testing.T) {
+	svc, _ := newService(t)
+	client := startRedis(t)
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger))
+	NewHandlerWithTrustedProxies(svc, NewLoginLimiter(client, config.AuthConfig{LoginMaxAttempts: 1, LoginEmailMaxAttempts: 10, LoginIPMaxAttempts: 100, LoginWindow: time.Minute}, []byte("test-limiter-hmac-key-at-least-32-chars")), false, "X-Trusted-Client-IP", []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, logger).Mount(router)
+	attempt := func(email, ip string) int {
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"email":"`+email+`","password":"wrong-password"}`))
+		request.RemoteAddr = "10.0.0.1:1234"
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("X-Trusted-Client-IP", ip)
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, request)
+		return recorder.Code
+	}
+	require.Equal(t, 401, attempt(ownerEmail, "192.0.2.1"))
+	require.Equal(t, 429, attempt(ownerEmail, "192.0.2.1"))
+	require.Equal(t, 401, attempt(ownerEmail, "192.0.2.2"))
+	require.Equal(t, 401, attempt("different@example.com", "192.0.2.1"))
+	keys, err := client.Keys(t.Context(), limiterKeyPrefix+"*").Result()
+	require.NoError(t, err)
+	for _, key := range keys {
+		require.NotContains(t, key, "@")
+	}
 }
 
 func TestMeReturnsUserWithoutSecrets(t *testing.T) {
@@ -166,6 +210,7 @@ func TestMeReturnsUserWithoutSecrets(t *testing.T) {
 	out := httptest.NewRecorder()
 	h.ServeHTTP(out, req)
 	require.Equal(t, http.StatusOK, out.Code)
+	require.Equal(t, "no-store", out.Header().Get("Cache-Control"))
 	require.Contains(t, out.Body.String(), ownerEmail)
 	require.NotContains(t, out.Body.String(), "password")
 }

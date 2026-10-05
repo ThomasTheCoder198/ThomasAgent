@@ -10,6 +10,7 @@ Produces the generated Postman collection and validates its deterministic script
 - `postprocess.test.mjs` — Node test runner regression suite.
 - `run.mjs` — environment-based programmatic Newman runner; emits a summary without request/response content.
 - `run.test.mjs` — runner configuration and execution regressions with a fake Newman adapter.
+- `generated-check.test.mjs` — executes the CI generation check against an isolated temporary repository with a newly generated untracked file; uses Git and Bash (Git Bash on Windows), with no staging or commits.
 - `thomasagent.postman_collection.json` — generated collection, imported into Postman or executed by Newman.
 - `local.postman_environment.json` — local URL and empty owner credential variables.
 

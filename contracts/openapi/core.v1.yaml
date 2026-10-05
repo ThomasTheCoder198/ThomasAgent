@@ -2,7 +2,11 @@ openapi: 3.1.0
 info:
   title: ThomasAgent Core API
   version: 1.0.0
-  description: All responses use the shared response format {data, meta} or {error}. Error codes come from contracts/errors.yaml.
+  description: >-
+    All responses use the shared response format {data, meta} or {error}. Error codes come from contracts/errors.yaml.
+    JSON request bodies require application/json (charset parameters are supported). Missing, malformed or other media types
+    return UNSUPPORTED_MEDIA_TYPE (415). Unknown fields and malformed JSON return VALIDATION_FAILED (400).
+    Requiring JSON and rejecting unknown fields are breaking changes for callers that previously relied on permissive decoding.
 servers:
   - url: "{baseUrl}"
     variables:
@@ -24,19 +28,23 @@ paths:
       operationId: healthz
       security: []
       responses:
-        "200": { $ref: "#/components/responses/Status" }
+        "200": { $ref: "#/components/responses/HealthStatus" }
   /readyz:
     get:
       tags: [Health]
       operationId: readyz
       security: []
       responses:
-        "200": { $ref: "#/components/responses/Status" }
+        "200": { $ref: "#/components/responses/HealthStatus" }
         "503": { $ref: "#/components/responses/Error" }
   /api/v1/auth/login:
     post:
       tags: [Auth]
       operationId: login
+      description: >-
+        Login attempts share email/IP, email-global and IP-only budgets before password verification.
+        Exhausting any budget returns RATE_LIMITED with Retry-After in seconds. The email-global
+        budget can block a correct password for the remaining window; it has no password exemption.
       security: []
       requestBody:
         required: true
@@ -45,17 +53,28 @@ paths:
             schema: { $ref: "#/components/schemas/LoginRequest" }
             example: { email: "{{ownerEmail}}", password: "{{ownerPassword}}" }
       responses:
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "200":
           description: Signed in; sets thomas_session and thomas_csrf cookies.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LoginSuccessResponse" }
-        "401": { $ref: "#/components/responses/Error" }
-        "429": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429":
+          description: Login budget exhausted; wait the Retry-After duration before retrying.
+          headers:
+            Retry-After:
+              description: Remaining blocked-window duration in seconds.
+              schema: { type: integer, minimum: 1 }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "400": { $ref: "#/components/responses/Error" }
   /api/v1/auth/me:
     get:
       tags: [Auth]
       operationId: me
+      description: Authenticates the stored session using database time for its expiry decision.
       security: [{ sessionCookie: [] }]
       responses:
         "200":
@@ -71,20 +90,23 @@ paths:
                         type: object
                         properties:
                           { user: { $ref: "#/components/schemas/User" } }
-        "401": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /api/v1/auth/logout:
     post:
       tags: [Auth]
       operationId: logout
       responses:
-        "200": { $ref: "#/components/responses/Status" }
-        "403": { $ref: "#/components/responses/Error" }
+        "200": { $ref: "#/components/responses/LogoutResult" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /api/v1/providers:
     get:
       tags: [Providers]
       operationId: listProviders
+      security: [{ sessionCookie: [] }]
       responses:
         "200": { $ref: "#/components/responses/ProviderList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
     post:
       tags: [Providers]
       operationId: createProvider
@@ -100,9 +122,14 @@ paths:
                 baseUrl: "http://127.0.0.1:1",
               }
       responses:
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "201": { $ref: "#/components/responses/Provider" }
         "400": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /api/v1/providers/{providerId}:
     parameters:
       - {
@@ -122,15 +149,24 @@ paths:
             schema: { $ref: "#/components/schemas/ProviderInput" }
             example: { enabled: true }
       responses:
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "200": { $ref: "#/components/responses/Provider" }
         "404": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
     delete:
       tags: [Providers]
       operationId: deleteProvider
       responses:
-        "200": { $ref: "#/components/responses/Status" }
+        "200": { $ref: "#/components/responses/DeleteResult" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/Error" }
   /api/v1/providers/{providerId}/test:
     parameters:
       - {
@@ -144,9 +180,14 @@ paths:
       tags: [Providers]
       operationId: testProvider
       responses:
-        "200": { $ref: "#/components/responses/Status" }
+        "200": { $ref: "#/components/responses/ProviderTestResult" }
         "400": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
   /api/v1/providers/{providerId}/sync:
     parameters:
       - {
@@ -173,6 +214,12 @@ paths:
                         { data: { $ref: "#/components/schemas/SyncResult" } },
                     }
         "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /api/v1/models:
     get:
       tags: [Models]
@@ -188,8 +235,11 @@ paths:
             in: query,
             schema: { $ref: "#/components/schemas/Capability" },
           }
+      security: [{ sessionCookie: [] }]
       responses:
         "200": { $ref: "#/components/responses/ModelList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "400": { $ref: "#/components/responses/Error" }
     post:
       tags: [Models]
       operationId: createModel
@@ -206,8 +256,13 @@ paths:
                 capabilities: [chat],
               }
       responses:
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "201": { $ref: "#/components/responses/Model" }
         "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /api/v1/models/{modelId}:
     parameters:
       - {
@@ -221,12 +276,17 @@ paths:
       tags: [Models]
       operationId: deleteModel
       responses:
-        "200": { $ref: "#/components/responses/Status" }
+        "200": { $ref: "#/components/responses/DeleteResult" }
+        "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/Error" }
   /api/v1/model-roles:
     get:
       tags: [Model roles]
       operationId: listModelRoles
+      security: [{ sessionCookie: [] }]
       responses:
         "200":
           description: Role assignments.
@@ -247,6 +307,7 @@ paths:
                             },
                         },
                     }
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /api/v1/model-roles/{role}:
     parameters:
       - {
@@ -266,13 +327,19 @@ paths:
             schema:
               {
                 type: object,
+                additionalProperties: false,
                 required: [modelId],
                 properties: { modelId: { type: string, format: uuid } },
               }
             example: { modelId: "{{modelId}}" }
       responses:
-        "200": { $ref: "#/components/responses/Status" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "200": { $ref: "#/components/responses/RoleAssignment" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /internal/models/resolve:
     get:
       tags: [Internal]
@@ -301,21 +368,73 @@ paths:
                           data: { $ref: "#/components/schemas/ResolvedModel" },
                         },
                     }
-        "401": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/Error" }
+        "400": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     sessionCookie: { type: apiKey, in: cookie, name: thomas_session }
     csrfHeader: { type: apiKey, in: header, name: X-CSRF-Token }
     serviceToken: { type: http, scheme: bearer }
   responses:
-    Status:
-      description: SuccessResponse with a small status object.
+    HealthStatus:
+      description: Health result.
       content:
         application/json:
-          schema: { $ref: "#/components/schemas/SuccessResponse" }
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/SuccessResponse" }
+              - { type: object, properties: { data: { type: object, required: [status], properties: { status: { type: string, enum: [ok, ready] } } } } }
+    DeleteResult:
+      description: Deletion confirmation.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/SuccessResponse" }
+              - { type: object, properties: { data: { type: object, required: [deleted], properties: { deleted: { type: boolean } } } } }
+    LogoutResult:
+      description: Logout confirmation.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/SuccessResponse" }
+              - { type: object, properties: { data: { type: object, required: [loggedOut], properties: { loggedOut: { type: boolean } } } } }
+    ProviderTestResult:
+      description: Provider connection test result.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/SuccessResponse" }
+              - { type: object, properties: { data: { type: object, required: [ok, modelCount], properties: { ok: { type: boolean }, modelCount: { type: integer, minimum: 0 } } } } }
+    RoleAssignment:
+      description: Role assignment.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/SuccessResponse" }
+              - { type: object, properties: { data: { $ref: "#/components/schemas/RoleAssignment" } } }
     Error:
       description: Error response.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    UnsupportedMediaType:
+      description: The JSON body requires application/json; missing, malformed or other media types return UNSUPPORTED_MEDIA_TYPE.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Unauthorized:
+      description: Authentication failed or is required.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Forbidden:
+      description: The authenticated request is not allowed.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -415,6 +534,7 @@ components:
         }
     LoginRequest:
       type: object
+      additionalProperties: false
       required: [email, password]
       properties:
         {
@@ -467,6 +587,7 @@ components:
         updatedAt: { type: string, format: date-time }
     ProviderInput:
       type: object
+      additionalProperties: false
       properties:
         kind: { $ref: "#/components/schemas/ProviderKind" }
         name: { type: string }
@@ -475,7 +596,7 @@ components:
           {
             type: [string, "null"],
             writeOnly: true,
-            description: "null/absent = unchanged, empty string = remove",
+            description: "null/absent = unchanged unless baseUrl changes (then cleared), empty string = remove",
           }
         enabled: { type: boolean }
     Model:
@@ -494,6 +615,7 @@ components:
         source: { type: string, enum: [manual, sync] }
     ModelInput:
       type: object
+      additionalProperties: false
       required: [providerId, modelRef]
       properties:
         providerId: { type: string, format: uuid }
@@ -514,7 +636,7 @@ components:
         }
     SyncResult:
       type: object
-      properties: { added: { type: integer }, updated: { type: integer } }
+      properties: { added: { type: integer }, updated: { type: integer }, skipped: { type: integer } }
     ResolvedModel:
       type: object
       properties:

@@ -36,6 +36,10 @@ errors:
     status: 429
     retryable: true
     message: { vi: "Quá nhiều yêu cầu, vui lòng thử lại sau.", en: "Too many requests, please retry later." }
+  - code: UNSUPPORTED_MEDIA_TYPE
+    status: 415
+    retryable: false
+    message: { vi: "Kiểu nội dung yêu cầu không được hỗ trợ.", en: "The request content type is not supported." }
   - code: PROVIDER_UNAVAILABLE
     status: 503
     retryable: true

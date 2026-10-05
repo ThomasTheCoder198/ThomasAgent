@@ -2,10 +2,12 @@ package auth
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -14,9 +16,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
 type authLogBuffer struct {
@@ -70,7 +75,7 @@ func newAuthenticatedStream(t *testing.T, handler http.HandlerFunc) (*http.Respo
 func TestSessionAndCSRF_DisconnectCancelsHandler(t *testing.T) {
 	cancelled := make(chan struct{})
 	resp, logs, cancel := newAuthenticatedStream(t, func(w http.ResponseWriter, r *http.Request) {
-		stream, err := httpx.NewEventStream(w, r, time.Hour)
+		stream, err := httpx.NewEventStream(w, r, config.HTTPConfig{EventStreamHeartbeat: time.Hour, EventStreamWriteTimeout: time.Second})
 		if err != nil {
 			httpx.WriteError(w, r, err)
 			return
@@ -96,9 +101,57 @@ func TestSessionAndCSRF_DisconnectCancelsHandler(t *testing.T) {
 	require.Eventually(t, func() bool { return strings.Count(logs.String(), `"path":"/stream"`) == 1 }, 5*time.Second, time.Millisecond)
 }
 
+func TestSessionAndCSRF_NonReadingClientBoundsShutdown(t *testing.T) {
+	svc, _ := newService(t)
+	_, session, err := svc.Login(tenant.WithID(t.Context(), tenant.PlatformID), ownerEmail, ownerPassword)
+	require.NoError(t, err)
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.TraceRequests("blocked-stream"), httpx.LogAccess(logger))
+	result := make(chan error, 1)
+	router.Group(func(pr chi.Router) {
+		pr.Use(RequireSession(svc))
+		pr.Post("/stream", func(w http.ResponseWriter, r *http.Request) {
+			stream, err := httpx.NewEventStream(w, r, config.HTTPConfig{EventStreamHeartbeat: time.Hour, EventStreamWriteTimeout: 50 * time.Millisecond})
+			if err != nil {
+				result <- err
+				return
+			}
+			err = stream.Send(bytes.Repeat([]byte{'x'}, 1<<20))
+			stream.Close()
+			result <- err
+		})
+	})
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+	request := httptest.NewRequest(http.MethodPost, "/stream", nil)
+	request.AddCookie(&http.Cookie{Name: CookieSession, Value: session.Token})
+	request.Header.Set(HeaderCSRF, session.CSRFToken)
+	go router.ServeHTTP(&blockedStreamWriter{conn: server, header: make(http.Header)}, request)
+	select {
+	case err := <-result:
+		require.Error(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("stream did not stop after its write deadline through tracing, session and CSRF middleware")
+	}
+}
+
+type blockedStreamWriter struct {
+	conn   net.Conn
+	header http.Header
+}
+
+func (w *blockedStreamWriter) Header() http.Header         { return w.header }
+func (w *blockedStreamWriter) WriteHeader(int)             {}
+func (w *blockedStreamWriter) Write(p []byte) (int, error) { return w.conn.Write(p) }
+func (w *blockedStreamWriter) Flush()                      {}
+func (w *blockedStreamWriter) SetWriteDeadline(deadline time.Time) error {
+	return w.conn.SetWriteDeadline(deadline)
+}
+
 func TestSessionAndCSRF_CommittedPanicAbortsWithoutJSON(t *testing.T) {
 	resp, logs, _ := newAuthenticatedStream(t, func(w http.ResponseWriter, r *http.Request) {
-		stream, err := httpx.NewEventStream(w, r, time.Hour)
+		stream, err := httpx.NewEventStream(w, r, config.HTTPConfig{EventStreamHeartbeat: time.Hour, EventStreamWriteTimeout: time.Second})
 		if err != nil {
 			httpx.WriteError(w, r, err)
 			return

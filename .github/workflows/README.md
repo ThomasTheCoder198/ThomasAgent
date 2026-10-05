@@ -21,7 +21,7 @@ Postman integration test exercises real HTTP against disposable Postgres/Redis.
 
 ## Conventions
 
-Generation remains deterministic. Linux retains Go race checks; Windows uses
+After `task gen`, CI checks both tracked diffs and untracked files from `git status --porcelain --untracked-files=all`; new generated outputs cannot silently pass. Generation remains deterministic. Linux retains Go race checks; Windows uses
 bounded package concurrency. API fixtures never change existing platform roles.
 
 ## Common failures

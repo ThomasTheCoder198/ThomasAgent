@@ -165,6 +165,10 @@ func (h *Handler) assignRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role := Role(chi.URLParam(r, "role"))
+	if body.ModelID == uuid.Nil {
+		httpx.WriteError(w, r, fieldError("modelId", validationRequired))
+		return
+	}
 	err := h.svc.AssignRole(r.Context(), role, body.ModelID)
 	respond(w, r, http.StatusOK, RoleAssignment{Role: role, ModelID: body.ModelID}, err)
 }

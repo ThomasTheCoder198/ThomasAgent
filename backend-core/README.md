@@ -55,7 +55,7 @@ derive `tenant_id` from trusted context. Owner bootstrap is idempotent.
 
 `CORE_VAULT_MASTER_KEY` is required and must decode to 32 bytes; `serve` validates
 it before opening dependencies or listening. Keep the key stable. All config-loading
-commands also require `CORE_SERVICE_TOKEN`. Set `CORE_AUTH_OWNER_EMAIL` and
+commands also require `CORE_SERVICE_TOKEN` of at least 32 characters; `change-me*` values are rejected outside dev. Set `CORE_AUTH_OWNER_EMAIL` and
 `CORE_AUTH_OWNER_PASSWORD` (at least 12 characters) to bootstrap the owner.
 Session/cookie/login settings are documented in [config](internal/platform/config/README.md).
 
@@ -72,3 +72,7 @@ generated collection is exercised against isolated Postgres/Redis and a real HTT
 server by `TestAPI_GeneratedPostmanCollection`; test fixtures never alter existing
 platform model roles. `task smoke` additionally checks deployed login/CSRF/provider
 creation with cleanup. `task api-test` supports an explicit test base URL.
+
+M0.2 hardening requires explicit tenant context at all business repositories; database tenant defaults have been removed by a new migration. Login uses keyed account and address budgets, hashing waits honor cancellation, and session last-seen writes are throttled. JSON endpoints return 415 for unsupported content types. See module READMEs for configuration and regression gates.
+
+Review round 3 adds the IP-only login budget, retries live-parent attempt timeouts, makes the system session purge cover all tenants, and uses database session expiry. Vault writes version 3 length-prefixed AAD while upgrading prior formats on read. Run Docker-backed packages one at a time with `TESTCONTAINERS_RYUK_DISABLED=true`; `task test` uses Go `-p 1` to serialize packages and must finish before builds or `task up`.

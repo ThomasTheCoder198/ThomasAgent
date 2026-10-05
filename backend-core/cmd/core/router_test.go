@@ -39,6 +39,7 @@ func TestRoutesDocumentedInOpenAPI(t *testing.T) {
 	r := newRouter(routerDeps{log: slog.New(slog.NewTextHandler(io.Discard, nil)), serviceName: "test"})
 	documented := documentedRoutes(t)
 	var missing []string
+	implemented := map[string]bool{}
 	err := chi.Walk(r, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		key := method + " " + strings.TrimSuffix(route, "/")
 		if route == "/" {
@@ -47,9 +48,18 @@ func TestRoutesDocumentedInOpenAPI(t *testing.T) {
 		if !documented[key] {
 			missing = append(missing, key)
 		}
+		implemented[key] = true
 		return nil
 	})
 	require.NoError(t, err)
 	sort.Strings(missing)
 	require.Empty(t, missing, "add these routes to contracts/openapi/core.v1.yaml, then run task gen")
+	var unimplemented []string
+	for key := range documented {
+		if !implemented[key] {
+			unimplemented = append(unimplemented, key)
+		}
+	}
+	sort.Strings(unimplemented)
+	require.Empty(t, unimplemented, "remove stale paths from contracts/openapi/core.v1.yaml")
 }

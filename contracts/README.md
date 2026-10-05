@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Single source for error codes and shared schemas used by the Go core, Python RAG app, and frontend. Owns catalog validation, core OpenAPI, and deterministic Postman generation.
+Single source for error codes and shared schemas used by the Go core, Python RAG app, and frontend. Owns catalog validation, core OpenAPI, deterministic Postman generation, and route drift checks in core tests.
 
 ## Entry points
 - `errors.yaml` — authoritative error codes, HTTP statuses, retryability, and VI/EN messages.
@@ -36,6 +36,11 @@ go vet ./...
 ## Conventions
 
 OpenAPI is the source of truth for the core API. `task gen` validates it and regenerates the Postman collection; never edit the collection by hand. `task api-test` runs it with Newman.
+The login contract documents all three attempt budgets, the intentional email-global lockout and 429 `Retry-After`. Session authentication uses database expiry time. These hardening changes preserve request/response schemas and error codes.
+JSON request bodies require `Content-Type: application/json` (charset parameters are allowed).
+Missing, malformed or other content types return catalog `UNSUPPORTED_MEDIA_TYPE` (415).
+Unknown fields and malformed JSON return `VALIDATION_FAILED` (400). The stricter body
+decoding is a breaking change for callers that previously sent other media types or extra fields.
 API tests require a running core and owner credentials. Export `CORE_AUTH_OWNER_EMAIL` and `CORE_AUTH_OWNER_PASSWORD` to use a disposable test server, or fall back to the local compose environment. `CORE_API_TEST_BASE_URL` overrides the default `http://localhost:8080`.
 The API test assigns `chat.fast` and verifies that deleting its model/provider returns conflict; use a disposable development database. Supplying `CORE_SERVICE_TOKEN` includes internal resolution. The programmatic runner passes credentials through environment values and prints only assertion counts and failed check names.
 Never edit generated files. Add an error code to `errors.yaml` first, then run `task gen`.

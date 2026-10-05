@@ -2,8 +2,8 @@
 
 ## Purpose
 
-Persists metadata-only audit events and copies the trace id from context.
-M0.2 data belongs to the [Platform tenant](../../../docs/glossary.md) (`default`), using the migration's platform defaults. M1 business tenancy must take `tenant_id` from trusted context, never client or model parameters.
+Persists metadata-only audit events and copies the trace id from context. Audit writes require the trusted tenant from context. Missing scope returns the catalog `INTERNAL_ERROR`; an event tenant never overrides context. Nil metadata is stored as `{}`.
+Explicit platform boundaries set the [Platform tenant](../../../docs/glossary.md) (`default`); business data always uses trusted context, never client or model parameters.
 
 ## Entry points
 
@@ -18,10 +18,10 @@ M0.2 data belongs to the [Platform tenant](../../../docs/glossary.md) (`default`
 
 ```bash
 cd backend-core
-go test ./internal/audit/... -count=1 -p 2
+TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/audit/... -count=1 -p 2
 ```
 
-Tests use `pgtest.Start`, migrated Docker Postgres and Ryuk.
+Tests use `pgtest.Start` and migrated Docker Postgres with Ryuk disabled on this host.
 
 ## Conventions
 

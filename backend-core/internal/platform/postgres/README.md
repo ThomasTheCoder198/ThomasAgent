@@ -24,7 +24,7 @@ cd backend-core
 go test ./internal/platform/postgres/... -count=1
 ```
 Docker Desktop must run with Linux containers; tests use postgres:18.6-alpine.
-Tests apply and roll back both platform and identity/registry migrations, reject deliberately broken
+Tests apply and roll back platform, identity/registry and hardening migrations, reject deliberately broken
 SQL, verify status transitions from pending to applied and back, and check that connection failure is returned before a pool is exposed.
 
 ## Conventions
@@ -36,6 +36,7 @@ Migration files use `YYYYMMDDHHMMSS_<desc>.sql` and goose Up/Down annotations.
 `Up` applies all pending migrations; `Down` rolls back one migration.
 `MigrationStatuses` returns every migration row instead of discarding status results.
 Never edit an applied migration. Use expand/contract for breaking changes.
+Vault version 3 adds a new constraint-expansion migration. Its Down retains the expanded check and encrypted rows; tests cover Up/Down/Up for both prior bound and version 3 data, plus all five migration status transitions.
 
 ## Common failures
 - Pool startup fails: verify `CORE_DATABASE_URL` and Postgres availability.

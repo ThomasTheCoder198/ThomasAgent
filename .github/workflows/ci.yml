@@ -30,6 +30,11 @@ jobs:
         run: |
           task gen
           git diff --exit-code -- backend-core ragx frontend contracts/postman/thomasagent.postman_collection.json
+          untracked="$(git status --porcelain --untracked-files=all | grep '^?? ' || true)"
+          if [ -n "$untracked" ]; then
+            printf 'Untracked generated files after task gen:\n%s\n' "$untracked"
+            exit 1
+          fi
 
   core:
     runs-on: ubuntu-latest

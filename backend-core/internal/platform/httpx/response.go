@@ -14,7 +14,8 @@ import (
 const (
 	headerRequestID      = "X-Request-Id"
 	headerContentType    = "Content-Type"
-	contentTypeJSON      = "application/json; charset=utf-8"
+	mediaTypeJSON        = "application/json"
+	contentTypeJSON      = mediaTypeJSON + "; charset=utf-8"
 	headerAcceptLanguage = "Accept-Language"
 )
 

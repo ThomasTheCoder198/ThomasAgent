@@ -8,6 +8,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
+
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tracing"
@@ -18,6 +20,7 @@ type application struct {
 	log           *slog.Logger
 	telemetry     tracing.Telemetry
 	startupTracer trace.Tracer
+	authService   *auth.Service
 }
 
 func newApplication(ctx context.Context) (*application, error) {

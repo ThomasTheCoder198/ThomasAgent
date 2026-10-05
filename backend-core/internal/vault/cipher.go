@@ -52,7 +52,7 @@ func (c *Cipher) Seal(plaintext, aad []byte) (Sealed, error) {
 }
 
 func (c *Cipher) Open(s Sealed, aad []byte) ([]byte, error) {
-	if len(s.Nonce) != c.aead.NonceSize() {
+	if s.KeyID != c.keyID || len(s.Nonce) != c.aead.NonceSize() {
 		return nil, ErrDecrypt
 	}
 	plain, err := c.aead.Open(nil, s.Nonce, s.Ciphertext, aad)

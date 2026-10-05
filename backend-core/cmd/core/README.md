@@ -89,7 +89,7 @@ keep it stable to preserve access to stored secrets. `CORE_VAULT_KEY_ID` default
 
 Core startup configures M0.2 platform-scoped modules. Their data belongs to the [Platform tenant](../../../docs/glossary.md) (`default`). M1 business tenancy must derive `tenant_id` from trusted context, never client or model parameters.
 
-All config-loading commands also require nonempty CORE_SERVICE_TOKEN. The identity test fixtures supply it explicitly.
+All config-loading commands also require CORE_SERVICE_TOKEN with at least 32 characters; values beginning `change-me` are rejected outside dev. The identity test fixtures supply it explicitly. The serve process periodically purges expired sessions across all tenants through the explicit system-level auth method and refreshes `last_seen_at` during authenticated requests. Expiry decisions use the database clock. The purge span names come from auth's named constants.
 
 `serve` validates the vault key before dependency access, bootstraps the owner,
 then injects the guarded provider catalog into the Registry. The route coverage
@@ -97,3 +97,5 @@ test checks every mounted method/path against the shared OpenAPI contract.
 The generated Postman collection runs against a live HTTP server backed by
 disposable migrated Postgres and Redis in `TestAPI_GeneratedPostmanCollection`.
 Its fixtures never change the existing platform roles or read real credentials.
+
+Bootstrap, login and the relay process establish the platform tenant explicitly. The purge job is deliberately system-wide; request repository methods remain scoped. Authenticated business requests use the tenant stored on the session row; service-token routes explicitly set platform scope after validating the token. Configured trusted proxy networks, keyed login budgets including the IP-only budget, session touch interval, catalog size and breaker cache capacity are injected at startup.

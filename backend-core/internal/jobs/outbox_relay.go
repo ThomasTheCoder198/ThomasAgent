@@ -48,16 +48,16 @@ func (r *OutboxRelay) PublishBatch(ctx context.Context) (int, error) {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	rows, err := tx.Query(ctx, `SELECT id, topic, payload, trace_parent FROM outbox
+	rows, err := tx.Query(ctx, `SELECT id, tenant_id, topic, payload, trace_parent FROM outbox
 		WHERE published_at IS NULL ORDER BY created_at LIMIT $1 FOR UPDATE SKIP LOCKED`, r.BatchSize)
 	if err != nil {
 		return 0, errors.ToAppError(fmt.Errorf("select outbox: %w", err))
 	}
-	type row struct{ id, stream, payload, traceParent string }
+	type row struct{ id, tenantID, stream, payload, traceParent string }
 	var batch []row
 	for rows.Next() {
 		var entry row
-		if err := rows.Scan(&entry.id, &entry.stream, &entry.payload, &entry.traceParent); err != nil {
+		if err := rows.Scan(&entry.id, &entry.tenantID, &entry.stream, &entry.payload, &entry.traceParent); err != nil {
 			rows.Close()
 			return 0, errors.ToAppError(fmt.Errorf("scan outbox: %w", err))
 		}
@@ -69,11 +69,11 @@ func (r *OutboxRelay) PublishBatch(ctx context.Context) (int, error) {
 	}
 
 	for _, entry := range batch {
-		values := map[string]any{StreamFieldPayload: entry.payload, StreamFieldTraceParent: entry.traceParent, StreamFieldOutboxID: entry.id}
+		values := map[string]any{StreamFieldPayload: entry.payload, StreamFieldTraceParent: entry.traceParent, StreamFieldOutboxID: entry.id, StreamFieldTenantID: entry.tenantID}
 		if err := r.Redis.XAdd(ctx, &redis.XAddArgs{Stream: entry.stream, Values: values}).Err(); err != nil {
 			return 0, errors.ToAppError(fmt.Errorf("xadd %s: %w", entry.stream, err))
 		}
-		if _, err := tx.Exec(ctx, `UPDATE outbox SET published_at = now() WHERE id = $1`, entry.id); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE outbox SET published_at = now() WHERE id = $1 AND tenant_id=$2`, entry.id, entry.tenantID); err != nil {
 			return 0, errors.ToAppError(fmt.Errorf("mark published: %w", err))
 		}
 	}

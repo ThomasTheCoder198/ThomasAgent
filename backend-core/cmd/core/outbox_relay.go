@@ -4,9 +4,11 @@ import (
 	"context"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/jobs"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
 func (a *application) runOutboxRelay(ctx context.Context) error {
+	ctx = tenant.WithID(ctx, tenant.PlatformID)
 	pool, err := a.openPostgres(ctx)
 	if err != nil {
 		return err

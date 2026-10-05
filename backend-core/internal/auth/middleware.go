@@ -7,6 +7,7 @@ import (
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
 const (
@@ -29,6 +30,7 @@ func UserFrom(ctx context.Context) (User, bool) {
 func RequireSession(svc *Service) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set(httpx.HeaderCacheControl, httpx.CacheControlNoStore)
 			c, err := r.Cookie(CookieSession)
 			if err != nil {
 				httpx.WriteError(w, r, errors.New(errors.CodeUnauthenticated))
@@ -43,7 +45,8 @@ func RequireSession(svc *Service) func(http.Handler) http.Handler {
 				httpx.WriteError(w, r, errors.New(errors.CodeAuthCsrfInvalid))
 				return
 			}
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey{}, user)))
+			ctx := tenant.WithID(r.Context(), sess.TenantID)
+			next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, userKey{}, user)))
 		})
 	}
 }

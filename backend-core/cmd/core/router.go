@@ -2,6 +2,7 @@ package main
 
 import (
 	"log/slog"
+	"net/netip"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -12,14 +13,16 @@ import (
 )
 
 type routerDeps struct {
-	log          *slog.Logger
-	serviceName  string
-	auth         *auth.Service
-	limiter      *auth.Limiter
-	cookieSecure bool
-	registry     *registry.Service
-	serviceToken string
-	health       map[string]httpx.DependencyPinger
+	log                *slog.Logger
+	serviceName        string
+	auth               *auth.Service
+	limiter            *auth.Limiter
+	cookieSecure       bool
+	trustedProxyHeader string
+	trustedProxyCIDRs  []netip.Prefix
+	registry           *registry.Service
+	serviceToken       string
+	health             map[string]httpx.DependencyPinger
 
 	requestTimeout time.Duration // cfg.HTTP.RequestTimeout
 	maxBodyBytes   int64         // cfg.HTTP.MaxBodyBytes
@@ -32,7 +35,7 @@ func newRouter(d routerDeps) chi.Router {
 	// because their lifetime is the run deadline, not an HTTP middleware.
 	r.Group(func(api chi.Router) {
 		api.Use(httpx.LimitRequestDuration(d.requestTimeout))
-		auth.NewHandler(d.auth, d.limiter, d.cookieSecure).Mount(api)
+		auth.NewHandlerWithTrustedProxies(d.auth, d.limiter, d.cookieSecure, d.trustedProxyHeader, d.trustedProxyCIDRs, d.log).Mount(api)
 		api.Group(func(pr chi.Router) {
 			pr.Use(auth.RequireSession(d.auth))
 			registry.NewHandler(d.registry, d.maxBodyBytes).Mount(pr)

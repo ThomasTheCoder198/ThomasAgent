@@ -28,6 +28,7 @@ const (
 	CodeRegistryRoleNotAssigned    Code = "REGISTRY_ROLE_NOT_ASSIGNED"
 	CodeRegistrySyncUnsupported    Code = "REGISTRY_SYNC_UNSUPPORTED"
 	CodeUnauthenticated            Code = "UNAUTHENTICATED"
+	CodeUnsupportedMediaType       Code = "UNSUPPORTED_MEDIA_TYPE"
 	CodeValidationFailed           Code = "VALIDATION_FAILED"
 )
 
@@ -55,6 +56,7 @@ const (
 	ErrRegistryRoleNotAssigned    NamedError = NamedError(CodeRegistryRoleNotAssigned)
 	ErrRegistrySyncUnsupported    NamedError = NamedError(CodeRegistrySyncUnsupported)
 	ErrUnauthenticated            NamedError = NamedError(CodeUnauthenticated)
+	ErrUnsupportedMediaType       NamedError = NamedError(CodeUnsupportedMediaType)
 	ErrValidationFailed           NamedError = NamedError(CodeValidationFailed)
 )
 
@@ -106,6 +108,8 @@ func LookupDefinition(code Code) ErrorDefinition {
 		return ErrorDefinition{HTTPStatus: 400, Retryable: false, MessageVI: "Provider này chưa hỗ trợ đồng bộ model.", MessageEN: "Model sync is not supported for this provider."}
 	case CodeUnauthenticated:
 		return ErrorDefinition{HTTPStatus: 401, Retryable: false, MessageVI: "Bạn cần đăng nhập.", MessageEN: "You need to sign in."}
+	case CodeUnsupportedMediaType:
+		return ErrorDefinition{HTTPStatus: 415, Retryable: false, MessageVI: "Kiểu nội dung yêu cầu không được hỗ trợ.", MessageEN: "The request content type is not supported."}
 	case CodeValidationFailed:
 		return ErrorDefinition{HTTPStatus: 400, Retryable: false, MessageVI: "Dữ liệu gửi lên không hợp lệ.", MessageEN: "The request data is invalid."}
 	default:

@@ -13,10 +13,12 @@ type User struct {
 }
 
 type Session struct {
+	TenantID  string
 	ID        uuid.UUID
 	UserID    uuid.UUID
 	CSRFToken string
 	ExpiresAt time.Time
+	Expired   bool
 }
 
 type IssuedSession struct {

@@ -7,6 +7,7 @@ Creates the provider HTTP client with destination validation and DNS pinning. Re
 ## Entry points
 
 - `NewClient(timeout, privateAllowlist)` returns a guarded `*http.Client`.
+- `IsSupportedScheme` shares the named HTTP/HTTPS scheme policy with Registry validation.
 - `ValidatePrivateAllowlist` validates exact `hostname:port` configuration without reading environment variables.
 
 ## Dependencies

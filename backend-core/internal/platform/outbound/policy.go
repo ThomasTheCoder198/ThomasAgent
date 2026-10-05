@@ -20,6 +20,8 @@ const (
 	maxLabelLength = 63
 )
 
+func IsSupportedScheme(scheme string) bool { return scheme == schemeHTTPS || scheme == schemeHTTP }
+
 type policy struct {
 	privateDestinations map[string]bool
 	blocked             []netip.Prefix

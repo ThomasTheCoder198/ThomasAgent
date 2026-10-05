@@ -14,11 +14,12 @@ import (
 const breakerErrorFormat = "circuit breaker execute: %w"
 
 type Breaker struct {
-	breaker *gobreaker.CircuitBreaker[struct{}]
+	breaker  *gobreaker.CircuitBreaker[struct{}]
+	settings config.BreakerConfig
 }
 
 func NewBreaker(name string, settings config.BreakerConfig) *Breaker {
-	return &Breaker{breaker: gobreaker.NewCircuitBreaker[struct{}](gobreaker.Settings{
+	return &Breaker{settings: settings, breaker: gobreaker.NewCircuitBreaker[struct{}](gobreaker.Settings{
 		Name:        name,
 		MaxRequests: settings.HalfOpenMaxCalls,
 		Timeout:     settings.OpenTimeout,
@@ -27,6 +28,12 @@ func NewBreaker(name string, settings config.BreakerConfig) *Breaker {
 			return err == nil || !IsRetryable(err)
 		},
 	})}
+}
+
+func (b *Breaker) ForProvider(name string) *Breaker { return NewBreaker(name, b.settings) }
+
+func (b *Breaker) CanDiscard() bool {
+	return b.breaker.State() == gobreaker.StateClosed && b.breaker.Counts().ConsecutiveFailures == 0
 }
 
 func (b *Breaker) Execute(ctx context.Context, op func(context.Context) error) error {

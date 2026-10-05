@@ -9,6 +9,8 @@ import (
 	"net"
 	"time"
 
+	"go.opentelemetry.io/otel"
+
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 )
@@ -16,6 +18,8 @@ import (
 const (
 	backoffBase      = 2
 	sleepErrorFormat = "retry wait: %w"
+	retryTracer      = "core.retry"
+	retryOperation   = "core.retry.execute"
 )
 
 type Policy struct {
@@ -71,24 +75,51 @@ func Backoff(p Policy, attempt int) time.Duration {
 	return time.Duration(p.Rand() * ceiling)
 }
 
+func retryDelay(p Policy, attempt int, err error) time.Duration {
+	delay := Backoff(p, attempt)
+	var provider RetryAfterProvider
+	if stderrors.As(err, &provider) && provider.RetryAfter() > 0 {
+		// The local backoff cap cannot shorten a provider's requested minimum wait.
+		delay = max(delay, provider.RetryAfter())
+	}
+	return delay
+}
+
 func Do(ctx context.Context, p Policy, op func(context.Context) error) error {
+	ctx, span := otel.Tracer(retryTracer).Start(ctx, retryOperation)
+	defer span.End()
+	if p.MaxAttempts <= 0 {
+		return errors.ErrInternalError.WithCause(fmt.Errorf("retry max attempts must be positive"))
+	}
 	var err error
 	for attempt := 0; attempt < p.MaxAttempts; attempt++ {
-		if err = op(ctx); err == nil || !IsRetryable(err) {
-			return err
+		if err := ctx.Err(); err != nil {
+			return errors.ErrProviderUnavailable.WithCause(context.Cause(ctx))
+		}
+		err = op(ctx)
+		if err == nil {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return errors.ErrProviderUnavailable.WithCause(stderrors.Join(err, context.Cause(ctx)))
+		}
+		if !IsRetryable(err) {
+			return terminalError(err)
 		}
 		if attempt == p.MaxAttempts-1 {
 			break
 		}
-		delay := Backoff(p, attempt)
-		var ra RetryAfterProvider
-		if stderrors.As(err, &ra) && ra.RetryAfter() > 0 {
-			// The local backoff cap cannot shorten a provider's requested minimum wait.
-			delay = max(delay, ra.RetryAfter())
-		}
+		delay := retryDelay(p, attempt, err)
 		if sleepErr := p.Sleep(ctx, delay); sleepErr != nil {
-			return stderrors.Join(err, sleepErr)
+			return errors.ErrProviderUnavailable.WithCause(stderrors.Join(err, sleepErr, context.Cause(ctx)))
 		}
+	}
+	return terminalError(err)
+}
+
+func terminalError(err error) error {
+	if stderrors.Is(err, context.Canceled) || stderrors.Is(err, context.DeadlineExceeded) {
+		return errors.ErrProviderUnavailable.WithCause(err)
 	}
 	return err
 }

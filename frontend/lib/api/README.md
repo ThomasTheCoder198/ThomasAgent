@@ -25,4 +25,4 @@ npx vitest run lib/api
 
 ## Common failures
 
-- `CLIENT_NETWORK_ERROR` for every call → core down or `WEB_CORE_URL` wrong → check `npm run dev:mock` / compose.
+- `CLIENT_NETWORK_ERROR` for every call → core down or `WEB_CORE_URL` wrong → use `bun run dev:mock` for fake core, or check that real core is running at `WEB_CORE_URL` (default `http://localhost:8080`) with `bun run dev`.

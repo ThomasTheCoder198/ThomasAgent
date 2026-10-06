@@ -52,6 +52,9 @@ test-results/
 # Data volumes (local dev)
 deploy/compose/data/
 
+# Throwaway M0.4 technical probes; findings live in docs/superpowers/spikes (owner decision 2026-10-06)
+spikes/
+
 # Planning docs, agent rules and skills are local-only (owner decision 2026-10-03)
 docs/
 AGENTS.md

@@ -26,12 +26,16 @@ no business data; everything comes from Go core through the same-origin `/api/v1
 
 ```bash
 npm install
-npm run dev:mock    # fake core (mock-core/) on :8787 + next dev on :3000; sign in as owner@thomas.local / metro-wayfinding
-npm run dev         # against real core: WEB_CORE_URL=http://localhost:8080 npm run dev
+bun run dev:mock    # fake core (mock-core/) on :8787 + next dev on :3000; sign in as owner@thomas.local / metro-wayfinding
+bun run dev         # against real core: WEB_CORE_URL=http://localhost:8080 bun run dev
 npm run lint && npm run typecheck && npm test && npm run build
 CORE_AUTH_OWNER_EMAIL=… CORE_AUTH_OWNER_PASSWORD=… npm run e2e          # needs a running app + core (or fake core)
 SCREENS=1 npx playwright test --grep @screens --project desktop        # review captures into ../.impeccable/review
 ```
+
+The frontend runs on the host, not in compose. From the repo root, use `task web:dev`
+or `task web:dev:mock`; `task lint:frontend` and `task test:frontend` also run from there.
+Bun is only the script runner; install with npm and keep `package-lock.json` as the lockfile of record.
 
 | Env            | Where                           | Meaning                                             |
 | -------------- | ------------------------------- | --------------------------------------------------- |

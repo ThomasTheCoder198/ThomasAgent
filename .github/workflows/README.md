@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Checks contracts, Go core and Python RAG changes independently on Linux.
+Checks contracts, Go core, Python RAG and frontend changes independently on Linux.
 
 ## Entry points
 
@@ -18,6 +18,10 @@ Checks contracts, Go core and Python RAG changes independently on Linux.
 Run `task gen`, `task lint` and `task test` locally with Docker available.
 The core job installs Task and contract npm dependencies because its generated
 Postman integration test exercises real HTTP against disposable Postgres/Redis.
+The web job uses Node 24.21.0 and `npm ci` with the frontend lockfile, then runs
+the production dependency audit (high or critical fails), lint, typecheck, unit
+tests and the production build. E2E stays outside CI because
+it needs a running app and core (or fake core).
 
 ## Conventions
 

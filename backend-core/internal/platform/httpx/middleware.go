@@ -5,16 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"time"
-
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
-
-func TraceRequests(serviceName string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler { return otelhttp.NewHandler(next, serviceName) }
-}
 
 type statusRecorder struct {
 	http.ResponseWriter
@@ -74,22 +67,6 @@ func ResponseCommitted(w http.ResponseWriter) bool {
 		w = unwrapper.Unwrap()
 	}
 	return false
-}
-
-func LogAccess(l *slog.Logger) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			start := time.Now()
-			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-			// Deferred so a connection aborted mid-stream (http.ErrAbortHandler) still gets an access-log line.
-			defer func() {
-				l.InfoContext(r.Context(), "http request",
-					"method", r.Method, "path", r.URL.Path, "status", rec.status,
-					"duration_ms", time.Since(start).Milliseconds())
-			}()
-			next.ServeHTTP(rec, r)
-		})
-	}
 }
 
 func NewSlogErrorLogger(l *slog.Logger) ErrorLogger {

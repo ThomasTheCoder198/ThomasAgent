@@ -5,16 +5,13 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 )
 
-const (
-	requestIDPrefix  = "req_"
-	panicCauseFormat = "panic: %v"
-)
+const panicCauseFormat = "panic: %v"
 
 type Middleware = func(http.Handler) http.Handler
 
@@ -33,15 +30,26 @@ func NewRouter(errorLogger ErrorLogger, middlewares ...Middleware) chi.Router {
 	return r
 }
 
+// assignRequestID trusts a client id only when it matches the shared pattern, so a forged header cannot inject
+// arbitrary text into every log line of the request.
 func assignRequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := r.Header.Get(headerRequestID)
-		if id == "" {
-			id = requestIDPrefix + uuid.NewString()
-		}
-		w.Header().Set(headerRequestID, id)
-		next.ServeHTTP(w, r.WithContext(logging.ContextWithRequestID(r.Context(), id)))
+		id, origin := acceptRequestID(r.Header.Get(requestid.Header))
+		w.Header().Set(requestid.Header, id)
+		ctx := withRequestIDOrigin(logging.ContextWithRequestID(r.Context(), id), origin)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func acceptRequestID(sent string) (string, requestIDOrigin) {
+	switch {
+	case requestid.IsValid(sent):
+		return sent, requestIDFromClient
+	case sent == "":
+		return requestid.NewRequest(), requestIDGenerated
+	default:
+		return requestid.NewRequest(), requestIDReplaced
+	}
 }
 
 func injectErrorLogger(errorLogger ErrorLogger) func(http.Handler) http.Handler {

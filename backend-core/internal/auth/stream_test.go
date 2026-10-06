@@ -42,7 +42,7 @@ func newAuthenticatedStream(t *testing.T, handler http.HandlerFunc) (*http.Respo
 	clk.t = time.Now()
 	logs := &authLogBuffer{}
 	logger := slog.New(slog.NewJSONHandler(logs, nil))
-	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.TraceRequests("auth-stream-test"), httpx.LogAccess(logger))
+	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
 	NewHandler(svc, NewLimiter(startRedis(t), 10, time.Minute), false).Mount(router)
 	router.Group(func(pr chi.Router) { pr.Use(RequireSession(svc)); pr.Post("/stream", handler) })
 	server := httptest.NewServer(router)
@@ -98,7 +98,7 @@ func TestSessionAndCSRF_DisconnectCancelsHandler(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("disconnect did not cancel handler")
 	}
-	require.Eventually(t, func() bool { return strings.Count(logs.String(), `"path":"/stream"`) == 1 }, 5*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return strings.Count(logs.String(), `"route":"/stream"`) == 1 }, 5*time.Second, time.Millisecond)
 }
 
 func TestSessionAndCSRF_NonReadingClientBoundsShutdown(t *testing.T) {
@@ -106,7 +106,7 @@ func TestSessionAndCSRF_NonReadingClientBoundsShutdown(t *testing.T) {
 	_, session, err := svc.Login(tenant.WithID(t.Context(), tenant.PlatformID), ownerEmail, ownerPassword)
 	require.NoError(t, err)
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.TraceRequests("blocked-stream"), httpx.LogAccess(logger))
+	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
 	result := make(chan error, 1)
 	router.Group(func(pr chi.Router) {
 		pr.Use(RequireSession(svc))
@@ -174,5 +174,5 @@ func TestSessionAndCSRF_CommittedPanicAbortsWithoutJSON(t *testing.T) {
 	require.NotContains(t, string(rest), "INTERNAL_ERROR")
 	require.NotContains(t, string(rest), "test stream panic")
 	require.Eventually(t, func() bool { return strings.Count(logs.String(), `"msg":"request failed"`) == 1 }, 5*time.Second, time.Millisecond)
-	require.Eventually(t, func() bool { return strings.Count(logs.String(), `"path":"/stream"`) == 1 }, 5*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return strings.Count(logs.String(), `"route":"/stream"`) == 1 }, 5*time.Second, time.Millisecond)
 }

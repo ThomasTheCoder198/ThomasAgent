@@ -35,7 +35,7 @@ func newRouter(t *testing.T, logs *bytes.Buffer) (chi.Router, *Service) {
 	s := newTestService(t, &fakeCatalog{})
 	log, err := logging.NewLogger(logs, "debug", "test", "test", nil)
 	require.NoError(t, err)
-	r := httpx.NewRouter(httpx.NewSlogErrorLogger(log), registryTestTracing(t), httpx.TraceRequests("registry-test"), httpx.LogAccess(log))
+	r := httpx.NewRouter(httpx.NewSlogErrorLogger(log), registryTestTracing(t), httpx.LogAccess(log))
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			next.ServeHTTP(w, r.WithContext(platformContext(r.Context())))
@@ -154,7 +154,7 @@ func TestRegistryHTTP_RealLoginSessionAndCSRF(t *testing.T) {
 	auth.NewHandler(authSvc, auth.NewLimiter(registryRedis(t), 10, time.Minute), false).Mount(router)
 	logger, err := logging.NewLogger(&logs, "debug", "registry-test", "test", nil)
 	require.NoError(t, err)
-	protected := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), registryTestTracing(t), httpx.TraceRequests("registry-test"), httpx.LogAccess(logger))
+	protected := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), registryTestTracing(t), httpx.LogAccess(logger))
 	protected.Use(auth.RequireSession(authSvc))
 	NewHandler(svc, testMaxBodyBytes).Mount(protected)
 	unauth := send(protected, http.MethodGet, "/api/v1/providers", "", nil)

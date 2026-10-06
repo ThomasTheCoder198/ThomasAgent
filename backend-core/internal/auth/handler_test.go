@@ -42,7 +42,7 @@ func newServer(t *testing.T, maxAttempts int) (http.Handler, *clock) {
 	t.Helper()
 	svc, c := newService(t)
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	r := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.TraceRequests("auth-test"), httpx.LogAccess(logger))
+	r := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
 	NewHandler(svc, NewLimiter(startRedis(t), maxAttempts, time.Minute), false).Mount(r)
 	r.Group(func(pr chi.Router) {
 		pr.Use(RequireSession(svc))

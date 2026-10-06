@@ -5,14 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"go.opentelemetry.io/otel/trace"
-
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 )
 
 const (
-	headerRequestID      = "X-Request-Id"
 	headerContentType    = "Content-Type"
 	mediaTypeJSON        = "application/json"
 	contentTypeJSON      = mediaTypeJSON + "; charset=utf-8"
@@ -24,10 +21,10 @@ type ResponseMeta struct {
 }
 
 type ErrorDetail struct {
-	Code    string         `json:"code"`
-	Message string         `json:"message"`
-	Details map[string]any `json:"details,omitempty"`
-	TraceID string         `json:"traceId,omitempty"`
+	Code      string         `json:"code"`
+	Message   string         `json:"message"`
+	Details   map[string]any `json:"details,omitempty"`
+	RequestID string         `json:"requestId,omitempty"`
 }
 
 type successResponse struct {
@@ -60,9 +57,9 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	status := appErr.HTTPStatus()
 	body := ErrorDetail{
-		Code:    string(appErr.Code),
-		Message: appErr.LocalizedMessage(errors.LangFromHeader(r.Header.Get(headerAcceptLanguage))),
-		TraceID: traceIDFromContext(r.Context()),
+		Code:      string(appErr.Code),
+		Message:   appErr.LocalizedMessage(errors.LangFromHeader(r.Header.Get(headerAcceptLanguage))),
+		RequestID: logging.RequestIDFromContext(r.Context()),
 	}
 	if status < http.StatusInternalServerError {
 		body.Details = appErr.Details
@@ -85,12 +82,4 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set(headerContentType, contentTypeJSON)
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
-}
-
-func traceIDFromContext(ctx context.Context) string {
-	sc := trace.SpanContextFromContext(ctx)
-	if !sc.HasTraceID() {
-		return ""
-	}
-	return sc.TraceID().String()
 }

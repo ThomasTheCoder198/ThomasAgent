@@ -58,7 +58,7 @@ func TestLogin_LimiterAndArgonSpansFollowRequest(t *testing.T) {
 	client := startRedis(t)
 	lim := NewLimiter(client, 2, time.Minute)
 	logger := slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))
-	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.TraceRequests("core.auth"))
+	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger))
 	NewHandlerWithProxyHeader(svc, lim, false, "", logger).Mount(router)
 	require.Equal(t, 401, attemptFrom(router, ownerEmail, "192.0.2.1:9999", "").Code)
 	ctx, parent := provider.Tracer("test").Start(t.Context(), "test-parent")

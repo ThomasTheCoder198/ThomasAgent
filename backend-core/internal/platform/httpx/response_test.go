@@ -9,10 +9,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 )
+
+const testRequestID = "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21"
 
 type responseBody struct {
 	Data  json.RawMessage `json:"data"`
@@ -57,7 +60,7 @@ func TestWriteSuccess_ResponseIncludesRequestID(t *testing.T) {
 	response := decodeResponse(t, rec)
 	require.JSONEq(t, `{"hello":"world"}`, string(response.Data))
 	require.NotEmpty(t, response.Meta.RequestID)
-	require.Equal(t, response.Meta.RequestID, rec.Header().Get(headerRequestID))
+	require.Equal(t, response.Meta.RequestID, rec.Header().Get(requestid.Header))
 }
 
 func TestWriteError_UsesCatalogAndLanguage(t *testing.T) {
@@ -106,10 +109,8 @@ func TestRecoverPanics_ReturnsInternalResponse(t *testing.T) {
 	require.Len(t, logged, 1)
 }
 
-func TestWriteError_ServerErrorSanitizesOverridesAndPreservesTraceID(t *testing.T) {
-	traceID, err := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
-	require.NoError(t, err)
-	ctx := trace.ContextWithSpanContext(context.Background(), trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID}))
+func TestWriteError_ServerErrorSanitizesOverridesAndCarriesRequestID(t *testing.T) {
+	ctx := logging.ContextWithRequestID(context.Background(), testRequestID)
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
 	req.Header.Set("Accept-Language", "en")
 	rec := httptest.NewRecorder()
@@ -119,21 +120,22 @@ func TestWriteError_ServerErrorSanitizesOverridesAndPreservesTraceID(t *testing.
 	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	require.Equal(t, "INTERNAL_ERROR", response.Error.Code)
 	require.Equal(t, "Something went wrong. Please try again.", response.Error.Message)
-	require.Equal(t, traceID.String(), response.Error.TraceID)
+	require.Equal(t, testRequestID, response.Error.RequestID)
 	require.Nil(t, response.Error.Details)
 	require.NotContains(t, rec.Body.String(), "secret")
+	require.NotContains(t, rec.Body.String(), "traceId")
 }
 
-func TestRecoverPanics_PreservesActiveTraceIDWithNilLogger(t *testing.T) {
-	traceID, err := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
-	require.NoError(t, err)
-	ctx := trace.ContextWithSpanContext(context.Background(), trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID}))
+func TestRecoverPanics_ReturnsClientRequestIDWithNilLogger(t *testing.T) {
 	r := NewRouter(nil)
 	r.Get("/panic", func(http.ResponseWriter, *http.Request) { panic("secret panic") })
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/panic", nil)
+	req.Header.Set(requestid.Header, testRequestID)
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/panic", nil))
+	r.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
-	require.Equal(t, traceID.String(), decodeResponse(t, rec).Error.TraceID)
+	require.Equal(t, testRequestID, decodeResponse(t, rec).Error.RequestID)
+	require.Equal(t, testRequestID, rec.Header().Get(requestid.Header))
 	require.NotContains(t, rec.Body.String(), "secret panic")
 }
 

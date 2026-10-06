@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
@@ -68,7 +67,7 @@ func TestStatusRecorder_KeepsFirstFinalResponse(t *testing.T) {
 }
 
 func TestRouter_LogsShareRequestID(t *testing.T) {
-	for _, requestID := range []string{"custom-request", ""} {
+	for _, requestID := range []string{"req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21", ""} {
 		t.Run(requestID, func(t *testing.T) {
 			var output bytes.Buffer
 			logger, err := logging.NewLogger(&output, "info", "core-test", "test", nil)
@@ -78,14 +77,7 @@ func TestRouter_LogsShareRequestID(t *testing.T) {
 				logger.InfoContext(req.Context(), "handler event")
 				WriteError(w, req, errors.ErrInternalError)
 			})
-			traceID, err := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
-			require.NoError(t, err)
-			spanID, err := trace.SpanIDFromHex("00f067aa0ba902b7")
-			require.NoError(t, err)
-			ctx := trace.ContextWithSpanContext(context.Background(), trace.NewSpanContext(trace.SpanContextConfig{
-				TraceID: traceID, SpanID: spanID, TraceFlags: trace.FlagsSampled,
-			}))
-			req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/log", nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/log", nil)
 			req.Header.Set("X-Request-Id", requestID)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, req)
@@ -103,7 +95,7 @@ func TestRouter_LogsShareRequestID(t *testing.T) {
 				require.Equal(t, actualID, entry["request_id"])
 				require.Equal(t, 1, bytes.Count(line, []byte(`"request_id":`)))
 				require.Equal(t, "test", entry["env"])
-				require.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", entry["trace_id"])
+				require.NotContains(t, entry, "trace_id")
 			}
 		})
 	}

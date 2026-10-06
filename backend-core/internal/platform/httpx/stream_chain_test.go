@@ -62,7 +62,7 @@ func newChainServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *
 	t.Helper()
 	logs := &lockedBuffer{}
 	logger := slog.New(slog.NewJSONHandler(logs, nil))
-	r := NewRouter(NewSlogErrorLogger(logger), TraceRequests("chain-test"), LogAccess(logger),
+	r := NewRouter(NewSlogErrorLogger(logger), LogAccess(logger),
 		requireHeader(chainSessionHeader), requireHeader(chainCSRFHeader))
 	r.Post("/stream", handler)
 	server := httptest.NewServer(r)

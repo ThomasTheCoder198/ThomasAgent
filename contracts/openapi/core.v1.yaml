@@ -523,7 +523,11 @@ components:
               }
             message: { type: string }
             details: { type: object }
-            traceId: { type: string }
+            requestId:
+              {
+                type: string,
+                description: "Same value as the X-Request-Id response header (pattern in contracts/request-id.json)",
+              }
     User:
       type: object
       properties:

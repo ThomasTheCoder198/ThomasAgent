@@ -81,7 +81,7 @@ func TestNewLogger_OTLPContract(t *testing.T) {
 		httpx.WriteSuccess(w, req, http.StatusOK, nil)
 	})
 	req := httptest.NewRequestWithContext(contractContext(t), http.MethodGet, "/log", nil)
-	req.Header.Set("X-Request-Id", "otlp-request")
+	req.Header.Set("X-Request-Id", "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21")
 	router.ServeHTTP(httptest.NewRecorder(), req)
 	require.Len(t, exporter.records, 1)
 	record := exporter.records[0]
@@ -92,7 +92,7 @@ func TestNewLogger_OTLPContract(t *testing.T) {
 	})
 	require.Equal(t, "test", attributes["env"])
 	require.Equal(t, "core-test", attributes["service"])
-	require.Equal(t, "otlp-request", attributes["request_id"])
+	require.Equal(t, "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21", attributes["request_id"])
 	require.Equal(t, logging.RedactedPlaceholder, attributes["api_key"])
 	require.Equal(t, logging.RedactedPlaceholder, attributes["Authorization"])
 	require.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", record.TraceID().String())

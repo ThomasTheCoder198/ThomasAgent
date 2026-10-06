@@ -8,12 +8,11 @@ recovery, acknowledgement, and dead-letter delivery.
 - `EnqueueOutbox`: call inside the transaction that writes the business change.
 - `OutboxRelay.Run` / `PublishBatch`: `core outbox-relay` publishes committed outbox rows.
 - `Consumer.EnsureGroup`, `Run`, `PollOnce`: worker entry points.
-- `Handler`: application processing with the restored W3C trace context.
-- `spans.go`: named tracer and fixed span constants, including `core.jobs.outbox_relay`.
+- `Handler`: application processing; its context carries the originating `request_id` and tenant.
 
 ## Dependencies
 - Logger construction returns an error for unknown levels; callers must handle it before injecting a logger.
-- Uses: pgx/Postgres, go-redis/Redis Streams, `internal/errors`, OpenTelemetry, slog.
+- Uses: pgx/Postgres, go-redis/Redis Streams, `internal/errors`, logging request-id context, slog.
 - Used by: core outbox-relay and future domain workers.
 - Configure batch/poll limits from `config.OutboxRelayConfig`; consumer limits from
   `config.ConsumerConfig`. Callers provide clients and a structured logger.
@@ -42,7 +41,7 @@ entry without scope receives empty tenant context so business repositories fail
 closed. Client/model payload fields never choose the tenant.
 Only successful handlers are acknowledged; failures remain pending until reclaim.
 XAUTOCLAIM and XPENDING determine delivery count; final failure goes to DLQ.
-EnqueueOutbox/relay/poll/job boundaries have spans; handler logs use restored trace IDs.
+EnqueueOutbox stores the context request id (or a new `job_` id) in `outbox.request_id`; the relay copies it to the `request_id` stream field; the consumer restores it (a missing or malformed value becomes a new `job_` id). Job outcome logs (`job handled`, `job failed, will retry`, `job moved to DLQ`) carry `duration_ms` and never the payload.
 The shared [log field contract](../platform/logging/README.md#log-field-contract) applies to worker and handler logs.
 Logs contain catalog error codes and job metadata, never payloads or raw errors.
 Handler errors should be safe to persist because the DLQ retains the last error.
@@ -50,13 +49,13 @@ The default is four total deliveries: the initial attempt plus up to three retri
 The foundation consumer retries handler failures up to its configured limit;
 domain handlers must apply retryable-error/backoff policy for outbound operations.
 
-DLQ stream: `<source>.dlq`. Fields: `payload`, `traceparent`, `error`,
+DLQ stream: `<source>.dlq`. Fields: `payload`, `request_id`, `error`,
 `deliveries`, `original_id`, `outbox_id`, `tenant_id`. The original outbox ID is preserved
 through DLQ delivery so replay retains the same deduplication key.
 To replay, inspect the DLQ entry, then XADD to the source stream with its payload,
-traceparent, preserved outbox_id, and tenant_id. For example:
+request_id, preserved outbox_id, and tenant_id. For example:
 ```bash
-redis-cli XADD thomas.ingest.requested '*' payload '<json>' traceparent '<w3c>' outbox_id '<original-id>' tenant_id '<trusted-tenant-id>'
+redis-cli XADD thomas.ingest.requested '*' payload '<json>' request_id '<req_or_job_id>' outbox_id '<original-id>' tenant_id '<trusted-tenant-id>'
 ```
 Keep the deduplication policy explicit when replaying an already completed job.
 The replay UI comes in M4. Replay starts a fresh pending delivery count.

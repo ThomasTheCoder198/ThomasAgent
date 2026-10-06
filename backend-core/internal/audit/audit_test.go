@@ -7,7 +7,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
 )
@@ -21,15 +21,14 @@ func TestRecordStoresEvent(t *testing.T) {
 	require.Equal(t, "provider.create", action)
 }
 
-func TestRecordStoresTraceAndPlatformScope(t *testing.T) {
+func TestRecordStoresRequestIDAndPlatformScope(t *testing.T) {
 	pool := pgtest.Start(t)
-	traceID, err := trace.TraceIDFromHex("0123456789abcdef0123456789abcdef")
-	require.NoError(t, err)
-	ctx := trace.ContextWithSpanContext(tenant.WithID(context.Background(), tenant.PlatformID), trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID}))
+	const origin = "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21"
+	ctx := logging.ContextWithRequestID(tenant.WithID(context.Background(), tenant.PlatformID), origin)
 	require.NoError(t, Record(ctx, pool, Event{Actor: "owner", Action: "auth.login", TargetType: "user", TargetID: "u1", Metadata: map[string]any{"kind": "login"}}))
-	var storedTrace, tenant, kind string
-	require.NoError(t, pool.QueryRow(ctx, "SELECT trace_id, tenant_id, metadata->>'kind' FROM audit_events").Scan(&storedTrace, &tenant, &kind))
-	require.Equal(t, traceID.String(), storedTrace)
+	var storedRequestID, tenant, kind string
+	require.NoError(t, pool.QueryRow(ctx, "SELECT request_id, tenant_id, metadata->>'kind' FROM audit_events").Scan(&storedRequestID, &tenant, &kind))
+	require.Equal(t, origin, storedRequestID)
 	require.Equal(t, "default", tenant)
 	require.Equal(t, "login", kind)
 }

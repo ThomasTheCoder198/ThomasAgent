@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Persists metadata-only audit events and copies the trace id from context. Audit writes require the trusted tenant from context. Missing scope returns the catalog `INTERNAL_ERROR`; an event tenant never overrides context. Nil metadata is stored as `{}`.
+Persists metadata-only audit events and copies the request id from context into `audit_events.request_id`. Audit writes require the trusted tenant from context. Missing scope returns the catalog `INTERNAL_ERROR`; an event tenant never overrides context. Nil metadata is stored as `{}`.
 Explicit platform boundaries set the [Platform tenant](../../../docs/glossary.md) (`default`); business data always uses trusted context, never client or model parameters.
 
 ## Entry points
@@ -11,7 +11,7 @@ Explicit platform boundaries set the [Platform tenant](../../../docs/glossary.md
 
 ## Dependencies
 
-- Uses: `postgres.DBTX`, JSON encoding, and OpenTelemetry trace context.
+- Uses: `postgres.DBTX`, JSON encoding, and the logging request-id context.
 - Used by: core domain services and the forthcoming HTTP/startup wiring.
 
 ## Run & test

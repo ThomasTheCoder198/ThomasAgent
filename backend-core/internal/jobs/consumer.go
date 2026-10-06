@@ -9,12 +9,10 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
@@ -23,6 +21,7 @@ const (
 	streamStartID   = "0"
 	newMessagesID   = ">"
 	autoClaimStart  = "0-0"
+	fieldDurationMS = "duration_ms"
 )
 
 type Message struct {
@@ -31,7 +30,7 @@ type Message struct {
 	StreamEntryID string
 	Stream        string
 	Payload       []byte
-	TraceParent   string
+	RequestID     string
 	Deliveries    int64
 }
 
@@ -50,8 +49,6 @@ type Consumer struct {
 }
 
 func (c *Consumer) EnsureGroup(ctx context.Context) error {
-	ctx, span := otel.Tracer(jobsTracerName).Start(ctx, ensureGroupSpan, trace.WithSpanKind(trace.SpanKindClient))
-	defer span.End()
 	err := c.Redis.XGroupCreateMkStream(ctx, c.Stream, c.GroupName, streamStartID).Err()
 	if err != nil && !strings.HasPrefix(err.Error(), busyGroupPrefix) {
 		return errors.ToAppError(fmt.Errorf("create group %s/%s: %w", c.Stream, c.GroupName, err))
@@ -60,8 +57,6 @@ func (c *Consumer) EnsureGroup(ctx context.Context) error {
 }
 
 func (c *Consumer) Run(ctx context.Context, handler Handler) error {
-	ctx, span := otel.Tracer(jobsTracerName).Start(ctx, consumeSpan)
-	defer span.End()
 	for ctx.Err() == nil {
 		if err := c.PollOnce(ctx, handler); err != nil && !stderrors.Is(err, context.Canceled) {
 			c.Log.ErrorContext(ctx, "stream poll failed", "stream", c.Stream, "error_code", errors.CodeOf(err))
@@ -71,8 +66,6 @@ func (c *Consumer) Run(ctx context.Context, handler Handler) error {
 }
 
 func (c *Consumer) PollOnce(ctx context.Context, handler Handler) error {
-	ctx, span := otel.Tracer(jobsTracerName).Start(ctx, pollSpan, trace.WithSpanKind(trace.SpanKindClient))
-	defer span.End()
 	reclaimed, _, err := c.Redis.XAutoClaim(ctx, &redis.XAutoClaimArgs{
 		Stream: c.Stream, Group: c.GroupName, Consumer: c.ConsumerName, MinIdle: c.VisibilityTimeout, Start: autoClaimStart, Count: c.BatchSize,
 	}).Result()
@@ -102,33 +95,38 @@ func (c *Consumer) handleEntries(ctx context.Context, msgs []redis.XMessage, han
 	}
 }
 
+// handle restores the originating request id and tenant, so every log line of the job can be found from the request.
 func (c *Consumer) handle(ctx context.Context, raw redis.XMessage, handler Handler) {
-	parent, _ := raw.Values[StreamFieldTraceParent].(string)
-	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier{StreamFieldTraceParent: parent})
 	tenantID, _ := raw.Values[StreamFieldTenantID].(string)
-	ctx = tenant.WithID(ctx, tenantID)
-	ctx, span := otel.Tracer(jobsTracerName).Start(ctx, handleSpan, trace.WithSpanKind(trace.SpanKindConsumer))
-	defer span.End()
+	requestID := messageRequestID(raw)
+	ctx = logging.ContextWithRequestID(tenant.WithID(ctx, tenantID), requestID)
 	deliveries, err := c.deliveries(ctx, raw.ID)
 	if err != nil {
-		span.SetStatus(codes.Error, "delivery count failed")
 		c.Log.ErrorContext(ctx, "read delivery count failed", "id", raw.ID, "error_code", errors.CodeOf(err))
 		return
 	}
-	msg := toMessage(c.Stream, raw, deliveries)
-	c.Log.DebugContext(ctx, "job handling", "stream", c.Stream, "id", raw.ID, "deliveries", deliveries)
+	msg := toMessage(c.Stream, raw, requestID, deliveries)
+	start := time.Now()
 	herr := handler(ctx, msg)
+	elapsed := time.Since(start).Milliseconds()
 	if herr == nil {
 		c.ack(ctx, raw.ID)
+		c.Log.InfoContext(ctx, "job handled", "stream", c.Stream, "id", raw.ID, "outbox_id", msg.OutboxID, "deliveries", deliveries, fieldDurationMS, elapsed)
 		return
 	}
-	span.SetStatus(codes.Error, "job failed")
 	if deliveries >= int64(c.MaxDeliveries) {
-		c.deadLetter(ctx, msg, herr)
+		c.deadLetter(ctx, msg, herr, elapsed)
 		return
 	}
-	c.Log.WarnContext(ctx, "job failed, will retry", "stream", c.Stream, "id", raw.ID, "deliveries", deliveries, "error_code", errors.CodeOf(herr))
+	c.Log.WarnContext(ctx, "job failed, will retry", "stream", c.Stream, "id", raw.ID, "outbox_id", msg.OutboxID, "deliveries", deliveries, "error_code", errors.CodeOf(herr), fieldDurationMS, elapsed)
+}
 
+// messageRequestID trusts only well-formed ids; entries from an older relay or forged entries get a fresh job id.
+func messageRequestID(raw redis.XMessage) string {
+	if id, _ := raw.Values[StreamFieldRequestID].(string); requestid.IsValid(id) {
+		return id
+	}
+	return requestid.NewJob()
 }
 
 func (c *Consumer) deliveries(ctx context.Context, id string) (int64, error) {
@@ -148,9 +146,9 @@ func (c *Consumer) ack(ctx context.Context, id string) {
 	}
 }
 
-func (c *Consumer) deadLetter(ctx context.Context, m Message, cause error) {
+func (c *Consumer) deadLetter(ctx context.Context, m Message, cause error, elapsed int64) {
 	values := map[string]any{
-		StreamFieldPayload: string(m.Payload), StreamFieldTraceParent: m.TraceParent, StreamFieldError: cause.Error(),
+		StreamFieldPayload: string(m.Payload), StreamFieldRequestID: m.RequestID, StreamFieldError: cause.Error(),
 		StreamFieldDeliveries: m.Deliveries, StreamFieldOriginalID: m.StreamEntryID, StreamFieldOutboxID: m.OutboxID,
 		StreamFieldTenantID: m.TenantID,
 	}
@@ -159,13 +157,12 @@ func (c *Consumer) deadLetter(ctx context.Context, m Message, cause error) {
 		return
 	}
 	c.ack(ctx, m.StreamEntryID)
-	c.Log.ErrorContext(ctx, "job moved to DLQ", "stream", c.Stream, "id", m.StreamEntryID, "deliveries", m.Deliveries, "error_code", errors.CodeOf(cause))
+	c.Log.ErrorContext(ctx, "job moved to DLQ", "stream", c.Stream, "id", m.StreamEntryID, "outbox_id", m.OutboxID, "deliveries", m.Deliveries, "error_code", errors.CodeOf(cause), fieldDurationMS, elapsed)
 }
 
-func toMessage(stream string, raw redis.XMessage, deliveries int64) Message {
+func toMessage(stream string, raw redis.XMessage, requestID string, deliveries int64) Message {
 	payload, _ := raw.Values[StreamFieldPayload].(string)
-	traceParent, _ := raw.Values[StreamFieldTraceParent].(string)
 	outboxID, _ := raw.Values[StreamFieldOutboxID].(string)
 	tenantID, _ := raw.Values[StreamFieldTenantID].(string)
-	return Message{TenantID: tenantID, OutboxID: outboxID, StreamEntryID: raw.ID, Stream: stream, Payload: []byte(payload), TraceParent: traceParent, Deliveries: deliveries}
+	return Message{TenantID: tenantID, OutboxID: outboxID, StreamEntryID: raw.ID, Stream: stream, Payload: []byte(payload), RequestID: requestID, Deliveries: deliveries}
 }

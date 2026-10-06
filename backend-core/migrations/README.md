@@ -12,6 +12,7 @@ Sessions reference users with the composite `(tenant_id, user_id)` foreign key, 
 the old defaults without modifying row ownership.
 
 ## Entry points
+- `20261006000001_request_id_columns.sql` adds `outbox.request_id` and `audit_events.request_id` (expand step; M0.5.2 drops `trace_parent` and `trace_id`).
 - `FS` embeds all SQL files for the Postgres migration provider.
 - `20261003000001_platform.sql` creates `outbox` and `audit_events`.
 - `20261003000002_identity_registry.sql` creates the six identity/registry tables and their constraints.
@@ -49,7 +50,7 @@ Keep development seeds separate from schema migrations.
 ## Common failures
 - SQL failure: the migration returns an error; inspect the unapplied SQL.
 - Missing database configuration: set the required core environment variables.
-- Down removes one migration at a time. From the latest schema, AAD expansion, tenant defaults and hardening constraints roll back first; the fourth and fifth Down remove identity/registry and platform tables and their data. Use only on disposable dev data.
+- Down removes one migration at a time. From the latest schema, request id columns, AAD expansion, tenant defaults and hardening constraints roll back first; the fifth and sixth Down remove identity/registry and platform tables and their data. Use only on disposable dev data.
 
 `20261004000001_identity_hardening.sql` upgrades already deployed identity tables with the composite session/user tenant foreign key and a vault AAD format marker. Original migrations remain unchanged. Down restores the old FK while retaining `aad_version` to prevent ciphertext misclassification; Up is safe after Down. After a secret is resealed, old application binaries require an encrypted-data backup to roll back.
 

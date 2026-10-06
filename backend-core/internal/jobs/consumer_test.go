@@ -4,17 +4,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
-	"go.opentelemetry.io/otel/trace"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 )
 
 func TestConsumer_AcksOnSuccess(t *testing.T) {
@@ -35,8 +33,13 @@ func TestConsumer_RedeliversThenSucceeds(t *testing.T) {
 	ctx := context.Background()
 	redisClient := startRedis(t)
 	c := newConsumer(redisClient, 3)
+	var output bytes.Buffer
+	log, err := logging.NewLogger(&output, "debug", "test", "test", nil)
+	require.NoError(t, err)
+	c.Log = log
+	const outboxID = "retry-outbox-id"
 	require.NoError(t, c.EnsureGroup(ctx))
-	require.NoError(t, redisClient.XAdd(ctx, &redis.XAddArgs{Stream: testStream, Values: map[string]any{StreamFieldPayload: "x"}}).Err())
+	require.NoError(t, redisClient.XAdd(ctx, &redis.XAddArgs{Stream: testStream, Values: map[string]any{StreamFieldPayload: "x", StreamFieldOutboxID: outboxID}}).Err())
 	calls := 0
 	h := func(context.Context, Message) error {
 		calls++
@@ -48,6 +51,9 @@ func TestConsumer_RedeliversThenSucceeds(t *testing.T) {
 	require.NoError(t, c.PollOnce(ctx, h))
 	time.Sleep(5 * time.Millisecond)
 	require.NoError(t, c.PollOnce(ctx, h))
+	require.Contains(t, output.String(), `"msg":"job failed, will retry"`)
+	require.Contains(t, output.String(), `"outbox_id":"`+outboxID+`"`)
+	require.Contains(t, output.String(), `"stream":"`+testStream+`"`)
 	require.Equal(t, 2, calls)
 	require.Zero(t, redisClient.XLen(ctx, testStream+DeadLetterSuffix).Val())
 }
@@ -92,42 +98,56 @@ func TestConsumer_PreservesOutboxIDThroughDLQ(t *testing.T) {
 	require.Equal(t, outboxID, entries[0].Values[StreamFieldOutboxID])
 }
 
-func TestConsumer_RestoresTraceAndLogsWithoutPayload(t *testing.T) {
-	recorder := tracetest.NewSpanRecorder()
-	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
-	previousProvider, previousPropagator := otel.GetTracerProvider(), otel.GetTextMapPropagator()
-	otel.SetTracerProvider(provider)
-	otel.SetTextMapPropagator(propagation.TraceContext{})
-	t.Cleanup(func() {
-		otel.SetTracerProvider(previousProvider)
-		otel.SetTextMapPropagator(previousPropagator)
-		require.NoError(t, provider.Shutdown(context.Background()))
-	})
-	ctx, parent := provider.Tracer("test").Start(context.Background(), "test.enqueue")
-	carrier := propagation.MapCarrier{}
-	otel.GetTextMapPropagator().Inject(ctx, carrier)
-	parent.End()
+func TestConsumer_RestoresRequestIDAndLogsWithoutPayload(t *testing.T) {
+	const outboxID = "correlated-dlq-outbox-id"
+	const origin = "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21"
+	ctx := context.Background()
 	redisClient := startRedis(t)
-	c := newConsumer(redisClient, 3)
+	c := newConsumer(redisClient, 1)
 	var output bytes.Buffer
 	log, err := logging.NewLogger(&output, "debug", "test", "test", nil)
 	require.NoError(t, err)
 	c.Log = log
-	require.NoError(t, c.EnsureGroup(context.Background()))
-	require.NoError(t, redisClient.XAdd(context.Background(), &redis.XAddArgs{Stream: testStream, Values: map[string]any{StreamFieldPayload: "private-document", StreamFieldTraceParent: carrier.Get(StreamFieldTraceParent)}}).Err())
-	require.NoError(t, c.PollOnce(context.Background(), func(ctx context.Context, _ Message) error {
-		require.Equal(t, parent.SpanContext().TraceID(), trace.SpanContextFromContext(ctx).TraceID())
+	require.NoError(t, c.EnsureGroup(ctx))
+	require.NoError(t, redisClient.XAdd(ctx, &redis.XAddArgs{Stream: testStream, Values: map[string]any{
+		StreamFieldPayload: "private-document", StreamFieldRequestID: origin, StreamFieldOutboxID: outboxID,
+	}}).Err())
+	require.NoError(t, c.PollOnce(ctx, func(ctx context.Context, m Message) error {
+		require.Equal(t, origin, logging.RequestIDFromContext(ctx))
+		require.Equal(t, origin, m.RequestID)
 		return errors.New("private-document in handler failure")
 	}))
-	var handled sdktrace.ReadOnlySpan
-	for _, span := range recorder.Ended() {
-		if span.Name() == "core.jobs.handle" {
-			handled = span
-		}
-	}
-	require.NotNil(t, handled)
-	t.Logf("emitted_span=%s trace_id=%s parent_span_id=%s", handled.Name(), handled.SpanContext().TraceID(), handled.Parent().SpanID())
-	require.Equal(t, parent.SpanContext().SpanID(), handled.Parent().SpanID())
-	require.Contains(t, output.String(), handled.SpanContext().TraceID().String())
+	entries, err := redisClient.XRange(ctx, testStream+DeadLetterSuffix, "-", "+").Result()
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, origin, entries[0].Values[StreamFieldRequestID])
+	require.Contains(t, output.String(), `"request_id":"`+origin+`"`)
+	require.Contains(t, output.String(), `"duration_ms"`)
+	require.Contains(t, output.String(), `"outbox_id":"`+outboxID+`"`)
+	require.Contains(t, output.String(), `"stream":"`+testStream+`"`)
 	require.NotContains(t, output.String(), "private-document")
+}
+
+func TestConsumer_ReplacesMalformedRequestID(t *testing.T) {
+	ctx := context.Background()
+	redisClient := startRedis(t)
+	c := newConsumer(redisClient, 3)
+	require.NoError(t, c.EnsureGroup(ctx))
+	for _, values := range []map[string]any{
+		{StreamFieldPayload: "a", StreamFieldRequestID: "forged\nid"},
+		{StreamFieldPayload: "b"},
+	} {
+		require.NoError(t, redisClient.XAdd(ctx, &redis.XAddArgs{Stream: testStream, Values: values}).Err())
+	}
+	var seen []string
+	require.NoError(t, c.PollOnce(ctx, func(ctx context.Context, m Message) error {
+		seen = append(seen, logging.RequestIDFromContext(ctx))
+		require.Equal(t, logging.RequestIDFromContext(ctx), m.RequestID)
+		return nil
+	}))
+	require.Len(t, seen, 2)
+	for _, id := range seen {
+		require.True(t, requestid.IsValid(id), id)
+		require.True(t, strings.HasPrefix(id, requestid.JobPrefix), id)
+	}
 }

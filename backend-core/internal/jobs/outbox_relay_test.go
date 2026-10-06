@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
@@ -55,4 +57,20 @@ func TestOutboxRelayPreservesTenantForHandlerAndDeadLetter(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, dlq, 1)
 	require.Equal(t, "other", dlq[0].Values["tenant_id"])
+}
+
+func TestOutboxRelay_PublishesRequestID(t *testing.T) {
+	const origin = "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21"
+	ctx := logging.ContextWithRequestID(tenant.WithID(context.Background(), tenant.PlatformID), origin)
+	pool, redisClient := startPool(t), startRedis(t)
+	require.NoError(t, EnqueueOutbox(ctx, pool, testStream, map[string]string{"file_id": "f1"}))
+	relay := &OutboxRelay{Pool: pool, Redis: redisClient, BatchSize: 10, PollInterval: time.Millisecond, Log: quietLog}
+	n, err := relay.PublishBatch(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+	entries, err := redisClient.XRange(ctx, testStream, "-", "+").Result()
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, origin, entries[0].Values[StreamFieldRequestID])
+	require.NotContains(t, entries[0].Values, "traceparent")
 }

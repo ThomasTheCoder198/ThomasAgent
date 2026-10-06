@@ -36,7 +36,7 @@ Migration files use `YYYYMMDDHHMMSS_<desc>.sql` and goose Up/Down annotations.
 `Up` applies all pending migrations; `Down` rolls back one migration.
 `MigrationStatuses` returns every migration row instead of discarding status results.
 Never edit an applied migration. Use expand/contract for breaking changes.
-Vault version 3 adds a new constraint-expansion migration. Its Down retains the expanded check and encrypted rows; tests cover Up/Down/Up for both prior bound and version 3 data, plus all five migration status transitions.
+Vault version 3 adds a new constraint-expansion migration. Its Down retains the expanded check and encrypted rows; tests cover Up/Down/Up for both prior bound and version 3 data, plus all seven migration status transitions. The trace-column contract migration is rolled back independently, restoring empty trace fields while retaining request IDs.
 
 ## Common failures
 - Pool startup fails: verify `CORE_DATABASE_URL` and Postgres availability.

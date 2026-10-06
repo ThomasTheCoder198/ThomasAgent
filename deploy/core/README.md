@@ -1,13 +1,14 @@
-# compose
+# Core stack
 
 ## Purpose
-Composes infrastructure, apps, and observability with shared service names and startup gates.
+Composes the core server: core, migrate, outbox-relay, Postgres, Redis, Prometheus, Grafana and VictoriaLogs. Ragx runs separately in deploy/ragx.
 
 ## Entry points
-- compose.infra.yaml, compose.observability.yaml, compose.yaml, .env.example
+- compose.yaml, .env.example, prometheus/prometheus.yml, grafana/provisioning/
+- `victorialogs/Dockerfile` preserves the pinned upstream version while adding its static HTTP healthcheck probe.
 
 ## Dependencies
-- Uses services configured in ../compose.
+- Uses backend-core, Postgres, Redis, Prometheus, Grafana and VictoriaLogs.
 - Used by the deployment compose stack.
 
 ## Run & test
@@ -18,17 +19,14 @@ task smoke
 
 ## Conventions
 
-Core exports only logs: `CORE_LOGS_OTLP_ENDPOINT` is the full logs URL (legacy collector `/v1/logs`). Core sends no traces; M0.5.2 replaces this stack.
-Configuration is mounted read only; credentials come from compose/.env. Every typed core
+Core exports OTLP logs to VictoriaLogs and Prometheus metrics through its internal listener.
+
+Configuration is mounted read only; credentials come from core/.env. Every typed core
 setting is forwarded through `x-core-env` to `core`, `migrate` and `outbox-relay`.
 `.env.example` lists all runtime defaults; blank database and Redis URLs use compose
 service addresses. Copy the example, then fill intentionally blank secrets and bootstrap credentials.
 
-Prometheus, Grafana, and both Langfuse services have real HTTP healthchecks.
-Grafana waits for healthy Prometheus; Langfuse web waits for a healthy worker.
-Collector, Loki, and `outbox-relay` still need additional internal probe implementations;
-their prescribed images lack an HTTP client, and `outbox-relay` has no readiness endpoint.
-The migration and bootstrap jobs remain one-shot completed-successfully gates.
+Postgres, Redis, core, VictoriaLogs, Prometheus and Grafana have healthchecks. Core does not wait for VictoriaLogs; log export retries while the API remains available. Grafana waits for Prometheus and VictoriaLogs. Outbox-relay has no healthcheck yet and serves only internal metrics. Migration is a one-shot gate. Core uses CORE_LOGS_OTLP_ENDPOINT as a complete logs URL and serves /metrics on CORE_METRICS_ADDR inside the network. Prometheus and VictoriaLogs bind 127.0.0.1. Retention uses VL_RETENTION/PROMETHEUS_RETENTION; log rotation uses LOG_MAX_SIZE/LOG_MAX_FILE.
 
 ## Common failures
 - Startup errors: inspect compose logs and validate environment variables.
@@ -60,5 +58,8 @@ Generate `CORE_SERVICE_TOKEN` with `openssl rand -base64 32`; it must have at le
 characters. Never print local credentials while validating configuration. The config
 package's `TestCompose_ExampleConfigurationValid` fills intentionally blank required
 secrets with test values and validates the other example settings. `TestCompose_ForwardsEveryCoreSetting`
-runs `docker compose config` against the example and checks all typed settings reach
+runs `docker compose config` against deploy/core/.env.example and compose.yaml and checks all typed settings reach
 every core process, without printing the resolved credentials.
+
+
+REDIS_HOST_PORT defaults to 6379 and changes only the published host port. The local Windows environment uses 16379 because its reserved ranges include 6379.

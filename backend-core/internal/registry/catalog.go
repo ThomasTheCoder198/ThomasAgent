@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/metrics"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
@@ -57,6 +58,10 @@ type Catalog interface {
 	ListModels(ctx context.Context, providerID uuid.UUID, kind ProviderKind, baseURL, apiKey string) ([]RemoteModel, error)
 }
 
+type OutboundRecorder interface {
+	ObserveOutbound(target, outcome string, elapsed time.Duration)
+}
+
 type HTTPCatalog struct {
 	Client           *http.Client
 	Policy           retry.Policy
@@ -68,6 +73,7 @@ type HTTPCatalog struct {
 	MaxResponseBytes int64
 	log              *slog.Logger
 	initErr          error
+	Metrics          OutboundRecorder
 }
 
 type providerBreaker struct {
@@ -113,7 +119,7 @@ func (c *HTTPCatalog) ListModels(ctx context.Context, providerID uuid.UUID, kind
 	defer c.releaseBreaker(entry)
 	var body openRouterModels
 	err = retry.Do(ctx, c.Policy, func(ctx context.Context) error {
-		return entry.breaker.Execute(ctx, func(ctx context.Context) error { return c.fetch(ctx, baseURL, apiKey, &body) })
+		return entry.breaker.Execute(ctx, func(ctx context.Context) error { return c.fetch(ctx, kind, baseURL, apiKey, &body) })
 	})
 	if err != nil {
 		return nil, err
@@ -170,11 +176,19 @@ func (c *HTTPCatalog) discardIdleBreaker() bool {
 	return true
 }
 
-func (c *HTTPCatalog) fetch(ctx context.Context, baseURL, apiKey string, out *openRouterModels) (err error) {
+func (c *HTTPCatalog) fetch(ctx context.Context, kind ProviderKind, baseURL, apiKey string, out *openRouterModels) (err error) {
 	start := time.Now()
 	defer func() {
+		elapsed := time.Since(start)
+		if c.Metrics != nil {
+			outcome := metrics.OutcomeSuccess
+			if err != nil {
+				outcome = metrics.OutcomeError
+			}
+			c.Metrics.ObserveOutbound(string(kind), outcome, elapsed)
+		}
 		if c.log != nil {
-			c.log.InfoContext(ctx, catalogOperation, slog.Bool(catalogSuccess, err == nil), slog.Int64(catalogDurationMS, time.Since(start).Milliseconds()))
+			c.log.InfoContext(ctx, catalogOperation, slog.Bool(catalogSuccess, err == nil), slog.Int64(catalogDurationMS, elapsed.Milliseconds()))
 		}
 	}()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+modelsPath, nil)

@@ -22,13 +22,14 @@ type routerDeps struct {
 	registry           *registry.Service
 	serviceToken       string
 	health             map[string]httpx.DependencyPinger
+	metrics            httpx.HTTPMetrics
 
 	requestTimeout time.Duration // cfg.HTTP.RequestTimeout
 	maxBodyBytes   int64         // cfg.HTTP.MaxBodyBytes
 }
 
 func newRouter(d routerDeps) chi.Router {
-	r := httpx.NewRouter(httpx.NewSlogErrorLogger(d.log), httpx.LogAccess(d.log))
+	r := httpx.NewRouter(httpx.NewSlogErrorLogger(d.log), httpx.LogAccess(d.log), httpx.RecordMetrics(d.metrics))
 	httpx.MountHealth(r, d.health)
 	// Ordinary routes carry a request deadline. Stream routes (M2) are mounted on r directly, outside this group,
 	// because their lifetime is the run deadline, not an HTTP middleware.

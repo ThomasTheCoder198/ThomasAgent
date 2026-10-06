@@ -28,6 +28,8 @@ Database tests require Docker Desktop and create isolated PostgreSQL testcontain
 
 ## Conventions
 
+Each catalog attempt records `outbound_requests_total` and `outbound_request_duration_seconds` with `target` equal to the provider kind, through the optional `HTTPCatalog.Metrics` recorder.
+
 API keys are accepted only as write inputs: absent/null preserves a key unless the base URL changes (then the stored key is deleted), empty removes it, and another value replaces it. Provider updates lock the row so parallel updates cannot orphan secrets. Reads and mutations explicitly constrain tenant data from context. Models in use cannot be deleted, including through provider cascade deletion. Mutations and audit records share a transaction.
 
 Each catalog attempt emits one safe structured outcome log with `success` and `duration_ms`; the logger adds the request id. They never expose raw URLs, response bodies or keys in errors/logs. The approved outbound client enforces destination/DNS rules, rejects redirects and ignores proxy environment variables. Unknown/dynamic OpenRouter prices (negative or nonfinite sentinels) remain nullable instead of being stored as invalid costs. Complete JSON responses are bounded by CORE_PROVIDER_MAX_RESPONSE_BYTES, including chunked responses. Retry-After applies to retryable statuses; other 4xx and malformed/oversized JSON are rejected without retry.

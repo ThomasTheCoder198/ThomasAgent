@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: core
+    static_configs:
+      - targets: ["core:9464"]
+  - job_name: outbox-relay
+    static_configs:
+      - targets: ["outbox-relay:9464"]

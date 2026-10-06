@@ -191,3 +191,30 @@ func TestNewLogger_RedactsNestedContainersInBothSinks(t *testing.T) {
 	}
 	require.Equal(t, "plain-secret", details["headers"].(map[string]string)["Authorization"])
 }
+
+func TestNewLogger_RedactsCamelCaseSecretKeysInBothSinks(t *testing.T) {
+	var local, exported bytes.Buffer
+	logger := testLogger(t, &local, "info", "service", slog.NewJSONHandler(&exported, nil))
+	secrets := map[string]any{
+		"accessToken": "oauth-value", "refreshToken": "refresh-value", "clientSecret": "client-value",
+		"apiKey": "api-value", "APIKey": "acronym-value", "privateKey": "private-value",
+	}
+	logger.With("refreshToken", "bound-value").Info("event", "accessToken", "direct-value",
+		"details", secrets, "inputTokens", 392, "input_tokens", 392, "tokenCount", 412, "token_count", 412,
+		slog.Group("clientSecret", "nested", "group-value"))
+	logger.WithGroup("clientSecret").Info("grouped", "nested", "derived-value")
+	for _, output := range []*bytes.Buffer{&local, &exported} {
+		for _, secret := range []string{"oauth-value", "refresh-value", "client-value", "api-value", "acronym-value", "private-value", "bound-value", "direct-value", "group-value", "derived-value"} {
+			require.NotContains(t, output.String(), secret)
+		}
+		var first map[string]any
+		require.NoError(t, json.Unmarshal(bytes.Split(output.Bytes(), []byte("\n"))[0], &first))
+		for _, key := range []string{"inputTokens", "input_tokens", "tokenCount", "token_count"} {
+			require.IsType(t, float64(0), first[key], "usage counter %s remains numeric", key)
+		}
+		details := first["details"].(map[string]any)
+		for key := range secrets {
+			require.Equal(t, RedactedPlaceholder, details[key])
+		}
+	}
+}

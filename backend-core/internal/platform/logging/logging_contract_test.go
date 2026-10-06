@@ -91,3 +91,24 @@ func TestNewLogger_OTLPContract(t *testing.T) {
 	require.Equal(t, "handler event", record.Body().AsString())
 	require.False(t, record.Timestamp().IsZero())
 }
+
+func TestNewLogger_OTLPCamelCaseSecretsAndUsageCounters(t *testing.T) {
+	exporter := &recordingExporter{}
+	provider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(exporter)))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+	var output bytes.Buffer
+	logger, err := logging.NewLogger(&output, "info", "core-test", "test", otelslog.NewHandler("core-test", otelslog.WithLoggerProvider(provider)))
+	require.NoError(t, err)
+	logger.With("refreshToken", "bound-value").Info("event", "accessToken", "oauth-value", "clientSecret", "client-value", "APIKey", "api-value", "privateKey", "private-value", "inputTokens", 392, "tokenCount", 412)
+	require.Len(t, exporter.records, 1)
+	attributes := map[string]attribute.Value{}
+	exporter.records[0].WalkAttributes(func(value attribute.KeyValue) bool {
+		attributes[string(value.Key)] = value.Value
+		return true
+	})
+	for _, key := range []string{"refreshToken", "accessToken", "clientSecret", "APIKey", "privateKey"} {
+		require.Equal(t, logging.RedactedPlaceholder, attributes[key].AsString())
+	}
+	require.EqualValues(t, 392, attributes["inputTokens"].AsInt64())
+	require.EqualValues(t, 412, attributes["tokenCount"].AsInt64())
+}

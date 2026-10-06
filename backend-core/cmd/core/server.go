@@ -44,6 +44,7 @@ func (a *application) serveHTTP(ctx context.Context) error {
 		return err
 	}
 	go a.purgeExpiredSessions(ctx, a.authService)
+	go a.serveMetrics(ctx)
 	return a.listenAndServe(ctx, router)
 }
 
@@ -59,6 +60,9 @@ func (a *application) buildRouter(ctx context.Context, pool *pgxpool.Pool, redis
 	}
 	breaker := retry.NewBreaker("provider-catalog", a.cfg.ProviderBreaker)
 	catalog := registry.NewHTTPCatalogWithClient(retry.NewPolicy(a.cfg.Retry), client, a.cfg.ProviderMaxResponseBytes, breaker, a.log, a.cfg.ProviderMaxBreakers)
+	if a.metrics != nil {
+		catalog.Metrics = a.metrics
+	}
 	registryService := registry.NewService(pool, vault.NewStore(cipher), catalog, a.cfg.ProviderMaxRemoteModels)
 	var proxyNetworks []netip.Prefix
 	for _, cidr := range a.cfg.Auth.TrustedProxyCIDRs {
@@ -68,7 +72,7 @@ func (a *application) buildRouter(ctx context.Context, pool *pgxpool.Pool, redis
 		}
 		proxyNetworks = append(proxyNetworks, network)
 	}
-	return newRouter(routerDeps{
+	deps := routerDeps{
 		log:                a.log,
 		auth:               authService,
 		limiter:            auth.NewLoginLimiter(redisClient, a.cfg.Auth, []byte(a.cfg.ServiceToken)),
@@ -78,7 +82,11 @@ func (a *application) buildRouter(ctx context.Context, pool *pgxpool.Pool, redis
 		registry:           registryService, serviceToken: a.cfg.ServiceToken,
 		health:         a.readinessChecks(pool, redisClient),
 		requestTimeout: a.cfg.HTTP.RequestTimeout, maxBodyBytes: a.cfg.HTTP.MaxBodyBytes,
-	}), nil
+	}
+	if a.metrics != nil {
+		deps.metrics = a.metrics
+	}
+	return newRouter(deps), nil
 }
 
 func (a *application) purgeExpiredSessions(ctx context.Context, service *auth.Service) {

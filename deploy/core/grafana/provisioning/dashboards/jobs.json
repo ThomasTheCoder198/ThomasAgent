@@ -1,0 +1,34 @@
+{
+  "uid": "core-jobs",
+  "title": "Core jobs",
+  "schemaVersion": 41,
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1, "type": "timeseries", "title": "Outbox backlog",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "outbox_pending{job=\"outbox-relay\"}", "legendFormat": "pending rows" }]
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "Oldest unpublished row",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "outbox_relay_lag_seconds{job=\"outbox-relay\"}", "legendFormat": "lag" }]
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "Jobs per minute by stream and outcome",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum by (stream, outcome) (rate(jobs_processed_total[5m])) * 60", "legendFormat": "{{stream}} {{outcome}}" }]
+    },
+    {
+      "id": 4, "type": "stat", "title": "Moved to DLQ, last 24 h",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(increase(jobs_dlq_total[24h]))" }]
+    }
+  ]
+}

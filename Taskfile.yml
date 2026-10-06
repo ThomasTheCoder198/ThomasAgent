@@ -1,7 +1,8 @@
 version: "3"
 
 vars:
-  COMPOSE: docker compose --env-file deploy/compose/.env -f deploy/compose/compose.infra.yaml -f deploy/compose/compose.observability.yaml -f deploy/compose/compose.yaml
+  COMPOSE: docker compose --env-file deploy/core/.env -f deploy/core/compose.yaml
+  RAGX_COMPOSE: docker compose --env-file deploy/ragx/.env -f deploy/ragx/compose.yaml
 
 tasks:
   gen:
@@ -64,11 +65,17 @@ tasks:
     cmds: [bun run dev:mock]
 
   up:
-    desc: Start the full stack
+    desc: Start the core stack
     cmds: ["{{.COMPOSE}} up -d --build --wait"]
   down:
-    desc: Stop the full stack
+    desc: Stop the core stack
     cmds: ["{{.COMPOSE}} down"]
+  up:ragx:
+    desc: Start the ragx stack (separate server in production)
+    cmds: ["{{.RAGX_COMPOSE}} up -d --build --wait"]
+  down:ragx:
+    desc: Stop the ragx stack
+    cmds: ["{{.RAGX_COMPOSE}} down"]
   migrate:
     desc: Run database migrations
     cmds: ["{{.COMPOSE}} run --rm migrate"]
@@ -87,7 +94,7 @@ tasks:
           api_test_password="${CORE_AUTH_OWNER_PASSWORD:-}"
           if [ -z "$api_test_email" ] || [ -z "$api_test_password" ]; then
             set -a
-            source ../deploy/compose/.env
+            source ../deploy/core/.env
             set +a
           fi
           export CORE_AUTH_OWNER_EMAIL="${api_test_email:-$CORE_AUTH_OWNER_EMAIL}"

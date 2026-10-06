@@ -50,10 +50,12 @@ go test ./cmd/core -count=1
 ```
 
 Core reads process environment variables. Compose supplies them through
-`deploy/compose/.env` and service environment blocks. Export CORE_* variables
+`deploy/core/.env` and service environment blocks. Export CORE_* variables
 yourself when running the binary outside Docker.
 
 ## Conventions
+
+`serve` and `outbox-relay` start an internal `/metrics` listener on `CORE_METRICS_ADDR` (default `:9464`, explicitly empty disables). The public router does not expose it, and compose does not publish it to the host. A bind failure is logged while the process keeps running.
 See the [shared naming glossary](../../../docs/glossary.md) for terms used across services.
 
 Missing or unknown commands report CLI usage before configuration or dependencies

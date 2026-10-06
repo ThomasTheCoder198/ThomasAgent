@@ -12,6 +12,7 @@ import (
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/metrics"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
@@ -36,6 +37,14 @@ type Message struct {
 
 type Handler func(ctx context.Context, m Message) error
 
+type JobRecorder interface {
+	ObserveJob(stream, outcome string)
+}
+
+type JobStreamRegistrar interface {
+	RegisterJobStream(stream string)
+}
+
 type Consumer struct {
 	Redis             *redis.Client
 	Stream            string
@@ -46,12 +55,22 @@ type Consumer struct {
 	BlockTimeout      time.Duration
 	BatchSize         int64
 	Log               *slog.Logger
+	Metrics           JobRecorder
+}
+
+func (c *Consumer) observe(outcome string) {
+	if c.Metrics != nil {
+		c.Metrics.ObserveJob(c.Stream, outcome)
+	}
 }
 
 func (c *Consumer) EnsureGroup(ctx context.Context) error {
 	err := c.Redis.XGroupCreateMkStream(ctx, c.Stream, c.GroupName, streamStartID).Err()
 	if err != nil && !strings.HasPrefix(err.Error(), busyGroupPrefix) {
 		return errors.ToAppError(fmt.Errorf("create group %s/%s: %w", c.Stream, c.GroupName, err))
+	}
+	if registrar, ok := c.Metrics.(JobStreamRegistrar); ok {
+		registrar.RegisterJobStream(c.Stream)
 	}
 	return nil
 }
@@ -111,6 +130,7 @@ func (c *Consumer) handle(ctx context.Context, raw redis.XMessage, handler Handl
 	elapsed := time.Since(start).Milliseconds()
 	if herr == nil {
 		c.ack(ctx, raw.ID)
+		c.observe(metrics.OutcomeSuccess)
 		c.Log.InfoContext(ctx, "job handled", "stream", c.Stream, "id", raw.ID, "outbox_id", msg.OutboxID, "deliveries", deliveries, fieldDurationMS, elapsed)
 		return
 	}
@@ -118,6 +138,7 @@ func (c *Consumer) handle(ctx context.Context, raw redis.XMessage, handler Handl
 		c.deadLetter(ctx, msg, herr, elapsed)
 		return
 	}
+	c.observe(metrics.OutcomeRetry)
 	c.Log.WarnContext(ctx, "job failed, will retry", "stream", c.Stream, "id", raw.ID, "outbox_id", msg.OutboxID, "deliveries", deliveries, "error_code", errors.CodeOf(herr), fieldDurationMS, elapsed)
 }
 
@@ -158,6 +179,7 @@ func (c *Consumer) deadLetter(ctx context.Context, m Message, cause error, elaps
 	}
 	c.ack(ctx, m.StreamEntryID)
 	c.Log.ErrorContext(ctx, "job moved to DLQ", "stream", c.Stream, "id", m.StreamEntryID, "outbox_id", m.OutboxID, "deliveries", m.Deliveries, "error_code", errors.CodeOf(cause), fieldDurationMS, elapsed)
+	c.observe(metrics.OutcomeDeadLetter)
 }
 
 func toMessage(stream string, raw redis.XMessage, requestID string, deliveries int64) Message {

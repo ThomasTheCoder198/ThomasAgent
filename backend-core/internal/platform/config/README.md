@@ -6,7 +6,7 @@ Loads typed startup configuration from CORE_ environment variables and validates
 ## Entry points
 - `BreakerConfig` supplies typed provider circuit breaker settings.
 - `Load() (Config, error)` — called during core startup.
-- `Config`, `HTTPConfig`, `RetryConfig`, `ConsumerConfig`, `OutboxRelayConfig` — configuration consumed by platform services. `Config.OutboxRelay` retains the `CORE_RELAY_` environment prefix and its existing defaults.
+- `Config`, `HTTPConfig`, `MetricsConfig`, `RetryConfig`, `ConsumerConfig`, `OutboxRelayConfig` — configuration consumed by platform services. `Config.OutboxRelay` retains the `CORE_RELAY_` environment prefix and its existing defaults.
 
 ## Dependencies
 - Uses: `github.com/caarlos0/env/v11`, platform logging's `ParseLevel`, and Go standard library.
@@ -21,7 +21,7 @@ go test ./internal/platform/config/... -count=1
 ## Conventions
 See the [shared naming glossary](../../../../docs/glossary.md) for terms used across services.
 Only process environment variables are read. Compose supplies them from
-`deploy/compose/.env` and its service environment blocks.
+`deploy/core/.env` and its service environment blocks.
 
 Environment variables and defaults:
 
@@ -39,8 +39,13 @@ Environment variables and defaults:
 | CORE_REDIS_URL                            | Required, nonempty                                           |
 | CORE_VAULT_MASTER_KEY                     | Required, nonempty; base64 of exactly 32 bytes for the vault |
 | CORE_VAULT_KEY_ID                         | v1                                                           |
-| CORE_LOGS_OTLP_ENDPOINT | Empty; disables export. Full logs URL, e.g. `http://otel-collector:4318/v1/logs` (legacy) or `http://victorialogs:9428/insert/opentelemetry/v1/logs` |
+| CORE_LOGS_OTLP_ENDPOINT | Empty; disables export. Full logs URL: `http://victorialogs:9428/insert/opentelemetry/v1/logs` |
 | CORE_LOG_LEVEL                            | info; debug/info/warn/error                                  |
+| CORE_METRICS_ADDR | `:9464`; internal `/metrics` listener for `serve` and `outbox-relay`; empty disables |
+| CORE_METRICS_HTTP_BUCKETS | `0.005,0.01,0.025,0.05,0.1,0.25,0.5,1,2.5,5,10` seconds; HTTP and outbound histograms |
+| CORE_METRICS_LLM_BUCKETS | `0.25,0.5,1,2,4,8,16,32,64` seconds; LLM duration and TTFT histograms |
+| CORE_LLM_LOG_CONTENT | `false`; when true, `llm.call` carries redacted prompt/response/tool content |
+| CORE_LLM_LOG_CONTENT_MAX_BYTES | `16384`; per content field, cut on a UTF-8 boundary; must be >= 1 |
 | CORE_SERVICE_NAME                         | thomas-core                                                  |
 | CORE_RETRY_MAX_ATTEMPTS                   | 4                                                            |
 | CORE_RETRY_BASE_DELAY                     | 200ms                                                        |
@@ -60,6 +65,8 @@ Environment variables and defaults:
 | CORE_AUTH_LOGIN_IP_MAX_ATTEMPTS           | 100; must be >= 1; independent IP-only login budget          |
 
 `Load` returns startup errors without logging. Retry maximum delay must be at least the base delay; retry attempts, stream deliveries, breaker failure threshold and half-open call limit must be at least one.
+
+Metric buckets must be nonempty, finite, positive and strictly ascending. The metrics constructor receives the configured slices directly, keeping config independent of the Prometheus registry. `Load` preserves an explicitly empty `CORE_METRICS_ADDR` because the environment parser otherwise replaces it with the default.
 
 Log levels are validated through `logging.ParseLevel`, the same parser used to construct loggers; unknown names fail startup.
 

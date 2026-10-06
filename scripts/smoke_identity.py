@@ -43,7 +43,7 @@ def expect(name, status, expected):
 
 
 def probe_identity():
-    env_path = Path(__file__).resolve().parents[1] / "deploy/compose/.env"
+    env_path = Path(__file__).resolve().parents[1] / "deploy/core/.env"
     settings = {**dotenv_values(env_path), **os.environ}
     email = settings.get("CORE_AUTH_OWNER_EMAIL")
     password = settings.get("CORE_AUTH_OWNER_PASSWORD")

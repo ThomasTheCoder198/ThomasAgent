@@ -12,12 +12,17 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
 
+type BacklogRecorder interface {
+	SetOutboxBacklog(pending int, oldest time.Duration)
+}
+
 type OutboxRelay struct {
 	Pool         *pgxpool.Pool
 	Redis        *redis.Client
 	BatchSize    int
 	PollInterval time.Duration
 	Log          *slog.Logger
+	Metrics      BacklogRecorder
 }
 
 func (r *OutboxRelay) Run(ctx context.Context) error {
@@ -27,12 +32,29 @@ func (r *OutboxRelay) Run(ctx context.Context) error {
 		if _, err := r.PublishBatch(ctx); err != nil {
 			r.Log.ErrorContext(ctx, "outbox relay batch failed", "error_code", errors.CodeOf(err))
 		}
+		r.recordBacklog(ctx)
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
 		}
 	}
+}
+
+// The relay is a system worker, so backlog includes every tenant like the publish query.
+func (r *OutboxRelay) recordBacklog(ctx context.Context) {
+	if r.Metrics == nil {
+		return
+	}
+	var pending int
+	var oldestSeconds float64
+	err := r.Pool.QueryRow(ctx, `SELECT count(*), COALESCE(EXTRACT(EPOCH FROM now() - min(created_at)), 0)::float8
+		FROM outbox WHERE published_at IS NULL`).Scan(&pending, &oldestSeconds)
+	if err != nil {
+		r.Log.WarnContext(ctx, "outbox backlog query failed", "error_code", errors.CodeOf(errors.ToAppError(err)))
+		return
+	}
+	r.Metrics.SetOutboxBacklog(pending, time.Duration(oldestSeconds*float64(time.Second)))
 }
 
 func (r *OutboxRelay) PublishBatch(ctx context.Context) (int, error) {

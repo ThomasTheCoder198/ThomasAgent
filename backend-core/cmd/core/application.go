@@ -8,6 +8,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/metrics"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/telemetry"
 )
 
@@ -16,6 +17,7 @@ type application struct {
 	log         *slog.Logger
 	telemetry   telemetry.Telemetry
 	authService *auth.Service
+	metrics     *metrics.Metrics
 }
 
 func newApplication(ctx context.Context) (*application, error) {
@@ -31,7 +33,7 @@ func newApplication(ctx context.Context) (*application, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &application{cfg: cfg, telemetry: tel, log: log}, nil
+	return &application{cfg: cfg, telemetry: tel, log: log, metrics: metrics.New(cfg.Metrics.HTTPBuckets, cfg.Metrics.LLMBuckets)}, nil
 }
 
 func (a *application) shutdownTelemetry() error {

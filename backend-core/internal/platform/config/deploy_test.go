@@ -15,7 +15,7 @@ import (
 
 func composeExample(t *testing.T) map[string]string {
 	t.Helper()
-	file, err := os.Open(filepath.Join("..", "..", "..", "..", "deploy", "compose", ".env.example"))
+	file, err := os.Open(filepath.Join("..", "..", "..", "..", "deploy", "core", ".env.example"))
 	require.NoError(t, err)
 	defer file.Close()
 	values := make(map[string]string)
@@ -74,8 +74,8 @@ func TestCompose_ExampleBreakerSettingsReachProvider(t *testing.T) {
 
 func TestCompose_ForwardsEveryCoreSetting(t *testing.T) {
 	require.Contains(t, composeExample(t), "CORE_AUTH_LOGIN_IP_MAX_ATTEMPTS")
-	composeDir := filepath.Join("..", "..", "..", "..", "deploy", "compose")
-	command := exec.CommandContext(t.Context(), "docker", "compose", "--env-file", ".env.example", "-f", "compose.infra.yaml", "-f", "compose.observability.yaml", "-f", "compose.yaml", "config", "--format", "json")
+	composeDir := filepath.Join("..", "..", "..", "..", "deploy", "core")
+	command := exec.CommandContext(t.Context(), "docker", "compose", "--env-file", ".env.example", "-f", "compose.yaml", "config", "--format", "json")
 	command.Dir = composeDir
 	output, err := command.Output()
 	require.NoError(t, err, "compose must resolve the example without using local secrets")
@@ -107,4 +107,29 @@ func TestCompose_ForwardsEveryCoreSetting(t *testing.T) {
 		}
 	}
 	assertSettings(reflect.TypeFor[Config](), "CORE_")
+}
+
+func TestCompose_CoreStackHasNoLegacyObservability(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "deploy", "core", "compose.yaml"))
+	require.NoError(t, err)
+	for _, legacy := range []string{"otel-collector", "loki", "langfuse", "clickhouse", "web:"} {
+		require.NotContains(t, string(raw), legacy)
+	}
+	for _, service := range []string{"core:", "migrate:", "outbox-relay:", "postgres:", "redis:", "prometheus:", "grafana:", "victorialogs:"} {
+		require.Contains(t, string(raw), service)
+	}
+}
+
+func TestCompose_CoreExampleDoesNotRequireLocalSecrets(t *testing.T) {
+	composeDir := filepath.Join("..", "..", "..", "..", "deploy", "core")
+	isolatedDir := t.TempDir()
+	for _, name := range []string{".env.example", "compose.yaml"} {
+		raw, err := os.ReadFile(filepath.Join(composeDir, name))
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(isolatedDir, name), raw, 0o600))
+	}
+	command := exec.CommandContext(t.Context(), "docker", "compose", "--env-file", ".env.example", "-f", "compose.yaml", "config", "--quiet")
+	command.Dir = isolatedDir
+	output, err := command.CombinedOutput()
+	require.NoError(t, err, "example-only compose must resolve on a clean checkout: %s", output)
 }

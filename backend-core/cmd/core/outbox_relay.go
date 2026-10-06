@@ -20,6 +20,10 @@ func (a *application) runOutboxRelay(ctx context.Context) error {
 	}
 	defer func() { _ = redisClient.Close() }()
 	r := &jobs.OutboxRelay{Pool: pool, Redis: redisClient, BatchSize: a.cfg.OutboxRelay.BatchSize, PollInterval: a.cfg.OutboxRelay.PollInterval, Log: a.log}
+	if a.metrics != nil {
+		r.Metrics = a.metrics
+	}
+	go a.serveMetrics(ctx)
 	a.log.InfoContext(ctx, "outbox relay started")
 	return r.Run(ctx)
 }

@@ -5,6 +5,8 @@ Owns JSON responses, request IDs and chi error boundaries.
 Structured logger setup is injected by the application. Core has no tracing middleware.
 
 ## Entry points
+
+`RecordMetrics(HTTPMetrics)` observes method, route pattern, status and duration after routing, with the request id as exemplar; nil disables it. `NewRouter` callers install it after `LogAccess`.
 - `DecodeJSON` requires `application/json`, rejects unknown fields, reads one size-limited JSON value and maps invalid bodies to catalog errors. Missing, malformed or other media types return `UNSUPPORTED_MEDIA_TYPE` (415); malformed JSON and unknown fields return `VALIDATION_FAILED` (400). Requiring JSON and rejecting unknown fields are breaking changes for permissive callers; JSON charset parameters remain supported.
 - `EventStream` commits SSE headers and serializes flushed data and heartbeat frames. `NewEventStream` requires typed heartbeat and positive per-write timeout settings. Deadlines also bound the initial header flush; write failures close `Done` so producers stop. Request cancellation closes `Done` independently of an in-progress heartbeat write through `context.AfterFunc`. `Close` unregisters this callback.
 - `ResponseCommitted` checks whether the status line has been sent.

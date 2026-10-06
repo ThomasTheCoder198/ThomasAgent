@@ -26,6 +26,12 @@ go run ./cmd/core outbox-relay
 Docker Desktop must run for the pinned Postgres/Redis integration containers.
 
 ## Conventions
+
+`OutboxRelay.Metrics` receives backlog (`outbox_pending`, `outbox_relay_lag_seconds`) after every batch. `Consumer.Metrics` receives each job outcome (`success`, `retry`, `dead_letter`). Both recorders are optional.
+Call `Consumer.EnsureGroup` before processing jobs. When the recorder also implements
+`JobStreamRegistrar`, group initialization registers the stream's zero DLQ counter, including when
+the group already exists after a worker restart. This gives Prometheus a baseline for the first failure
+without resetting counters or requiring observation-only recorders to implement registration.
 See the [shared naming glossary](../../../docs/glossary.md) for terms used across services.
 Delivery is at-least-once. A crash after XADD and before transaction COMMIT can
 publish the same outbox row again. Handlers must deduplicate by `outbox_id` and

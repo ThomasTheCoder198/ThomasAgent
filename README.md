@@ -9,8 +9,9 @@ Self-hosted AI workspace (one operator, many tenants): a built-in agent that ans
 ## Quick start
 
 ```bash
-cp deploy/compose/.env.example deploy/compose/.env   # fill in secrets
-task up        # infra + observability + services
+cp deploy/core/.env.example deploy/core/.env   # fill in secrets
+cp deploy/ragx/.env.example deploy/ragx/.env   # ragx stack (task up:ragx)
+task up        # core + Postgres/Redis + observability
 task smoke     # health checks
 task web:dev   # run in a separate terminal; host frontend, WEB_CORE_URL defaults to http://localhost:8080
 ```

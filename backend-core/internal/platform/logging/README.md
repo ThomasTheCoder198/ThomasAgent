@@ -20,6 +20,8 @@ go test ./internal/platform/logging/... -count=1
 See the [shared naming glossary](../../../../docs/glossary.md) for terms used across services.
 Secret leaf keys and bearer/sk values are redacted in JSON and OTEL, including bound attributes and groups. Usage token counters remain visible. The configured level applies to both sinks. Do not log raw document content or opaque objects containing credentials.
 
+Secret key matching preserves camelCase and acronym boundaries (`accessToken`, `clientSecret`, `APIKey`, `privateKey`) alongside snake_case and header names. `inputTokens`/`input_tokens` and `tokenCount`/`token_count` remain usage counters. This shared policy applies to stdout, OTLP, ancestor groups and structured call content.
+
 `ParseLevel` owns the supported level names (debug/info/warn/error). Both startup configuration and `NewLogger` use it; unknown names return errors instead of silently choosing Info. `NewLogger` returns a logger and an error.
 
 The multiHandler attempts every enabled sink and returns their joined errors, including JSON writer failures. An OTEL failure still allows the JSON line to be written. Callers using `slog.Logger` should know its convenience logging methods discard handler errors; call `Handler().Handle` when the write result is needed.

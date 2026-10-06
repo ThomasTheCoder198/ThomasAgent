@@ -7,6 +7,9 @@ Creates the provider HTTP client with destination validation and DNS pinning. Re
 ## Entry points
 
 - `NewClient(timeout, privateAllowlist)` returns a guarded `*http.Client`.
+- `Instrument(next, target, recorder, propagateRequestID)` wraps a transport to record `outbound_*` metrics; the ragx transport (`TargetRagx`) enables request-id propagation. M1 builds the ragx client with it.
+
+`Instrument` clones requests, removes every case spelling of supplied `X-Request-Id` headers, and adds a validated context ID only when propagation is enabled for the `ragx` target. HTTP 4xx/5xx responses and transport failures are recorded as errors.
 - `IsSupportedScheme` shares the named HTTP/HTTPS scheme policy with Registry validation.
 - `ValidatePrivateAllowlist` validates exact `hostname:port` configuration without reading environment variables.
 

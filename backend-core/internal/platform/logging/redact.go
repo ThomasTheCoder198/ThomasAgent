@@ -7,19 +7,31 @@ import (
 	"strings"
 )
 
-const RedactedPlaceholder = "[REDACTED]"
+const (
+	RedactedPlaceholder    = "[REDACTED]"
+	keyBoundaryReplacement = "${1}_${2}"
+	tokenCountKey          = "token_count"
+)
 
 // Matching whole words keeps usage fields such as input_tokens visible while csrf_token or X-Api-Key are hidden.
 var (
-	secretKeyWords   = map[string]bool{"secret": true, "password": true, "passwd": true, "token": true, "authorization": true, "cookie": true, "apikey": true}
-	secretKeyPhrases = []string{"api_key", "private_key"}
-	keyWordSplitter  = regexp.MustCompile(`[^a-z0-9]+`)
+	secretKeyWords     = map[string]bool{"secret": true, "password": true, "passwd": true, "token": true, "authorization": true, "cookie": true, "apikey": true}
+	secretKeyPhrases   = []string{"api_key", "private_key"}
+	keyWordSplitter    = regexp.MustCompile(`[^a-z0-9]+`)
+	keyCamelBoundary   = regexp.MustCompile(`([a-z0-9])([A-Z])`)
+	keyAcronymBoundary = regexp.MustCompile(`([A-Z])([A-Z][a-z])`)
 )
 
 var secretValuePattern = regexp.MustCompile(`(?i)(bearer\s+\S+|sk-[a-z0-9_\-]{3,}\S*)`)
 
 func isSecretKey(key string) bool {
+	// JSON uses camelCase; retain its word boundaries before folding case so credential names stay recognizable.
+	key = keyAcronymBoundary.ReplaceAllString(key, keyBoundaryReplacement)
+	key = keyCamelBoundary.ReplaceAllString(key, keyBoundaryReplacement)
 	k := strings.ToLower(key)
+	if k == tokenCountKey {
+		return false
+	}
 	for _, phrase := range secretKeyPhrases {
 		if strings.Contains(strings.ReplaceAll(k, "-", "_"), phrase) {
 			return true

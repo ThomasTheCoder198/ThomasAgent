@@ -3,8 +3,10 @@ package config
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/netip"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -43,6 +45,40 @@ type HTTPConfig struct {
 	RequestTimeout          time.Duration `env:"REQUEST_TIMEOUT" envDefault:"30s"`
 	EventStreamHeartbeat    time.Duration `env:"EVENT_STREAM_HEARTBEAT" envDefault:"15s"`
 	EventStreamWriteTimeout time.Duration `env:"EVENT_STREAM_WRITE_TIMEOUT" envDefault:"10s"`
+}
+
+type MetricsConfig struct {
+	Addr        string    `env:"ADDR" envDefault:":9464"`
+	HTTPBuckets []float64 `env:"HTTP_BUCKETS" envSeparator:"," envDefault:"0.005,0.01,0.025,0.05,0.1,0.25,0.5,1,2.5,5,10"`
+	LLMBuckets  []float64 `env:"LLM_BUCKETS" envSeparator:"," envDefault:"0.25,0.5,1,2,4,8,16,32,64"`
+}
+
+type LLMLogConfig struct {
+	Content         bool `env:"CONTENT" envDefault:"false"`
+	ContentMaxBytes int  `env:"CONTENT_MAX_BYTES" envDefault:"16384"`
+}
+
+func (c MetricsConfig) validate() []error {
+	var errs []error
+	if !ascendingPositive(c.HTTPBuckets) {
+		errs = append(errs, errors.New("CORE_METRICS_HTTP_BUCKETS must be finite, positive and strictly ascending"))
+	}
+	if !ascendingPositive(c.LLMBuckets) {
+		errs = append(errs, errors.New("CORE_METRICS_LLM_BUCKETS must be finite, positive and strictly ascending"))
+	}
+	return errs
+}
+
+func ascendingPositive(buckets []float64) bool {
+	if len(buckets) == 0 {
+		return false
+	}
+	for index, bucket := range buckets {
+		if math.IsNaN(bucket) || math.IsInf(bucket, 0) || bucket <= 0 || (index > 0 && bucket <= buckets[index-1]) {
+			return false
+		}
+	}
+	return true
 }
 
 func (c HTTPConfig) validate() []error {
@@ -167,6 +203,8 @@ type Config struct {
 	ServiceToken             string            `env:"SERVICE_TOKEN,required,notEmpty"`
 	Vault                    VaultConfig       `envPrefix:"VAULT_"`
 	HTTP                     HTTPConfig        `envPrefix:"HTTP_"`
+	Metrics                  MetricsConfig     `envPrefix:"METRICS_"`
+	LLMLog                   LLMLogConfig      `envPrefix:"LLM_LOG_"`
 	Environment              string            `env:"ENV" envDefault:"dev"`
 	ServiceName              string            `env:"SERVICE_NAME" envDefault:"thomas-core"`
 	HTTPAddr                 string            `env:"HTTP_ADDR" envDefault:":8080"`
@@ -182,6 +220,8 @@ type Config struct {
 }
 
 const envPrefix = "CORE_"
+
+const metricsAddrEnv = envPrefix + "METRICS_ADDR"
 
 const DefaultProviderMaxResponseBytes int64 = 8388608
 
@@ -208,6 +248,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("load config: %w", err)
 	}
+	// envDefault replaces an explicit empty value; here empty intentionally disables the listener.
+	if addr, exists := os.LookupEnv(metricsAddrEnv); exists && addr == "" {
+		cfg.Metrics.Addr = addr
+	}
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
 	}
@@ -226,6 +270,10 @@ func (c Config) validate() error {
 		errs = append(errs, errors.New("CORE_RETRY_MAX_ATTEMPTS and CORE_STREAM_MAX_DELIVERIES must be >= 1"))
 	}
 	errs = append(errs, c.HTTP.validate()...)
+	errs = append(errs, c.Metrics.validate()...)
+	if c.LLMLog.ContentMaxBytes < 1 {
+		errs = append(errs, errors.New("CORE_LLM_LOG_CONTENT_MAX_BYTES must be >= 1"))
+	}
 	errs = append(errs, c.Auth.validate()...)
 	errs = append(errs, c.validateServiceToken()...)
 	errs = append(errs, c.validateProvider()...)

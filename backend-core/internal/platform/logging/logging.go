@@ -7,8 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"time"
-
-	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -19,8 +17,6 @@ const (
 	fieldTimestamp   = "ts"
 	fieldService     = "service"
 	fieldEnvironment = "env"
-	fieldTraceID     = "trace_id"
-	fieldSpanID      = "span_id"
 	fieldRequestID   = "request_id"
 )
 
@@ -62,29 +58,27 @@ func NewLogger(w io.Writer, level, service, environment string, otelHandler slog
 	if otelHandler != nil {
 		h = multiHandler{h, redactingHandler{Handler: otelHandler}}
 	}
-	return slog.New(levelFilterHandler{Handler: traceContextHandler{h}, level: parsedLevel}).With(fieldService, service, fieldEnvironment, environment), nil
+	return slog.New(levelFilterHandler{Handler: requestContextHandler{h}, level: parsedLevel}).With(fieldService, service, fieldEnvironment, environment), nil
 }
 
-type traceContextHandler struct{ slog.Handler }
+// requestContextHandler adds the request id from context, so callers never pass it as an explicit attribute.
+type requestContextHandler struct{ slog.Handler }
 
-func (h traceContextHandler) Handle(ctx context.Context, r slog.Record) error {
-	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
-		r.AddAttrs(slog.String(fieldTraceID, sc.TraceID().String()), slog.String(fieldSpanID, sc.SpanID().String()))
-	}
+func (h requestContextHandler) Handle(ctx context.Context, r slog.Record) error {
 	if requestID := RequestIDFromContext(ctx); requestID != "" {
 		r.AddAttrs(slog.String(fieldRequestID, requestID))
 	}
 	if err := h.Handler.Handle(ctx, r); err != nil {
-		return fmt.Errorf("handle trace log: %w", err)
+		return fmt.Errorf("handle request log: %w", err)
 	}
 	return nil
 }
 
-func (h traceContextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return traceContextHandler{h.Handler.WithAttrs(attrs)}
+func (h requestContextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return requestContextHandler{h.Handler.WithAttrs(attrs)}
 }
-func (h traceContextHandler) WithGroup(name string) slog.Handler {
-	return traceContextHandler{h.Handler.WithGroup(name)}
+func (h requestContextHandler) WithGroup(name string) slog.Handler {
+	return requestContextHandler{h.Handler.WithGroup(name)}
 }
 
 type redactingHandler struct {

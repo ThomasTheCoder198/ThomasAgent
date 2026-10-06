@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
@@ -93,7 +92,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	user, issued, err := h.svc.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		if errors.ToAppError(err).Code == errors.CodeAuthInvalidCredentials && h.log != nil {
-			h.log.WarnContext(r.Context(), "auth login failed", slog.String("event", actionLoginFailed), slog.String("identity", h.lim.identity(req.Email)), slog.String("trace_id", trace.SpanContextFromContext(r.Context()).TraceID().String()))
+			h.log.WarnContext(r.Context(), "auth login failed", slog.String("event", actionLoginFailed), slog.String("identity", h.lim.identity(req.Email)))
 		}
 		httpx.WriteError(w, r, err)
 		return
@@ -109,7 +108,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) writeLimiterError(w http.ResponseWriter, r *http.Request, decision LimitDecision, err error) {
 	if decision.EmailTripped {
 		if auditErr := h.svc.recordFailedLogin(r.Context()); auditErr != nil && h.log != nil {
-			h.log.WarnContext(r.Context(), "auth limiter audit unavailable", slog.String("trace_id", trace.SpanContextFromContext(r.Context()).TraceID().String()))
+			h.log.WarnContext(r.Context(), "auth limiter audit unavailable")
 		}
 	}
 	appErr := errors.ToAppError(err)

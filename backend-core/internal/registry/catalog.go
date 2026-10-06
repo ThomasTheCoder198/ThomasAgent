@@ -19,9 +19,6 @@ import (
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/retry"
@@ -32,11 +29,9 @@ const (
 	bearerScheme        = "Bearer"
 	bearerPrefix        = bearerScheme + " "
 	headerRetryAfter    = "Retry-After"
-	catalogTracer       = "core.registry"
 	catalogOperation    = "provider.list_models"
-	catalogFailure      = "provider request failed"
 	catalogSuccess      = "success"
-	catalogTraceID      = "trace_id"
+	catalogDurationMS   = "duration_ms"
 	decimalBase         = 10
 	intBits             = 64
 	maxRetryAfter       = time.Duration(1<<63 - 1)
@@ -176,14 +171,10 @@ func (c *HTTPCatalog) discardIdleBreaker() bool {
 }
 
 func (c *HTTPCatalog) fetch(ctx context.Context, baseURL, apiKey string, out *openRouterModels) (err error) {
-	ctx, span := otel.Tracer(catalogTracer).Start(ctx, catalogOperation, trace.WithSpanKind(trace.SpanKindClient))
+	start := time.Now()
 	defer func() {
-		defer span.End()
-		if err != nil {
-			span.SetStatus(codes.Error, catalogFailure)
-		}
 		if c.log != nil {
-			c.log.InfoContext(ctx, catalogOperation, slog.Bool(catalogSuccess, err == nil), slog.String(catalogTraceID, span.SpanContext().TraceID().String()))
+			c.log.InfoContext(ctx, catalogOperation, slog.Bool(catalogSuccess, err == nil), slog.Int64(catalogDurationMS, time.Since(start).Milliseconds()))
 		}
 	}()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+modelsPath, nil)

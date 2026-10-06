@@ -30,7 +30,7 @@ SQL, verify status transitions from pending to applied and back, and check that 
 ## Conventions
 See the [shared naming glossary](../../../../docs/glossary.md) for terms used across services.
 The core command wraps migration and startup connection/ping operations in
-client spans and logs failures once at that boundary. This package returns errors.
+logs failures once at that boundary. This package returns errors.
 The caller closes a returned pool. Failed ping closes it internally.
 Migration files use `YYYYMMDDHHMMSS_<desc>.sql` and goose Up/Down annotations.
 `Up` applies all pending migrations; `Down` rolls back one migration.

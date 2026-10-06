@@ -5,22 +5,17 @@ import (
 	"log/slog"
 	"os"
 
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
-
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
-
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tracing"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/telemetry"
 )
 
 type application struct {
-	cfg           config.Config
-	log           *slog.Logger
-	telemetry     tracing.Telemetry
-	startupTracer trace.Tracer
-	authService   *auth.Service
+	cfg         config.Config
+	log         *slog.Logger
+	telemetry   telemetry.Telemetry
+	authService *auth.Service
 }
 
 func newApplication(ctx context.Context) (*application, error) {
@@ -28,15 +23,15 @@ func newApplication(ctx context.Context) (*application, error) {
 	if err != nil {
 		return nil, err
 	}
-	tp, err := tracing.Setup(ctx, cfg.ServiceName, cfg.Environment, cfg.OTLPEndpoint)
+	tel, err := telemetry.Setup(ctx, cfg.ServiceName, cfg.Environment, cfg.LogsOTLPEndpoint)
 	if err != nil {
 		return nil, err
 	}
-	log, err := logging.NewLogger(os.Stdout, cfg.LogLevel, cfg.ServiceName, cfg.Environment, tp.LogHandler)
+	log, err := logging.NewLogger(os.Stdout, cfg.LogLevel, cfg.ServiceName, cfg.Environment, tel.LogHandler)
 	if err != nil {
 		return nil, err
 	}
-	return &application{cfg: cfg, telemetry: tp, startupTracer: otel.Tracer(cfg.ServiceName), log: log}, nil
+	return &application{cfg: cfg, telemetry: tel, log: log}, nil
 }
 
 func (a *application) shutdownTelemetry() error {

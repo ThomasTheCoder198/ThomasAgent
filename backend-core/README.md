@@ -11,7 +11,7 @@ Go API and agent runtime for ThomasAgent.
 - GET `/internal/models/resolve`: service-token authentication; decrypted keys are internal-only.
 
 ## Dependencies
-- Uses platform config, `internal/errors`, httpx, logging and tracing; see each README in `internal/platform/*`.
+- Uses platform config, `internal/errors`, httpx, logging, telemetry and requestid; see each README in `internal/platform/*`.
 - Used by the frontend and service clients.
 
 ## Run & test
@@ -39,13 +39,13 @@ golangci-lint run ./...
 
 ## Conventions
 See the [shared naming glossary](../docs/glossary.md) for terms used across services.
-Go 1.27.1 is pinned. CORE_ variables configure startup. Optional CORE_OTLP_ENDPOINT enables OTLP HTTP traces and logs. Serve opens and pings Postgres and Redis before listening; readiness checks both dependencies. All HTTP responses use the shared response.
+Go 1.27.1 is pinned. CORE_ variables configure startup. Optional CORE_LOGS_OTLP_ENDPOINT (full logs URL) enables OTLP HTTP log export; core has no traces and correlates by `request_id`. Serve opens and pings Postgres and Redis before listening; readiness checks both dependencies. All HTTP responses use the shared response.
 Process, HTTP, and worker logs follow the shared [log field contract](internal/platform/logging/README.md#log-field-contract).
 
 ## Common failures
 - Missing database/Redis environment values fail config loading.
 - An occupied HTTP address prevents startup.
-- An unreachable OTLP collector prevents telemetry delivery.
+- An unreachable logs endpoint drops exported records; stdout logs are unaffected.
 
 ## Identity and provider configuration
 

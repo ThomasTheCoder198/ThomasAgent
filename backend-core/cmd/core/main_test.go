@@ -16,30 +16,23 @@ import (
 	"github.com/stretchr/testify/require"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
-	"go.opentelemetry.io/otel/codes"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tracing"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/telemetry"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/migrations"
 )
 
-func TestApplication_DatabaseFailuresRecordDiagnosticsOnce(t *testing.T) {
+func TestApplication_DatabaseFailuresLogDiagnosticsOnce(t *testing.T) {
 	for _, operation := range []string{"migrate", "open"} {
 		t.Run(operation, func(t *testing.T) {
-			recorder := tracetest.NewSpanRecorder()
-			provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
-			t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
 			var output bytes.Buffer
 			log, logErr := logging.NewLogger(&output, "info", "core-test", "test", nil)
 			require.NoError(t, logErr)
 			a := &application{
-				cfg:           config.Config{DatabaseURL: "postgres://nobody:secret-password@127.0.0.1:1/none?connect_timeout=1"},
-				log:           log,
-				startupTracer: provider.Tracer("core-test"),
+				cfg: config.Config{DatabaseURL: "postgres://nobody:secret-password@127.0.0.1:1/none?connect_timeout=1"},
+				log: log,
 			}
 			var err error
 			if operation == "migrate" {
@@ -48,23 +41,14 @@ func TestApplication_DatabaseFailuresRecordDiagnosticsOnce(t *testing.T) {
 				_, err = a.openPostgres(context.Background())
 			}
 			require.Error(t, err)
-			spans := recorder.Ended()
-			require.Len(t, spans, 1)
-			require.Equal(t, "core.postgres."+operation, spans[0].Name())
-			require.Equal(t, codes.Error, spans[0].Status().Code)
+			lines := bytes.Split(bytes.TrimSpace(output.Bytes()), []byte("\n"))
+			require.Len(t, lines, 1, "a dependency failure is logged exactly once")
 			var record map[string]any
-			require.NoError(t, json.Unmarshal(output.Bytes(), &record))
+			require.NoError(t, json.Unmarshal(lines[0], &record))
 			require.Equal(t, "ERROR", record["level"])
-			require.Equal(t, spans[0].SpanContext().TraceID().String(), record["trace_id"])
-			require.Equal(t, spans[0].SpanContext().SpanID().String(), record["span_id"])
 			require.Equal(t, "INTERNAL_ERROR", record["error_code"])
-			require.NotEmpty(t, record["error"])
 			require.Contains(t, record["error"], "127.0.0.1")
-			require.Len(t, spans[0].Events(), 1)
-			for _, attribute := range spans[0].Events()[0].Attributes {
-				require.NotContains(t, attribute.Value.AsString(), "secret-password")
-				require.NotContains(t, attribute.Value.AsString(), "postgres://")
-			}
+			require.NotContains(t, record, "trace_id")
 			require.NotContains(t, output.String(), "secret-password")
 			require.NotContains(t, output.String(), "postgres://")
 		})
@@ -111,7 +95,7 @@ func TestRealMain_LogsDatabaseFailureOnce(t *testing.T) {
 			t.Setenv("CORE_TEST_COMMAND", command)
 			t.Setenv("CORE_DATABASE_URL", "postgres://nobody:secret-password@127.0.0.1:1/none?connect_timeout=1")
 			t.Setenv("CORE_REDIS_URL", "redis://127.0.0.1:1")
-			t.Setenv("CORE_OTLP_ENDPOINT", "")
+			t.Setenv("CORE_LOGS_OTLP_ENDPOINT", "")
 			process := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestRealMain_Helper$")
 			output, err := process.CombinedOutput()
 			var exitErr *exec.ExitError
@@ -148,7 +132,7 @@ func TestSanitizeDependencyError_RemovesCredentials(t *testing.T) {
 func TestApplication_TelemetryShutdownHasDeadline(t *testing.T) {
 	a := &application{
 		cfg: config.Config{ShutdownTimeout: 20 * time.Millisecond},
-		telemetry: tracing.Telemetry{Shutdown: func(ctx context.Context) error {
+		telemetry: telemetry.Telemetry{Shutdown: func(ctx context.Context) error {
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			require.WithinDuration(t, time.Now().Add(20*time.Millisecond), deadline, 10*time.Millisecond)
@@ -172,7 +156,7 @@ func (w *cancelOnListeningWriter) Write(line []byte) (int, error) {
 	return n, err
 }
 
-func TestServe_ListeningLogCarriesTraceContext(t *testing.T) {
+func TestServe_ListeningLogUsesSharedFields(t *testing.T) {
 	ctx := t.Context()
 	database, err := tcpostgres.Run(ctx, "postgres:18.6-alpine",
 		tcpostgres.WithDatabase("core"), tcpostgres.WithUsername("core"), tcpostgres.WithPassword("core"), tcpostgres.BasicWaitStrategies())
@@ -186,10 +170,6 @@ func TestServe_ListeningLogCarriesTraceContext(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, redis.Terminate(context.Background())) })
 	redisURL, err := redis.ConnectionString(ctx)
 	require.NoError(t, err)
-	provider := sdktrace.NewTracerProvider()
-	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
-	ctx, span := provider.Tracer("core-test").Start(ctx, "serve-test")
-	defer span.End()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	output := &cancelOnListeningWriter{cancel: cancel}
@@ -205,20 +185,21 @@ func TestServe_ListeningLogCarriesTraceContext(t *testing.T) {
 			ProviderMaxResponseBytes: config.DefaultProviderMaxResponseBytes,
 			ProviderBreaker:          config.BreakerConfig{FailureThreshold: 5, OpenTimeout: time.Second, HalfOpenMaxCalls: 1},
 		},
-		log: log, startupTracer: provider.Tracer("core-test"),
+		log: log,
 	}
 	require.NoError(t, a.serveHTTP(ctx))
 	var record map[string]any
 	require.NoError(t, json.Unmarshal(output.Bytes(), &record))
-	require.Equal(t, span.SpanContext().TraceID().String(), record["trace_id"])
-	require.Equal(t, span.SpanContext().SpanID().String(), record["span_id"])
+	require.Equal(t, "core listening", record["msg"])
+	require.Equal(t, "core-test", record["service"])
+	require.NotContains(t, record, "trace_id")
 }
 
 func TestHealthcheck_DoesNotOpenDependencies(t *testing.T) {
 	setIdentityEnv(t)
 	t.Setenv("CORE_DATABASE_URL", "postgres://invalid:invalid@127.0.0.1:1/none")
 	t.Setenv("CORE_REDIS_URL", "redis://127.0.0.1:1")
-	t.Setenv("CORE_OTLP_ENDPOINT", "")
+	t.Setenv("CORE_LOGS_OTLP_ENDPOINT", "")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/healthz", r.URL.Path)
 		w.WriteHeader(http.StatusOK)
@@ -234,10 +215,6 @@ func TestHealthcheck_RejectsUnhealthyStatus(t *testing.T) {
 	}))
 	defer server.Close()
 	require.ErrorContains(t, checkHTTPHealth(context.Background(), strings.TrimPrefix(server.URL, "http://127.0.0.1")), "503")
-}
-
-func TestSpanNames_UseCoreServicePrefix(t *testing.T) {
-	require.Equal(t, []string{"core.postgres.open", "core.redis.startup", "core.postgres.migrate"}, []string{postgresOpenSpan, redisStartupSpan, postgresMigrateSpan})
 }
 
 // testVaultMasterKey is the base64 of 32 ASCII bytes.

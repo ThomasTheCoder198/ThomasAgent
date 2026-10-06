@@ -1,14 +1,14 @@
 # Logging
 
 ## Purpose
-Owns JSON logs, secret redaction and trace correlation.
+Owns JSON logs, secret redaction and request correlation.
 
 ## Entry points
 - `NewLogger(writer, level, service, environment, otelHandler)`, `ParseLevel`, `RedactValue`
 - `ContextWithRequestID` and `RequestIDFromContext` share request correlation with HTTP boundaries and application callers.
 
 ## Dependencies
-- Uses: slog and OTEL trace; consumed by core and HTTP boundaries
+- Uses: slog; consumed by core and HTTP boundaries
 
 ## Run & test
 ```bash
@@ -28,12 +28,11 @@ The multiHandler attempts every enabled sink and returns their joined errors, in
 
 JSON records always include `ts`, `level`, `msg`, `service`, and `env`. `ts` replaces slog's top-level `time` field and uses UTC RFC3339Nano; nested application fields named `time` retain their names and values. Logger construction receives the service and environment from typed config.
 
-A valid active span adds `trace_id` and `span_id`. A request ID stored with `ContextWithRequestID` adds `request_id`; absent context omits these correlation fields. The request middleware preserves a supplied `X-Request-Id` or generates one and stores the same value in context and the response header. Handler, access, and boundary error logs receive it automatically; callers do not repeat it as an explicit attribute.
+A request id stored with `ContextWithRequestID` adds `request_id`; absent context omits it. The request middleware accepts `X-Request-Id` only when it matches the shared pattern, otherwise generates one, and stores the same value in context and the response header. Handler, access, job and boundary error logs receive it automatically; callers do not repeat it as an explicit attribute. Core logs carry no `trace_id`/`span_id`.
 
-OTLP records use their native timestamp, severity, and body fields for `ts`, `level`, and `msg`. They receive the same service, environment, trace, span, and request attributes as JSON records. Both outputs apply the configured level and redaction policy.
+OTLP records use their native timestamp, severity, and body fields for `ts`, `level`, and `msg`. They receive the same service, environment, and request attributes as JSON records. Both outputs apply the configured level and redaction policy.
 
 ## Common failures
-- Missing trace IDs indicate there is no valid span context.
 - Invalid log level causes startup to fail; use debug, info, warn, or error.
 - Sink write errors can be inspected from the handler return value with `errors.Is`.
 

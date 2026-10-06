@@ -17,6 +17,8 @@ task smoke
 ```
 
 ## Conventions
+
+Core exports only logs: `CORE_LOGS_OTLP_ENDPOINT` is the full logs URL (legacy collector `/v1/logs`). Core sends no traces; M0.5.2 replaces this stack.
 Configuration is mounted read only; credentials come from compose/.env. Every typed core
 setting is forwarded through `x-core-env` to `core`, `migrate` and `outbox-relay`.
 `.env.example` lists all runtime defaults; blank database and Redis URLs use compose

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"go.opentelemetry.io/otel"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
@@ -94,9 +93,13 @@ func (l *Limiter) Check(ctx context.Context, email, ip string) (LimitDecision, e
 	return l.checkKeys(ctx, []string{limiterKeyPrefix + identity + limiterIPSuffix + ip, limiterKeyPrefix + identity + limiterEmailSuffix, limiterIPKeyPrefix + ip}, limiterEmailKeyIndex, l.max, l.emailMax, l.ipMax)
 }
 
+func (l *Limiter) identity(email string) string {
+	mac := hmac.New(sha256.New, l.hmacKey)
+	_, _ = mac.Write([]byte(normalizeEmail(email)))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
 func (l *Limiter) checkKeys(ctx context.Context, keys []string, emailKeyIndex int, limits ...int) (LimitDecision, error) {
-	ctx, span := otel.Tracer(TracerName).Start(ctx, limiterCheckSpan)
-	defer span.End()
 	if l.initErr != nil {
 		return LimitDecision{}, l.initErr
 	}
@@ -106,7 +109,6 @@ func (l *Limiter) checkKeys(ctx context.Context, keys []string, emailKeyIndex in
 	}
 	result, err := l.script.Run(ctx, l.rdb, keys, args...).Int64Slice()
 	if err != nil {
-		span.RecordError(err)
 		return LimitDecision{}, errors.ErrInternalError.WithCause(fmt.Errorf("login limiter increment: %w", err))
 	}
 	if len(result) != limiterResultLength {
@@ -121,8 +123,6 @@ func (l *Limiter) checkKeys(ctx context.Context, keys []string, emailKeyIndex in
 }
 
 func (l *Limiter) Reset(ctx context.Context, key string) error {
-	ctx, span := otel.Tracer(TracerName).Start(ctx, limiterResetSpan)
-	defer span.End()
 	if err := l.rdb.Del(ctx, limiterKeyPrefix+key).Err(); err != nil {
 		return errors.ErrInternalError.WithCause(fmt.Errorf("login limiter reset: %w", err))
 	}
@@ -130,18 +130,9 @@ func (l *Limiter) Reset(ctx context.Context, key string) error {
 }
 
 func (l *Limiter) ResetLogin(ctx context.Context, email, ip string) error {
-	ctx, span := otel.Tracer(TracerName).Start(ctx, limiterResetSpan)
-	defer span.End()
 	identity := l.identity(email)
 	if err := l.rdb.Del(ctx, limiterKeyPrefix+identity+limiterIPSuffix+ip, limiterKeyPrefix+identity+limiterEmailSuffix).Err(); err != nil {
-		span.RecordError(err)
 		return errors.ErrInternalError.WithCause(err)
 	}
 	return nil
-}
-
-func (l *Limiter) identity(email string) string {
-	mac := hmac.New(sha256.New, l.hmacKey)
-	_, _ = mac.Write([]byte(normalizeEmail(email)))
-	return hex.EncodeToString(mac.Sum(nil))
 }

@@ -12,7 +12,6 @@ import (
 
 	"github.com/alexedwards/argon2id"
 	"github.com/jackc/pgx/v5"
-	"go.opentelemetry.io/otel"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/audit"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
@@ -74,28 +73,6 @@ func NewService(repo *Repository, db transactionDB, cfg config.AuthConfig, now f
 	decoy, err := s.createHash(context.Background(), timingDecoyPassword)
 	s.decoy, s.decoyErr = decoy, err
 	return s
-}
-
-func (s *Service) createHash(ctx context.Context, password string) (string, error) {
-	ctx, span := otel.Tracer(TracerName).Start(ctx, argonCreateSpan)
-	defer span.End()
-	if err := s.acquireHashSlot(ctx); err != nil {
-		span.RecordError(err)
-		return "", err
-	}
-	defer func() { <-s.hashSlots }()
-	return argon2id.CreateHash(password, s.argonParams)
-}
-
-func (s *Service) compareHash(ctx context.Context, password, encoded string) (bool, error) {
-	ctx, span := otel.Tracer(TracerName).Start(ctx, argonCompareSpan)
-	defer span.End()
-	if err := s.acquireHashSlot(ctx); err != nil {
-		span.RecordError(err)
-		return false, err
-	}
-	defer func() { <-s.hashSlots }()
-	return argon2id.ComparePasswordAndHash(password, encoded)
 }
 
 func (s *Service) acquireHashSlot(ctx context.Context) error {
@@ -262,4 +239,20 @@ func randomToken() (string, error) {
 func hashToken(token string) []byte {
 	sum := sha256.Sum256([]byte(token))
 	return sum[:]
+}
+
+func (s *Service) createHash(ctx context.Context, password string) (string, error) {
+	if err := s.acquireHashSlot(ctx); err != nil {
+		return "", err
+	}
+	defer func() { <-s.hashSlots }()
+	return argon2id.CreateHash(password, s.argonParams)
+}
+
+func (s *Service) compareHash(ctx context.Context, password, encoded string) (bool, error) {
+	if err := s.acquireHashSlot(ctx); err != nil {
+		return false, err
+	}
+	defer func() { <-s.hashSlots }()
+	return argon2id.ComparePasswordAndHash(password, encoded)
 }

@@ -42,7 +42,7 @@ See the [shared naming glossary](../../../../docs/glossary.md) for terms used ac
   count as successful calls so invalid requests cannot block valid traffic.
   Open and saturated half-open
   states return catalog `PROVIDER_UNAVAILABLE` with the library error as cause.
-- Do creates a parented core.retry.execute span for every execution. Operations own outbound spans; handlers/workers own structured error logs.
+- Handlers, workers and outbound callers own structured error logs; Do itself does not log.
 - Operations with side effects must be safe to repeat or use idempotency keys.
 
 ## Common failures

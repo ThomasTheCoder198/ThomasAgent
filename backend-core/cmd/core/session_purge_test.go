@@ -1,11 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 
 	"github.com/stretchr/testify/require"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
@@ -56,4 +62,20 @@ func TestSessionPurgeJobDeletesExpiredSessionsAcrossTenants(t *testing.T) {
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FILTER (WHERE expires_at<=now()), count(*) FILTER (WHERE expires_at>now()) FROM sessions`).Scan(&expired, &active))
 	require.Zero(t, expired, "system cleanup must include every tenant")
 	require.Equal(t, 2, active, "system cleanup must preserve active sessions in both tenants")
+}
+
+func TestSessionPurgeLogsCarryJobRequestID(t *testing.T) {
+	pool := pgtest.Start(t)
+	service := auth.NewService(auth.NewRepository(pool), pool, config.AuthConfig{}, time.Now)
+	var output bytes.Buffer
+	log, err := logging.NewLogger(&output, "info", "core-test", "test", nil)
+	require.NoError(t, err)
+	app := application{log: log}
+	app.runSessionPurge(t.Context(), service)
+	var record map[string]any
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(output.Bytes()), &record))
+	require.Equal(t, "expired sessions purged", record["msg"])
+	id, _ := record["request_id"].(string)
+	require.True(t, strings.HasPrefix(id, requestid.JobPrefix), id)
+	require.Contains(t, record, "duration_ms")
 }

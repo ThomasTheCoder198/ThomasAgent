@@ -32,7 +32,7 @@ probe launched by Docker against the API process.
 
 ## Dependencies
 
-- Uses: `internal/errors`, platform config, logging, tracing, httpx, postgres, redisx, jobs, and embedded migrations.
+- Uses: `internal/errors`, platform config, logging, telemetry, httpx, postgres, redisx, jobs, and embedded migrations.
 - Used by: the backend Docker image, Compose `core`/`migrate`/`outbox-relay` services, and local CLI commands.
 
 ## Run & test
@@ -67,12 +67,7 @@ context. An interrupt or termination signal cancels the API or outbox relay work
 
 `migrate` defaults to `up`; `down` rolls back one migration; failures exit with
 code 1. `status` logs version, path and applied/pending state from
-`postgres.MigrationStatuses`. Migration and startup connection/ping run inside client spans
-(`core.postgres.migrate`, `core.postgres.open`, `core.redis.startup`/`core.redis.open`).
-
-Dependency failures emit one structured error with the catalog code, trace
-context and underlying diagnostics after removing dependency URLs and decoded
-passwords. The span records the same sanitized error. The process boundary
+`postgres.MigrationStatuses`. Dependency failures (migration, Postgres open, Redis ping) emit one structured error with the catalog code and a sanitized error, never URLs or passwords. The process boundary
 recognizes an already logged error and returns a failure exit code without
 printing a second copy. Logger creation rejects unknown log levels.
 `newApplication` passes `Config.Environment` into the logger; process and HTTP logs follow the shared [log field contract](../../internal/platform/logging/README.md#log-field-contract).
@@ -89,7 +84,7 @@ keep it stable to preserve access to stored secrets. `CORE_VAULT_KEY_ID` default
 
 Core startup configures M0.2 platform-scoped modules. Their data belongs to the [Platform tenant](../../../docs/glossary.md) (`default`). M1 business tenancy must derive `tenant_id` from trusted context, never client or model parameters.
 
-All config-loading commands also require CORE_SERVICE_TOKEN with at least 32 characters; values beginning `change-me` are rejected outside dev. The identity test fixtures supply it explicitly. The serve process periodically purges expired sessions across all tenants through the explicit system-level auth method and refreshes `last_seen_at` during authenticated requests. Expiry decisions use the database clock. The purge span names come from auth's named constants.
+All config-loading commands also require CORE_SERVICE_TOKEN with at least 32 characters; values beginning `change-me` are rejected outside dev. The identity test fixtures supply it explicitly. The serve process periodically purges expired sessions across all tenants through the explicit system-level auth method and refreshes `last_seen_at` during authenticated requests. Expiry decisions use the database clock. Each purge run logs with its own `job_` request id and `duration_ms`.
 
 `serve` validates the vault key before dependency access, bootstraps the owner,
 then injects the guarded provider catalog into the Registry. The route coverage

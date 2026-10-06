@@ -9,8 +9,6 @@ import (
 	"net"
 	"time"
 
-	"go.opentelemetry.io/otel"
-
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 )
@@ -18,8 +16,6 @@ import (
 const (
 	backoffBase      = 2
 	sleepErrorFormat = "retry wait: %w"
-	retryTracer      = "core.retry"
-	retryOperation   = "core.retry.execute"
 )
 
 type Policy struct {
@@ -86,8 +82,6 @@ func retryDelay(p Policy, attempt int, err error) time.Duration {
 }
 
 func Do(ctx context.Context, p Policy, op func(context.Context) error) error {
-	ctx, span := otel.Tracer(retryTracer).Start(ctx, retryOperation)
-	defer span.End()
 	if p.MaxAttempts <= 0 {
 		return errors.ErrInternalError.WithCause(fmt.Errorf("retry max attempts must be positive"))
 	}

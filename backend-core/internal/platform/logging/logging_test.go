@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace"
 )
 
 func testLogger(t *testing.T, w io.Writer, level, service string, otelHandler slog.Handler) *slog.Logger {
@@ -114,18 +113,14 @@ func TestNewLogger_RedactsSecretKeysAndValues(t *testing.T) {
 	require.Equal(t, "openrouter", group["name"])
 }
 
-func TestNewLogger_AddsServiceAndTraceIDs(t *testing.T) {
+func TestNewLogger_AddsServiceAndRequestID(t *testing.T) {
 	var buf bytes.Buffer
 	l := testLogger(t, &buf, "info", "thomas-core", nil)
-	traceID, _ := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
-	spanID, _ := trace.SpanIDFromHex("00f067aa0ba902b7")
-	ctx := trace.ContextWithSpanContext(context.Background(),
-		trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: spanID, TraceFlags: trace.FlagsSampled}))
-	l.InfoContext(ctx, "hello")
+	l.InfoContext(ContextWithRequestID(context.Background(), "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21"), "hello")
 	m := lastLine(t, &buf)
 	require.Equal(t, "thomas-core", m["service"])
-	require.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", m["trace_id"])
-	require.Equal(t, "00f067aa0ba902b7", m["span_id"])
+	require.Equal(t, "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21", m["request_id"])
+	require.NotContains(t, m, "trace_id")
 }
 
 func TestNewLogger_RespectsLevel(t *testing.T) {

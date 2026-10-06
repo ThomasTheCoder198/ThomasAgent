@@ -11,7 +11,6 @@ M0.2 data belongs to the [Platform tenant](../../../docs/glossary.md) (`default`
 - `NewHandler(...).Mount` registers POST `/api/v1/auth/login`, POST `/api/v1/auth/logout`, and GET `/api/v1/auth/me`.
 - `RequireSession` authenticates cookies, checks CSRF on unsafe methods and exposes `UserFrom` to protected handlers; `NewLimiter` counts login attempts.
 - `PurgeAllExpiredSessions` is the explicit system-job repository/service entry point; `PurgeExpiredSessions` remains tenant-scoped for request use.
-- `TracerName` and the auth span constants in `tracing.go` own fixed telemetry names, including the exported `SessionPurgeSpan` used by core.
 
 ## Dependencies
 
@@ -25,7 +24,7 @@ cd backend-core
 TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/auth -count=1
 ```
 
-Tests use `pgtest.Start`, migrated Docker Postgres and Redis, with Ryuk disabled on this host. Real HTTP stream gates exercise tracing, access logging, session cookies and CSRF checks, three incremental frames, disconnect cancellation and committed-panic recovery without JSON corruption.
+Tests use `pgtest.Start`, migrated Docker Postgres and Redis, with Ryuk disabled on this host. Real HTTP stream gates exercise access logging, session cookies and CSRF checks, three incremental frames, disconnect cancellation and committed-panic recovery without JSON corruption.
 
 ## Conventions
 
@@ -39,11 +38,11 @@ The email-global bucket intentionally runs before password verification and stil
 
 Forwarding headers default to disabled. With an explicitly configured header and trusted proxy CIDRs, only trusted RemoteAddr peers can forward an address; all header lines are joined in received order before traversal chooses the rightmost untrusted hop. Invalid forwarding chains fall back to RemoteAddr. The trusted edge proxy must append the actual connecting address.
 
-Ordinary credential failures produce a warning with trace_id and HMAC identity, without writing audit rows. The email counter's first blocked attempt records at most one credential-free audit event per window; audit failure cannot alter invalid-credential responses or the limiter response. Successful session creation and its audit row share one transaction; rollback failures preserve both causes.
+Ordinary credential failures produce a warning with the request id and HMAC identity, without writing audit rows. The email counter's first blocked attempt records at most one credential-free audit event per window; audit failure cannot alter invalid-credential responses or the limiter response. Successful session creation and its audit row share one transaction; rollback failures preserve both causes.
 
 Argon2 creation and comparison acquire a bounded semaphore using request cancellation. Cancelled waits return retryable DEPENDENCY_TIMEOUT errors. Iterations, memory, parallelism, salt length, key length and concurrency come from typed config; running hashes release their slot after completion.
 
-Middleware preserves the response writer and request cancellation. Session reads compute `Expired` using database `now()` and use that same clock for last-seen refresh and purge. App-clock skew cannot override the database expiry decision. Session reads update last_seen_at only after CORE_AUTH_SESSION_TOUCH_INTERVAL and never for rows whose expiry has passed. The token lookup establishes trusted scope before the scoped session query. The periodic system job deletes expired sessions across every tenant through `PurgeAllExpiredSessions`, preserving active sessions; request-path reads/deletes and `PurgeExpiredSessions` still require tenant context. Limiter/hash operations and the purge job carry parented spans.
+Middleware preserves the response writer and request cancellation. Session reads compute `Expired` using database `now()` and use that same clock for last-seen refresh and purge. App-clock skew cannot override the database expiry decision. Session reads update last_seen_at only after CORE_AUTH_SESSION_TOUCH_INTERVAL and never for rows whose expiry has passed. The token lookup establishes trusted scope before the scoped session query. The periodic system job deletes expired sessions across every tenant through `PurgeAllExpiredSessions`, preserving active sessions; request-path reads/deletes and `PurgeExpiredSessions` still require tenant context.
 
 ## Common failures
 

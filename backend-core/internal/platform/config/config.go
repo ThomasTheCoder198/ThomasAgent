@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"net/url"
 	"strings"
 	"time"
 
@@ -173,7 +174,7 @@ type Config struct {
 	ReadHeaderTimeout        time.Duration     `env:"READ_HEADER_TIMEOUT" envDefault:"10s"`
 	DatabaseURL              string            `env:"DATABASE_URL,required,notEmpty"`
 	RedisURL                 string            `env:"REDIS_URL,required,notEmpty"`
-	OTLPEndpoint             string            `env:"OTLP_ENDPOINT"`
+	LogsOTLPEndpoint         string            `env:"LOGS_OTLP_ENDPOINT"`
 	LogLevel                 string            `env:"LOG_LEVEL" envDefault:"info"`
 	Retry                    RetryConfig       `envPrefix:"RETRY_"`
 	Stream                   ConsumerConfig    `envPrefix:"STREAM_"`
@@ -228,6 +229,7 @@ func (c Config) validate() error {
 	errs = append(errs, c.Auth.validate()...)
 	errs = append(errs, c.validateServiceToken()...)
 	errs = append(errs, c.validateProvider()...)
+	errs = append(errs, c.validateLogsEndpoint()...)
 	return errors.Join(errs...)
 }
 
@@ -269,4 +271,23 @@ func (c Config) validateProvider() []error {
 		errs = append(errs, fmt.Errorf("CORE_PROVIDER_PRIVATE_ALLOWLIST: %w", err))
 	}
 	return errs
+}
+
+const (
+	schemeHTTP  = "http"
+	schemeHTTPS = "https"
+	rootPath    = "/"
+)
+
+// validateLogsEndpoint wants the complete logs URL: a bare collector base URL would silently post to the wrong path.
+func (c Config) validateLogsEndpoint() []error {
+	if c.LogsOTLPEndpoint == "" {
+		return nil
+	}
+	parsed, err := url.Parse(c.LogsOTLPEndpoint)
+	if err != nil || (parsed.Scheme != schemeHTTP && parsed.Scheme != schemeHTTPS) || parsed.Host == "" ||
+		parsed.Path == "" || parsed.Path == rootPath {
+		return []error{errors.New("CORE_LOGS_OTLP_ENDPOINT must be a full http(s) URL including the logs path")}
+	}
+	return nil
 }

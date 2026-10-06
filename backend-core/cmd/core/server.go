@@ -8,10 +8,11 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/codes"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
@@ -68,7 +69,7 @@ func (a *application) buildRouter(ctx context.Context, pool *pgxpool.Pool, redis
 		proxyNetworks = append(proxyNetworks, network)
 	}
 	return newRouter(routerDeps{
-		log: a.log, serviceName: a.cfg.ServiceName,
+		log:                a.log,
 		auth:               authService,
 		limiter:            auth.NewLoginLimiter(redisClient, a.cfg.Auth, []byte(a.cfg.ServiceToken)),
 		cookieSecure:       a.cfg.Auth.CookieSecure,
@@ -96,17 +97,16 @@ func (a *application) purgeExpiredSessions(ctx context.Context, service *auth.Se
 	}
 }
 
+// runSessionPurge is a scheduled job: each run gets its own job id so its log lines can be found together.
 func (a *application) runSessionPurge(ctx context.Context, service *auth.Service) {
-	ctx, span := otel.Tracer(auth.TracerName).Start(ctx, auth.SessionPurgeSpan)
-	defer span.End()
+	ctx = logging.ContextWithRequestID(ctx, requestid.NewJob())
+	start := time.Now()
 	count, err := service.PurgeAllExpiredSessions(ctx)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "session purge failed")
-		a.log.ErrorContext(ctx, "expired session purge failed", "error", err)
+		a.log.ErrorContext(ctx, "expired session purge failed", "error", err, fieldDurationMS, time.Since(start).Milliseconds())
 		return
 	}
-	a.log.InfoContext(ctx, "expired sessions purged", "count", count)
+	a.log.InfoContext(ctx, "expired sessions purged", "count", count, fieldDurationMS, time.Since(start).Milliseconds())
 }
 
 func (a *application) listenAndServe(ctx context.Context, handler http.Handler) error {
@@ -133,3 +133,5 @@ func (a *application) listenAndServe(ctx context.Context, handler http.Handler) 
 func (a *application) readinessChecks(pool *pgxpool.Pool, redisClient *redis.Client) map[string]httpx.DependencyPinger {
 	return map[string]httpx.DependencyPinger{"postgres": pool, "redis": redisx.ClientPinger{Client: redisClient}}
 }
+
+const fieldDurationMS = "duration_ms"

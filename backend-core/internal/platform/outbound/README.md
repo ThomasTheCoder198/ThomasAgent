@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Creates the provider HTTP client with destination validation and DNS pinning. Registry owns catalog response byte limits and its outbound tracing/logging boundary.
+Creates the provider HTTP client with destination validation and DNS pinning. Registry owns catalog response byte limits and its outbound logging boundary.
 
 ## Entry points
 
@@ -27,7 +27,7 @@ go test ./internal/platform/outbound ./internal/platform/config -count=1
 
 Public destinations require HTTPS. Requests with credentials, fragments or unsupported schemes are rejected before transport. Every DNS answer must be permitted before any dial; connections use checked IP literals while HTTP keeps the hostname for TLS verification. Reserved and special-use ranges, IPv4-mapped IPv6, unspecified addresses and multicast are rejected. Exact private allowlist entries permit HTTP plus private/loopback addresses; link-local metadata addresses remain blocked.
 
-Redirects are rejected and ambient HTTP proxies are disabled. No package state is mutable globally. Dial/DNS/TLS/body errors discard raw causes; operational policy errors use nonretryable `REGISTRY_PROVIDER_REJECTED` and network failures use retryable catalog errors. This layer does not log: Registry logs once with its span and `trace_id`.
+Redirects are rejected and ambient HTTP proxies are disabled. No package state is mutable globally. Dial/DNS/TLS/body errors discard raw causes; operational policy errors use nonretryable `REGISTRY_PROVIDER_REJECTED` and network failures use retryable catalog errors. This layer does not log: Registry logs once, with the request id.
 
 Go `http.Client.Do` adds the request URL to its `url.Error` even when the transport cause is safe. Catalog callers must map errors to safe catalog codes without retaining that raw wrapper, and must never log request URLs, headers or bodies.
 

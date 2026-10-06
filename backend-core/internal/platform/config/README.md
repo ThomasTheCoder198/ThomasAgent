@@ -39,7 +39,7 @@ Environment variables and defaults:
 | CORE_REDIS_URL                            | Required, nonempty                                           |
 | CORE_VAULT_MASTER_KEY                     | Required, nonempty; base64 of exactly 32 bytes for the vault |
 | CORE_VAULT_KEY_ID                         | v1                                                           |
-| CORE_OTLP_ENDPOINT                        | Empty; disables export                                       |
+| CORE_LOGS_OTLP_ENDPOINT | Empty; disables export. Full logs URL, e.g. `http://otel-collector:4318/v1/logs` (legacy) or `http://victorialogs:9428/insert/opentelemetry/v1/logs` |
 | CORE_LOG_LEVEL                            | info; debug/info/warn/error                                  |
 | CORE_SERVICE_NAME                         | thomas-core                                                  |
 | CORE_RETRY_MAX_ATTEMPTS                   | 4                                                            |

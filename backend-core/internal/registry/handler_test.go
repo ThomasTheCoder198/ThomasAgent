@@ -15,7 +15,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
@@ -35,7 +34,7 @@ func newRouter(t *testing.T, logs *bytes.Buffer) (chi.Router, *Service) {
 	s := newTestService(t, &fakeCatalog{})
 	log, err := logging.NewLogger(logs, "debug", "test", "test", nil)
 	require.NoError(t, err)
-	r := httpx.NewRouter(httpx.NewSlogErrorLogger(log), registryTestTracing(t), httpx.LogAccess(log))
+	r := httpx.NewRouter(httpx.NewSlogErrorLogger(log), httpx.LogAccess(log))
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			next.ServeHTTP(w, r.WithContext(platformContext(r.Context())))
@@ -58,20 +57,6 @@ func TestServiceTokenSetsExplicitPlatformTenant(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request.WithContext(tenant.WithID(request.Context(), "untrusted")))
 	require.Equal(t, http.StatusNoContent, response.Code)
-}
-
-func registryTestTracing(t *testing.T) httpx.Middleware {
-	t.Helper()
-	provider := sdktrace.NewTracerProvider()
-	t.Cleanup(func() { require.NoError(t, provider.Shutdown(platformContext(context.Background()))) })
-	tracer := provider.Tracer("registry-test")
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-			ctx, span := tracer.Start(request.Context(), "registry-test.request")
-			defer span.End()
-			next.ServeHTTP(w, request.WithContext(ctx))
-		})
-	}
 }
 
 func TestServiceToken_RejectsMissingBearerPrefixAndEmptyConfiguration(t *testing.T) {
@@ -154,7 +139,7 @@ func TestRegistryHTTP_RealLoginSessionAndCSRF(t *testing.T) {
 	auth.NewHandler(authSvc, auth.NewLimiter(registryRedis(t), 10, time.Minute), false).Mount(router)
 	logger, err := logging.NewLogger(&logs, "debug", "registry-test", "test", nil)
 	require.NoError(t, err)
-	protected := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), registryTestTracing(t), httpx.LogAccess(logger))
+	protected := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
 	protected.Use(auth.RequireSession(authSvc))
 	NewHandler(svc, testMaxBodyBytes).Mount(protected)
 	unauth := send(protected, http.MethodGet, "/api/v1/providers", "", nil)
@@ -181,7 +166,7 @@ func TestRegistryHTTP_RealLoginSessionAndCSRF(t *testing.T) {
 	require.Equal(t, http.StatusCreated, created.Code)
 	require.NotContains(t, created.Body.String(), secretKey)
 	require.NotContains(t, logs.String(), secretKey)
-	require.Contains(t, logs.String(), "trace_id")
+	require.Contains(t, logs.String(), "request_id")
 }
 
 func TestRegistryHTTP_CRUDRoutesAndWriteOnlyKeyUpdates(t *testing.T) {

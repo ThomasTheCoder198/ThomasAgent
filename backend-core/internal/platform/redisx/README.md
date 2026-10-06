@@ -28,8 +28,7 @@ Docker Desktop is required for the jobs integration tests.
 See the [shared naming glossary](../../../../docs/glossary.md) for terms used across services.
 Failed startup ping closes the client before returning an application error.
 Successful readiness ping returns a nil error interface; only failed commands are wrapped.
-Open and readiness ping use the named `core.redis.open` and `core.redis.ping` client spans; startup failures are logged once by
-core with a catalog code and trace context, without the connection URL.
+Startup failures are logged once by core with a catalog code and the request or startup context, without the connection URL.
 Redis URL credentials and document content must never be logged.
 Tunables for jobs come from config.OutboxRelayConfig and config.ConsumerConfig.
 

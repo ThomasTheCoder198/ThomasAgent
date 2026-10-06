@@ -12,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
@@ -34,9 +33,7 @@ func TestAPI_GeneratedPostmanCollection(t *testing.T) {
 	t.Setenv("CORE_SERVICE_TOKEN", "fixture-api-service-token-with-at-least-32-characters")
 	cfg, err := config.Load()
 	require.NoError(t, err)
-	provider := sdktrace.NewTracerProvider()
-	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
-	app := &application{cfg: cfg, log: slog.New(slog.NewJSONHandler(io.Discard, nil)), startupTracer: provider.Tracer("api-test")}
+	app := &application{cfg: cfg, log: slog.New(slog.NewJSONHandler(io.Discard, nil))}
 	redisClient, err := app.openRedis(t.Context())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, redisClient.Close()) })

@@ -8,9 +8,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
@@ -197,20 +194,4 @@ func TestDo_OperationCancellationUsesCatalogError(t *testing.T) {
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, errors.CodeProviderUnavailable, appErr.Code)
 	require.ErrorIs(t, err, context.Canceled)
-}
-
-func TestDo_EmitsRetrySpanWithParentContext(t *testing.T) {
-	recorder := tracetest.NewSpanRecorder()
-	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
-	previous := otel.GetTracerProvider()
-	otel.SetTracerProvider(provider)
-	t.Cleanup(func() { otel.SetTracerProvider(previous); require.NoError(t, provider.Shutdown(context.Background())) })
-	ctx, parent := provider.Tracer("test").Start(t.Context(), "parent")
-	err := Do(ctx, testPolicy(&recordedSleeps{}), func(context.Context) error { return nil })
-	parent.End()
-	require.NoError(t, err)
-	spans := recorder.Ended()
-	require.Len(t, spans, 2)
-	require.Equal(t, "core.retry.execute", spans[0].Name())
-	require.Equal(t, parent.SpanContext().SpanID(), spans[0].Parent().SpanID())
 }

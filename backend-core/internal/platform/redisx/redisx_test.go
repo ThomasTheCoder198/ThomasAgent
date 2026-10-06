@@ -26,8 +26,3 @@ func TestClientPinger_SuccessAndFailure(t *testing.T) {
 	require.ErrorAs(t, pinger.Ping(ctx), &appErr)
 	require.Equal(t, errors.CodeInternalError, appErr.Code)
 }
-
-func TestSpanNames_UseCoreServicePrefix(t *testing.T) {
-	require.Equal(t, "redisx", redisTracerName)
-	require.Equal(t, []string{"core.redis.open", "core.redis.ping"}, []string{openSpan, pingSpan})
-}

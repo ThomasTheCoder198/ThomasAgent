@@ -1,0 +1,88 @@
+name: thomas-ragx
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: ${LOG_MAX_SIZE:-10m}
+    max-file: ${LOG_MAX_FILE:-5}
+
+x-rag-env: &rag-env
+  RAG_CORE_SERVICE_TOKEN: ${RAG_CORE_SERVICE_TOKEN}
+  RAG_CORE_INTERNAL_URL: ${RAG_CORE_INTERNAL_URL:-http://host.docker.internal:8080}
+  RAG_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+  RAG_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+  RAG_OTLP_ENDPOINT: ${RAG_OTLP_ENDPOINT-http://phoenix:6006}
+  RAG_PHOENIX_API_KEY: ${RAG_PHOENIX_API_KEY}
+  RAG_PHOENIX_PROJECT: ${RAG_PHOENIX_PROJECT:-thomas-ragx}
+  RAG_TRACE_CONTENT: ${RAG_TRACE_CONTENT:-false}
+  RAG_BUCKETS: '["kb-raw","kb-preview","chat-attachments"]'
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.19.1-unprivileged
+    logging: *logging
+    volumes: [qdrant-data:/qdrant/storage]
+    ports: ["${QDRANT_HOST_PORT:-6333}:6333"]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    logging: *logging
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes: [minio-data:/data]
+    ports: ["9000:9000", "9001:9001"]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  phoenix:
+    image: arizephoenix/phoenix:version-20.19.0
+    logging: *logging
+    environment:
+      PHOENIX_WORKING_DIR: /mnt/data
+      PHOENIX_ENABLE_AUTH: "true"
+      PHOENIX_SECRET: ${PHOENIX_SECRET}
+      PHOENIX_ADMIN_SECRET: ${PHOENIX_ADMIN_SECRET}
+      PHOENIX_DEFAULT_ADMIN_INITIAL_PASSWORD: ${PHOENIX_DEFAULT_ADMIN_INITIAL_PASSWORD:-admin}
+    volumes: [phoenix-data:/mnt/data]
+    ports: ["${PHOENIX_HOST_PORT:-6006}:6006"]
+    healthcheck:
+      # Distroless image: its Python performs the probe without a shell or wget.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6006/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  ragx-bootstrap:
+    build: ../../ragx
+    logging: *logging
+    command: ["bootstrap"]
+    environment: *rag-env
+    depends_on:
+      minio: { condition: service_healthy }
+      qdrant: { condition: service_healthy }
+
+  ragx-api:
+    build: ../../ragx
+    logging: *logging
+    command: ["serve"]
+    environment: *rag-env
+    ports: ["8090:8090"]
+    # Linux servers do not define host.docker.internal by default (RAG_CORE_INTERNAL_URL).
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    depends_on:
+      ragx-bootstrap: { condition: service_completed_successfully }
+
+volumes:
+  qdrant-data:
+  minio-data:
+  phoenix-data:

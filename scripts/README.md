@@ -1,7 +1,7 @@
 # Scripts
 
 ## Purpose
-Owns root service smoke checks, including `ragx-health` and `error-response-404`.
+Owns root service smoke checks, including core log/metrics correlation, optional ragx/Phoenix health and `error-response-404`.
 See the [glossary](../docs/glossary.md) for response and health terminology.
 
 ## Entry points
@@ -9,12 +9,14 @@ See the [glossary](../docs/glossary.md) for response and health terminology.
 - `smoke_identity.py`: checks login, identity, CSRF, provider creation and cleanup, then logout.
 
 ## Dependencies
-- Uses Bash, curl and uv-managed Python with python-dotenv; requires the full compose stack.
+- Uses Bash, curl and uv-managed Python with python-dotenv; requires `deploy/core`, with `deploy/ragx` checked when its API container exists.
 - Used by local deployment verification.
 
 ## Run & test
 ```bash
 task up
+# Optional: start ragx and Phoenix for combined-stack checks.
+task up:ragx
 task smoke
 bash -n scripts/smoke.sh
 ```
@@ -27,4 +29,5 @@ the login session is logged out on success. No model roles are changed.
 
 ## Common failures
 - Connection refused: start the stack and inspect failed container logs.
-- Langfuse health failure: wait for its initial database migrations to finish.
+- Ragx health failure: start or repair `deploy/ragx`; smoke skips it only when the API container is absent.
+- Phoenix health failure: inspect Phoenix startup logs and `PHOENIX_HOST_PORT` in `deploy/ragx/.env`.

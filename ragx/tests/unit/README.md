@@ -8,6 +8,7 @@ Checks config, errors, logging redaction, tracing, retries, API responses, and b
 - `test_config.py`: unchanged environment aliases and defaults for renamed Config fields, including construction by Python field name.
 - `test_logging.py`: redaction and CLI bootstrap logging context.
 - `test_health.py`: response format and HTTP handler/access log correlation.
+- `test_tracing.py`: Phoenix bearer export and project resource, malformed-key rejection without credential leakage in standard-library logs, content policy, isolated app providers, direct root-span/request-ID correlation, error-response trace headers, and exporter outage tolerance. CLI wiring checks content policy and global installation before startup plus provider shutdown on both normal and failed startup.
 
 ## Dependencies
 - Uses: pytest, service modules, and injected fakes.

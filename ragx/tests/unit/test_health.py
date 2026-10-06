@@ -14,6 +14,7 @@ def test_healthz_returns_response_with_request_id() -> None:
     app = create_app(Config(core_service_token="t", minio_access_key="a", minio_secret_key="s"))
     res = TestClient(app).get("/healthz")
     assert res.status_code == 200
+    assert len(res.headers["X-Ragx-Trace-Id"]) == 32
     assert res.json()["data"] == {"status": "ok"}
     assert res.json()["meta"]["requestId"] == res.headers["X-Request-Id"]
 
@@ -45,6 +46,7 @@ def test_app_logs_environment_and_correlates_handler_with_response(
         with TestClient(app) as client:
             response = client.get("/logged", headers=headers)
         assert response.status_code == 200
+        assert len(response.headers["X-Ragx-Trace-Id"]) == 32
         response_request_id = response.headers["X-Request-Id"]
         assert response.json() == {"data": {"status": "ok"}, "meta": {"requestId": response_request_id}}
         if incoming_request_id == "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21":
@@ -61,6 +63,7 @@ def test_app_logs_environment_and_correlates_handler_with_response(
             assert record["ts"]
             assert record["request_id"] == response_request_id
             assert len(record["trace_id"]) == 32
+            assert record["trace_id"] == response.headers["X-Ragx-Trace-Id"]
             assert len(record["span_id"]) == 16
             assert int(record["trace_id"], 16) != 0
             assert int(record["span_id"], 16) != 0

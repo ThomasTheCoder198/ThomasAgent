@@ -14,6 +14,9 @@ class Config(BaseSettings):
     http_port: int = 8090
     log_level: Literal["debug", "info", "warn", "error"] = "info"
     otlp_endpoint: str = ""
+    phoenix_api_key: SecretStr | None = None
+    phoenix_project: str = "thomas-ragx"
+    trace_content: bool = False
     core_internal_url: str = "http://core:8080"
     core_service_token: SecretStr
     qdrant_url: str = "http://qdrant:6333"

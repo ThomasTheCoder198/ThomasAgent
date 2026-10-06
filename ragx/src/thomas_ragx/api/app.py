@@ -1,5 +1,6 @@
-import uuid
 from collections.abc import Awaitable, Callable
+from time import perf_counter
+from typing import Final
 
 import structlog
 from fastapi import FastAPI, Request, Response
@@ -12,9 +13,22 @@ from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
 from thomas_ragx.platform.http_response import error_response, install_error_handlers
 from thomas_ragx.platform.logging import configure_logging
+from thomas_ragx.platform.request_id import (
+    REQUEST_ID_HEADER,
+    REQUEST_ID_SOURCE_GENERATED,
+    accept_request_id,
+)
 from thomas_ragx.platform.tracing import configure_tracing
 
-REQUEST_ID_HEADER = "X-Request-Id"
+MILLISECONDS_PER_SECOND: Final = 1000
+
+
+def _request_id_fields(sent: str | None, rejected: bool) -> dict[str, object]:
+    if rejected:
+        return {"request_id_source": REQUEST_ID_SOURCE_GENERATED, "client_request_id_rejected": True}
+    if not sent:
+        return {"request_id_source": REQUEST_ID_SOURCE_GENERATED}
+    return {}
 
 
 def create_app(config: Config | None = None) -> FastAPI:
@@ -28,7 +42,9 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def request_id(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        request_id = request.headers.get(REQUEST_ID_HEADER) or f"req_{uuid.uuid4()}"
+        started = perf_counter()
+        sent = request.headers.get(REQUEST_ID_HEADER)
+        request_id, rejected = accept_request_id(sent)
         request.state.request_id = request_id
         with (
             tracer.start_as_current_span(
@@ -46,7 +62,13 @@ def create_app(config: Config | None = None) -> FastAPI:
                 # Exception messages may contain secrets, so only the type is recorded.
                 logger.error("unhandled error", error_type=type(exc).__name__)  # noqa: TRY400
                 response = error_response(request, AppError(ErrorCode.INTERNAL_ERROR))
-            logger.info("request completed", method=request.method, status=response.status_code)
+            logger.info(
+                "request completed",
+                method=request.method,
+                status=response.status_code,
+                duration_ms=(perf_counter() - started) * MILLISECONDS_PER_SECOND,
+                **_request_id_fields(sent, rejected),
+            )
         response.headers[REQUEST_ID_HEADER] = request_id
         return response
 

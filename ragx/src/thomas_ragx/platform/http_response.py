@@ -4,7 +4,6 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from opentelemetry import trace
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from thomas_ragx.platform.constants import HTTP_STATUS_SERVER_ERROR
@@ -18,11 +17,6 @@ _STATUS_TO_CODE = {
 }
 
 log = structlog.get_logger(__name__)
-
-
-def _trace_id() -> str | None:
-    ctx = trace.get_current_span().get_span_context()
-    return format(ctx.trace_id, "032x") if ctx.is_valid else None
 
 
 def request_id_of(request: Request) -> str:
@@ -43,8 +37,8 @@ def error_response(request: Request, err: AppError) -> JSONResponse:
     }
     if err.details is not None and status < HTTP_STATUS_SERVER_ERROR:
         body["details"] = err.details
-    if trace_id := _trace_id():
-        body["traceId"] = trace_id
+    if request_id := request_id_of(request):
+        body["requestId"] = request_id
     return JSONResponse(status_code=status, content={"error": body})
 
 

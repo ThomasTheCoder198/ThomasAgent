@@ -8,7 +8,8 @@ Owns typed config, catalog errors, safe structured logging, tracing, and retry h
 - `constants.py`: shared HTTP status thresholds used by responses and retries.
 - `errors.py`: AppError and language selection.
 - `error_codes_gen.py`: shared definitions covering authentication, internal service-token validation, and provider/model registry errors.
-- `http_response.py`: success_body, error_response, request_id_of, and exception handlers.
+- `http_response.py`: success_body, error_response, request_id_of, and exception handlers; error bodies carry `requestId`.
+- `request_id.py`: shared request id header, pattern and prefixes (mirrored from `contracts/request-id.json`, checked by `test_request_id.py`), `is_valid_request_id`, and `accept_request_id`.
 - `logging.py`, `tracing.py`, `retry.py`: shared infrastructure.
 
 ## Dependencies

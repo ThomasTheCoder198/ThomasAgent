@@ -26,3 +26,5 @@ The application passes `Config.environment` to logging configuration, preserving
 ## Common failures
 - Missing credentials: supply the required RAG_ environment variables.
 - Bootstrap connection failure: start MinIO and Qdrant.
+
+`X-Request-Id` is accepted only when it matches the shared pattern. Otherwise the middleware generates a new `req_` id; the rejected value is never logged. Completion logs include monotonic elapsed `duration_ms` and add `request_id_source` for generated ids and `client_request_id_rejected` when a client value was rejected.

@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from thomas_ragx.api.app import create_app
+from thomas_ragx.platform.config import Config
 from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
 from thomas_ragx.platform.http_response import install_error_handlers
@@ -56,3 +58,31 @@ def test_error_response_wraps_unknown_routes() -> None:
     res = client.get("/nope")
     assert res.status_code == 404
     assert res.json()["error"]["code"] == "NOT_FOUND"
+
+
+def test_error_body_carries_request_id_not_trace_id() -> None:
+    app = create_app(Config(core_service_token="t", minio_access_key="a", minio_secret_key="s"))
+
+    @app.get("/conflict")
+    def conflict() -> None:
+        raise AppError(ErrorCode.CONFLICT)
+
+    sent = "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21"
+    try:
+        with TestClient(app) as client:
+            response = client.get("/conflict", headers={"X-Request-Id": sent})
+        assert response.json()["error"]["requestId"] == sent
+        assert "traceId" not in response.json()["error"]
+    finally:
+        app.state.tracer_provider.shutdown()
+
+
+def test_app_replaces_forged_request_id() -> None:
+    app = create_app(Config(core_service_token="t", minio_access_key="a", minio_secret_key="s"))
+    try:
+        with TestClient(app) as client:
+            response = client.get("/healthz", headers={"X-Request-Id": 'req_x"} injected'})
+        assert response.headers["X-Request-Id"].startswith("req_")
+        assert "injected" not in response.headers["X-Request-Id"]
+    finally:
+        app.state.tracer_provider.shutdown()

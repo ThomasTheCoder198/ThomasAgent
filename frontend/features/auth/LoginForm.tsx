@@ -7,7 +7,7 @@ import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/TextField";
 import type { Locale } from "@/i18n/config";
-import { ApiError, apiFetch } from "@/lib/api/client";
+import { apiFetch, describeApiError } from "@/lib/api/client";
 
 import { AUTH_PATHS } from "./paths";
 
@@ -32,7 +32,7 @@ export function LoginForm({ next }: { next: string }) {
       });
       router.replace(next);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : tErr("generic"));
+      setError(describeApiError(err, tErr("generic"), (id) => tErr("requestId", { id })));
       setPending(false);
     }
   }

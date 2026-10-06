@@ -8,6 +8,8 @@ messages from `contracts/errors.yaml`, the `thomas_session` + `thomas_csrf` cook
 unsafe methods, and the AI SDK UI Message Stream (`x-vercel-ai-ui-message-stream: v1`) for chat.
 All content it serves is **synthetic**.
 
+Error responses echo a valid `X-Request-Id` in both the header and `error.requestId`; missing or invalid IDs are replaced.
+
 ## Entry points
 
 - `server.ts` — `node:http` router; run with `npm run mock-core` (Node 24 strips the TypeScript types).

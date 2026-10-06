@@ -163,6 +163,7 @@
     "loadFailed": "Không mở được tài liệu nguồn."
   },
   "errors": {
+    "requestId": "(Mã yêu cầu: {id})",
     "generic": "Đã có lỗi xảy ra. Vui lòng thử lại.",
     "network": "Không kết nối được tới máy chủ."
   },

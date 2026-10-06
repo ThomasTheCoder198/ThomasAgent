@@ -5,6 +5,8 @@
 Owner sign-in and the server-side session check. Cookies (`thomas_session`, `thomas_csrf`) are set by core;
 this module never stores credentials or tokens.
 
+Login errors include the request ID when core supplies one, using the current language.
+
 ## Entry points
 
 - `LoginForm.tsx` — posts to `POST /api/v1/auth/login` and follows `next`.

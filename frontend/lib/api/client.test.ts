@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, apiFetch } from "./client";
+import { ApiError, apiFetch, describeApiError, mutationHeaders } from "./client";
+import { REQUEST_ID_PATTERN } from "./request-id";
 
 function mockFetch(response: Response | Error) {
   const fn = vi.fn<typeof fetch>(async () => {
     if (response instanceof Error) throw response;
-    return response;
+    return response.clone();
   });
   vi.stubGlobal("fetch", fn);
   return fn;
@@ -26,10 +27,65 @@ describe("apiFetch", () => {
   });
 
   it("throws ApiError from the error response", async () => {
-    mockFetch(json(409, { error: { code: "CONFLICT", message: "Xung đột", traceId: "t1" } }));
+    mockFetch(json(409, { error: { code: "CONFLICT", message: "Xung đột", requestId: "req_abcdefgh" } }));
     const err = await apiFetch("/api/v1/thing").catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
-    expect(err).toMatchObject({ code: "CONFLICT", status: 409, message: "Xung đột", traceId: "t1" });
+    expect(err).toMatchObject({
+      code: "CONFLICT",
+      status: 409,
+      message: "Xung đột",
+      requestId: "req_abcdefgh",
+    });
+  });
+
+  it("falls back to the response header for the request id", async () => {
+    mockFetch(
+      new Response(JSON.stringify({ error: { code: "CONFLICT", message: "Xung đột" } }), {
+        status: 409,
+        headers: { "Content-Type": "application/json", "X-Request-Id": "req_fromheader" },
+      }),
+    );
+    await expect(apiFetch("/api/v1/thing")).rejects.toMatchObject({ requestId: "req_fromheader" });
+  });
+
+  it("sends a new valid X-Request-Id on every call", async () => {
+    const fn = mockFetch(json(200, { data: [], meta: { requestId: "r" } }));
+    await apiFetch("/api/v1/providers");
+    await apiFetch("/api/v1/providers", { method: "POST", body: "{}" });
+    const ids = fn.mock.calls.map((call) => new Headers(call[1]?.headers).get("X-Request-Id"));
+    expect(ids).toHaveLength(2);
+    for (const id of ids) expect(REQUEST_ID_PATTERN.test(id ?? "")).toBe(true);
+    expect(ids[0]).not.toBe(ids[1]);
+  });
+
+  it("gives the chat transport a fresh request id per request", () => {
+    const first = mutationHeaders("vi")["X-Request-Id"];
+    const second = mutationHeaders("vi")["X-Request-Id"];
+    expect(REQUEST_ID_PATTERN.test(first ?? "")).toBe(true);
+    expect(first).not.toBe(second);
+  });
+
+  it("describes errors with the request id", () => {
+    const label = (id: string) => `(Mã yêu cầu: ${id})`;
+    const withId = new ApiError("CONFLICT" as never, "Xung đột", 409, undefined, "req_abcdefgh");
+    expect(describeApiError(withId, "fallback", label)).toBe("Xung đột (Mã yêu cầu: req_abcdefgh)");
+    expect(describeApiError(new ApiError("CONFLICT" as never, "Xung đột", 409), "fallback", label)).toBe(
+      "Xung đột",
+    );
+    expect(describeApiError(new Error("x"), "fallback", label)).toBe("fallback");
+  });
+
+  it.each(["GET", "HEAD", "OPTIONS"])("replaces supplied request IDs on each %s call", async (method) => {
+    const fn = mockFetch(json(200, { data: [] }));
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await apiFetch("/api/v1/providers", { method, headers: { "X-Request-Id": "req_suppliedid" } });
+    }
+    const ids = fn.mock.calls.map((call) => new Headers(call[1]?.headers).get("X-Request-Id"));
+    for (const id of ids) {
+      expect(REQUEST_ID_PATTERN.test(id ?? "")).toBe(true);
+      expect(id).not.toBe("req_suppliedid");
+    }
+    expect(ids[0]).not.toBe(ids[1]);
   });
 
   it("attaches the CSRF header on mutations", async () => {

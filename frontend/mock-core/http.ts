@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import { REQUEST_ID_PATTERN } from "../lib/api/request-id.ts";
 import { errorDefinitions, type ErrorCode } from "../lib/errors/codes.gen.ts";
 
 export type Locale = "vi" | "en";
@@ -39,12 +40,13 @@ export function sendError(
   headers?: Record<string, string | string[]>,
 ) {
   const spec = errorDefinitions[code];
-  const traceId = randomUUID().replaceAll("-", "");
+  const sent = req.headers["x-request-id"];
+  const requestId = typeof sent === "string" && REQUEST_ID_PATTERN.test(sent) ? sent : `req_${randomUUID()}`;
   writeJson(
     res,
     spec.httpStatus,
-    { error: { code, message: spec.message[requestLocale(req)], traceId } },
-    headers,
+    { error: { code, message: spec.message[requestLocale(req)], requestId } },
+    { "X-Request-Id": requestId, ...headers },
   );
 }
 

@@ -163,6 +163,7 @@
     "loadFailed": "Could not open the source document."
   },
   "errors": {
+    "requestId": "(Request ID: {id})",
     "generic": "Something went wrong. Please try again.",
     "network": "Could not reach the server."
   },

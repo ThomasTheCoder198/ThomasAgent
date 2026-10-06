@@ -6,6 +6,8 @@ Agents list and per-Agent settings: name and description, instructions, the one 
 per-tool policy (auto / ask / off) grouped by tool source, model overrides per role, context files. Edits stay in
 a local draft until one PATCH saves exactly what changed.
 
+Save errors include the request ID when core supplies one, using the current language.
+
 ## Entry points
 
 - `AgentList.tsx` — server-rendered departure-board table for `/agents`.

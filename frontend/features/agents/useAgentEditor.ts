@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import type { Locale } from "@/i18n/config";
-import { ApiError, apiFetch } from "@/lib/api/client";
+import { apiFetch, describeApiError as apiErrorText } from "@/lib/api/client";
 
 import { AGENT_PATHS, type AgentDetail } from "./contract";
 import {
@@ -51,7 +51,7 @@ function patchAgent(agent: AgentDetail, draft: AgentDraft, locale: Locale) {
  */
 export function useAgentEditor(initial: AgentDetail) {
   const locale = useLocale() as Locale;
-  const tErr = useTranslations("errors");
+  const t = useTranslations("errors");
   const router = useRouter();
   const [agent, setAgent] = useState(initial);
   const [draft, setDraft] = useState<AgentDraft>(() => fromDetail(initial));
@@ -84,7 +84,7 @@ export function useAgentEditor(initial: AgentDetail) {
       router.refresh();
       flash.start();
     } catch (err) {
-      setSave({ status: "error", message: err instanceof ApiError ? err.message : tErr("generic") });
+      setSave({ status: "error", message: apiErrorText(err, t("generic"), (id) => t("requestId", { id })) });
     } finally {
       savingRef.current = false;
     }

@@ -6,10 +6,13 @@ The response-aware HTTP client for core: unwraps `{ data }`, turns `{ error }` i
 catalog code, maps network failures and non-JSON bodies to `CLIENT_NETWORK_ERROR`, and attaches
 `X-CSRF-Token` from the `thomas_csrf` cookie on unsafe methods.
 
+Every call sends a fresh `X-Request-Id` (`request-id.ts`, values copied from `contracts/request-id.json` and checked by `request-id.test.ts`); `ApiError.requestId` comes from `error.requestId` or the response header, and `describeApiError` appends it to the user-facing message.
+
 ## Entry points
 
 - `client.ts` — `apiFetch` (browser), `parseResponse`, `mutationHeaders` (also used by the chat transport), `ApiError`.
 - `server.ts` — `serverFetch` for server components; calls `WEB_CORE_URL` directly and forwards the browser's cookies. `serverFetchOptional` (404 → fallback) is only for endpoints core may not serve yet where "empty" is a true answer (e.g. the Agent list); `serverFetchResult` returns a `Loaded<T>` so any other failure is rendered as an error state instead of an empty list.
+- `request-id.ts` — `newRequestId` and the shared header/pattern constants.
 - `loaded.ts` — the `Loaded<T>` type and `loadedOr`, shared by server loaders and client components.
 
 ## Dependencies

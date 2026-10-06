@@ -14,7 +14,6 @@ import (
 
 type routerDeps struct {
 	log                *slog.Logger
-	serviceName        string
 	auth               *auth.Service
 	limiter            *auth.Limiter
 	cookieSecure       bool

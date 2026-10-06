@@ -70,7 +70,7 @@ code 1. `status` logs version, path and applied/pending state from
 `postgres.MigrationStatuses`. Dependency failures (migration, Postgres open, Redis ping) emit one structured error with the catalog code and a sanitized error, never URLs or passwords. The process boundary
 recognizes an already logged error and returns a failure exit code without
 printing a second copy. Logger creation rejects unknown log levels.
-`newApplication` passes `Config.Environment` into the logger; process and HTTP logs follow the shared [log field contract](../../internal/platform/logging/README.md#log-field-contract).
+`newRouter` uses the injected logger for service identity. `newApplication` passes `Config.Environment` into the logger; process and HTTP logs follow the shared [log field contract](../../internal/platform/logging/README.md#log-field-contract).
 
 ## Common failures
 

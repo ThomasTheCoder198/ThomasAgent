@@ -36,7 +36,7 @@ func documentedRoutes(t *testing.T) map[string]bool {
 }
 
 func TestRoutesDocumentedInOpenAPI(t *testing.T) {
-	r := newRouter(routerDeps{log: slog.New(slog.NewTextHandler(io.Discard, nil)), serviceName: "test"})
+	r := newRouter(routerDeps{log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	documented := documentedRoutes(t)
 	var missing []string
 	implemented := map[string]bool{}

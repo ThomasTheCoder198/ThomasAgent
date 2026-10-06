@@ -7,6 +7,9 @@ Single source for error codes and shared schemas used by the Go core, Python RAG
 ## Entry points
 - `errors.yaml` — authoritative error codes, HTTP statuses, retryability, and VI/EN messages.
   Includes authentication, internal service-token, and model/provider registry errors.
+- `request-id.json` — the `X-Request-Id` header, its pattern and prefixes, with valid/invalid examples. There is no
+  generator: Go (`backend-core/internal/platform/requestid`), Python (`ragx/.../platform/request_id.py`) and
+  TypeScript (`frontend/lib/api/request-id.ts`) copy the values and each has a test that reads this file.
 - `cmd/errorcodegen` — command invoked by `task gen`.
 - `internal/errorcodegen` — catalog parser and Go, Python, and TypeScript renderers.
 - `openapi/core.v1.yaml` — source of truth for the core HTTP API.

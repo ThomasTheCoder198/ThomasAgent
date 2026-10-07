@@ -1,5 +1,14 @@
 {
   "common": { "appName": "ThomasAgent", "loading": "Đang tải…", "retry": "Thử lại" },
+  "routeStatus": {
+    "loadingTitle": "Đang mở trang",
+    "loadingBody": "ThomasAgent đang chuẩn bị nội dung.",
+    "errorTitle": "Không tải được trang",
+    "errorBody": "Trang hiện không khả dụng. Hãy thử lại sau ít phút.",
+    "notFoundTitle": "Không tìm thấy trang",
+    "notFoundBody": "Đường dẫn hoặc tài nguyên này không tồn tại.",
+    "backToWorkspace": "Về hội thoại mới"
+  },
   "auth": {
     "title": "Đăng nhập",
     "subtitle": "Workspace AI của riêng bạn.",

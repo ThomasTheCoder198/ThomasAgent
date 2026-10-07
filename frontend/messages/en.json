@@ -1,5 +1,14 @@
 {
   "common": { "appName": "ThomasAgent", "loading": "Loading…", "retry": "Retry" },
+  "routeStatus": {
+    "loadingTitle": "Opening page",
+    "loadingBody": "ThomasAgent is preparing the content.",
+    "errorTitle": "Could not load this page",
+    "errorBody": "This page is temporarily unavailable. Please try again shortly.",
+    "notFoundTitle": "Page not found",
+    "notFoundBody": "This path or resource does not exist.",
+    "backToWorkspace": "Go to a new chat"
+  },
   "auth": {
     "title": "Sign in",
     "subtitle": "Your own AI workspace.",

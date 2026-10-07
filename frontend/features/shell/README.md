@@ -13,6 +13,7 @@ one-station empty state.
 - `shell-menu.ts` — context for `MenuButton` / `CollapseButton`; `pageOwnsHeader()` lists routes whose header carries the mobile menu.
 - `NavLink.tsx` — `aria-current` from the live pathname (layouts persist across navigations).
 - `PageHeader.tsx`, `UserMenu.tsx`, `EmptyState.tsx`.
+- `RouteStatus.tsx` — shared loading, recoverable error and 404 station for route boundaries; root and workspace variants use the same copy and theme tokens.
 
 ## Dependencies
 

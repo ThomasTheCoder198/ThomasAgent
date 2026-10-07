@@ -32,6 +32,7 @@ npm run e2e -- e2e/chat.spec.ts
 - Tool line colour and name plate come from `toolMetadata` (`{ line, source, durationMs }`), reasoning timing from `providerMetadata.thomas.durationMs`, citation locators from `source-document.providerMetadata.thomas`. Never infer a line from a tool name.
 - The transport sends only the newest message (`ChatRequestBody`); the chosen model rides in the request `body`.
 - `[n]` markers become roundels only when a source numbered `n` exists in the same message.
+- `/chat` creates a fresh draft conversation; `/chat/[id]` renders the workspace 404 state when that conversation is missing.
 
 ## Common failures
 

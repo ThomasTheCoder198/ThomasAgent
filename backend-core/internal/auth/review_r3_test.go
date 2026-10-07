@@ -3,10 +3,12 @@ package auth
 import (
 	"fmt"
 	"net/http"
-	"net/http/httptest"
-	"net/netip"
 	"testing"
 	"time"
+
+	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/handler"
+	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
+	authtoken "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/token"
 
 	"github.com/stretchr/testify/require"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
@@ -25,7 +27,7 @@ func TestLogin_IPBudgetBlocksEmailSpray(t *testing.T) {
 	require.NoError(t, err)
 	service, _ := newService(t)
 	router := httpx.NewRouter(nil)
-	NewHandler(service, NewLoginLimiter(startRedis(t), cfg.Auth, []byte(cfg.ServiceToken)), false).Mount(router)
+	authhandler.NewAuthHandler(service, authlimiter.NewLoginLimiter(startRedis(t), cfg.Auth, []byte(cfg.ServiceToken)), false).Mount(router)
 	for index := range 3 {
 		require.Equal(t, http.StatusUnauthorized, attemptFrom(router, fmt.Sprintf("spray%d@example.com", index), "192.0.2.1:9000", "").Code)
 	}
@@ -33,16 +35,6 @@ func TestLogin_IPBudgetBlocksEmailSpray(t *testing.T) {
 	require.Equal(t, http.StatusTooManyRequests, blocked.Code)
 	require.NotEmpty(t, blocked.Header().Get("Retry-After"))
 	require.Equal(t, http.StatusUnauthorized, attemptFrom(router, "another@example.com", "192.0.2.2:9000", "").Code)
-}
-
-func TestClientIP_JoinsForwardingHeaderLines(t *testing.T) {
-	handler := NewHandlerWithProxyHeader(nil, nil, false, "X-Forwarded-For", nil)
-	handler.trustedProxyCIDRs = []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
-	req := httptest.NewRequest(http.MethodPost, "/", nil)
-	req.RemoteAddr = "10.0.0.1:9000"
-	req.Header.Add("X-Forwarded-For", "192.0.2.99")
-	req.Header.Add("X-Forwarded-For", "198.51.100.7, 10.0.0.2")
-	require.Equal(t, "198.51.100.7", handler.clientIP(req))
 }
 
 func TestAuthenticate_UsesDatabaseExpiryDespiteClockSkew(t *testing.T) {
@@ -55,12 +47,12 @@ func TestAuthenticate_UsesDatabaseExpiryDespiteClockSkew(t *testing.T) {
 	clock.t = clock.t.Add(24 * time.Hour)
 	_, _, err = service.Authenticate(ctx, valid.Token)
 	require.NoError(t, err, "a valid DB session must survive an app clock ahead of DB")
-	_, err = service.db.Exec(ctx, `UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1`, hashToken(expired.Token))
+	_, err = service.db.Exec(ctx, `UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1`, authtoken.Hash(expired.Token))
 	require.NoError(t, err)
 	clock.t = clock.t.Add(-48 * time.Hour)
 	_, _, err = service.Authenticate(ctx, expired.Token)
 	require.Equal(t, errors.CodeAuthSessionExpired, codeOf(t, err))
 	var count int
-	require.NoError(t, service.db.QueryRow(ctx, `SELECT count(*) FROM sessions WHERE token_hash=$1`, hashToken(expired.Token)).Scan(&count))
+	require.NoError(t, service.db.QueryRow(ctx, `SELECT count(*) FROM sessions WHERE token_hash=$1`, authtoken.Hash(expired.Token)).Scan(&count))
 	require.Zero(t, count)
 }

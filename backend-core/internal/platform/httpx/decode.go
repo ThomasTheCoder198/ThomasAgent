@@ -12,8 +12,6 @@ import (
 
 const fieldBody = "body"
 
-var errTrailingJSON = stderrors.New("unexpected data after JSON value")
-
 // The decoder error is kept only as the cause (never serialized), so request content cannot reach a response.
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any, maxBytes int64) error {
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get(headerContentType))
@@ -29,7 +27,7 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any, maxBytes int64)
 	case stderrors.Is(err, io.EOF):
 		return nil
 	case err == nil:
-		return decodeFailure(errTrailingJSON)
+		return decodeFailure(errors.ErrTrailingJSON)
 	default:
 		return decodeFailure(err)
 	}

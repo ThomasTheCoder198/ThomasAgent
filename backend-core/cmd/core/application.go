@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/metrics"
@@ -16,7 +15,7 @@ type application struct {
 	cfg         config.Config
 	log         *slog.Logger
 	telemetry   telemetry.Telemetry
-	authService *auth.Service
+	authService sessionPurger
 	metrics     *metrics.Metrics
 }
 

@@ -14,6 +14,11 @@ import (
 	"testing"
 	"time"
 
+	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/handler"
+	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
+	authmiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/middleware"
+	authtoken "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/token"
+
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 
 	"github.com/go-chi/chi/v5"
@@ -43,9 +48,9 @@ func newServer(t *testing.T, maxAttempts int) (http.Handler, *clock) {
 	svc, c := newService(t)
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	r := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
-	NewHandler(svc, NewLimiter(startRedis(t), maxAttempts, time.Minute), false).Mount(r)
+	authhandler.NewAuthHandler(svc, authlimiter.NewLimiter(startRedis(t), maxAttempts, time.Minute), false).Mount(r)
 	r.Group(func(pr chi.Router) {
-		pr.Use(RequireSession(svc))
+		pr.Use(authmiddleware.RequireSession(svc))
 		pr.Post("/api/v1/things", func(w http.ResponseWriter, req *http.Request) {
 			httpx.WriteSuccess(w, req, http.StatusCreated, map[string]bool{"ok": true})
 		})
@@ -117,24 +122,24 @@ func TestLoginSetsCookies(t *testing.T) {
 	h, _ := newServer(t, 10)
 	rec := login(t, h, ownerEmail, ownerPassword)
 	require.Equal(t, http.StatusOK, rec.Code)
-	sess := cookie(rec, CookieSession)
+	sess := cookie(rec, authmiddleware.CookieSession)
 	require.NotNil(t, sess)
 	require.True(t, sess.HttpOnly)
 	require.Equal(t, http.SameSiteLaxMode, sess.SameSite)
-	require.NotNil(t, cookie(rec, CookieCSRF))
+	require.NotNil(t, cookie(rec, authmiddleware.CookieCSRF))
 }
 
 func TestMutationWithoutCSRFIsForbidden(t *testing.T) {
 	h, _ := newServer(t, 10)
 	rec := login(t, h, ownerEmail, ownerPassword)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/things", nil)
-	req.AddCookie(cookie(rec, CookieSession))
+	req.AddCookie(cookie(rec, authmiddleware.CookieSession))
 	out := httptest.NewRecorder()
 	h.ServeHTTP(out, req)
 	require.Equal(t, http.StatusForbidden, out.Code)
 	require.Equal(t, "AUTH_CSRF_INVALID", errCode(t, out))
 
-	req.Header.Set(HeaderCSRF, cookie(rec, CookieCSRF).Value)
+	req.Header.Set(authmiddleware.HeaderCSRF, cookie(rec, authmiddleware.CookieCSRF).Value)
 	ok := httptest.NewRecorder()
 	h.ServeHTTP(ok, req)
 	require.Equal(t, http.StatusCreated, ok.Code)
@@ -143,12 +148,12 @@ func TestMutationWithoutCSRFIsForbidden(t *testing.T) {
 func TestExpiredSessionIsRejectedOverHTTP(t *testing.T) {
 	service, _ := newService(t)
 	h := httpx.NewRouter(nil)
-	NewHandler(service, NewLimiter(startRedis(t), 10, time.Minute), false).Mount(h)
+	authhandler.NewAuthHandler(service, authlimiter.NewLimiter(startRedis(t), 10, time.Minute), false).Mount(h)
 	rec := login(t, h, ownerEmail, ownerPassword)
-	_, err := service.db.Exec(t.Context(), `UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1`, hashToken(cookie(rec, CookieSession).Value))
+	_, err := service.db.Exec(t.Context(), `UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1`, authtoken.Hash(cookie(rec, authmiddleware.CookieSession).Value))
 	require.NoError(t, err)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
-	req.AddCookie(cookie(rec, CookieSession))
+	req.AddCookie(cookie(rec, authmiddleware.CookieSession))
 	out := httptest.NewRecorder()
 	h.ServeHTTP(out, req)
 	require.Equal(t, http.StatusUnauthorized, out.Code)
@@ -181,7 +186,7 @@ func TestLoginLimiterSeparatesForwardedIPsAndEmails(t *testing.T) {
 	client := startRedis(t)
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger))
-	NewHandlerWithTrustedProxies(svc, NewLoginLimiter(client, config.AuthConfig{LoginMaxAttempts: 1, LoginEmailMaxAttempts: 10, LoginIPMaxAttempts: 100, LoginWindow: time.Minute}, []byte("test-limiter-hmac-key-at-least-32-chars")), false, "X-Trusted-Client-IP", []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, logger).Mount(router)
+	authhandler.NewAuthHandlerWithTrustedProxies(svc, authlimiter.NewLoginLimiter(client, config.AuthConfig{LoginMaxAttempts: 1, LoginEmailMaxAttempts: 10, LoginIPMaxAttempts: 100, LoginWindow: time.Minute}, []byte("test-limiter-hmac-key-at-least-32-chars")), false, "X-Trusted-Client-IP", []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, logger).Mount(router)
 	attempt := func(email, ip string) int {
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"email":"`+email+`","password":"wrong-password"}`))
 		request.RemoteAddr = "10.0.0.1:1234"
@@ -195,7 +200,7 @@ func TestLoginLimiterSeparatesForwardedIPsAndEmails(t *testing.T) {
 	require.Equal(t, 429, attempt(ownerEmail, "192.0.2.1"))
 	require.Equal(t, 401, attempt(ownerEmail, "192.0.2.2"))
 	require.Equal(t, 401, attempt("different@example.com", "192.0.2.1"))
-	keys, err := client.Keys(t.Context(), limiterKeyPrefix+"*").Result()
+	keys, err := client.Keys(t.Context(), authlimiter.KeyPrefix+"*").Result()
 	require.NoError(t, err)
 	for _, key := range keys {
 		require.NotContains(t, key, "@")
@@ -206,7 +211,7 @@ func TestMeReturnsUserWithoutSecrets(t *testing.T) {
 	h, _ := newServer(t, 10)
 	rec := login(t, h, ownerEmail, ownerPassword)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
-	req.AddCookie(cookie(rec, CookieSession))
+	req.AddCookie(cookie(rec, authmiddleware.CookieSession))
 	out := httptest.NewRecorder()
 	h.ServeHTTP(out, req)
 	require.Equal(t, http.StatusOK, out.Code)
@@ -256,7 +261,7 @@ func TestSessionAndCSRF_StreamIncrementally(t *testing.T) {
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/api/v1/stream-probe", nil)
 	require.NoError(t, err)
-	req.Header.Set(HeaderCSRF, login.Data.CSRFToken)
+	req.Header.Set(authmiddleware.HeaderCSRF, login.Data.CSRFToken)
 	started := time.Now()
 	resp, err := client.Do(req)
 	require.NoError(t, err)

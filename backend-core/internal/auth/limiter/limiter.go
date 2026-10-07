@@ -1,4 +1,4 @@
-package auth
+package limiter
 
 import (
 	"context"
@@ -12,20 +12,22 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/model"
+	authtoken "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/token"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 )
 
-const limiterKeyPrefix = "thomas:auth:login:"
+const KeyPrefix = "thomas:auth:login:"
 const (
 	limiterEmailSuffix   = ":email"
 	limiterIPSuffix      = ":ip:"
-	retryAfterSeconds    = "retryAfterSeconds"
+	RetryAfterSeconds    = "retryAfterSeconds"
 	limiterResultLength  = 3
 	limiterTTLIndex      = 1
 	limiterTripIndex     = 2
 	limiterEmailKeyIndex = 2
-	limiterIPKeyPrefix   = limiterKeyPrefix + "ip:"
+	limiterIPKeyPrefix   = KeyPrefix + "ip:"
 )
 
 const incrementWithTTL = `
@@ -64,7 +66,7 @@ type Limiter struct {
 }
 
 func NewLimiter(rdb *redis.Client, max int, window time.Duration) *Limiter {
-	key := make([]byte, tokenBytes)
+	key := make([]byte, authtoken.Bytes)
 	_, err := rand.Read(key)
 	lim := NewLoginLimiter(rdb, config.AuthConfig{LoginMaxAttempts: max, LoginEmailMaxAttempts: max, LoginIPMaxAttempts: config.DefaultLoginIPMaxAttempts, LoginWindow: window}, key)
 	if err != nil {
@@ -82,20 +84,20 @@ func NewLoginLimiter(rdb *redis.Client, cfg config.AuthConfig, key []byte) *Limi
 }
 
 func (l *Limiter) Allow(ctx context.Context, key string) error {
-	_, err := l.checkKeys(ctx, []string{limiterKeyPrefix + key}, 0, l.max)
+	_, err := l.checkKeys(ctx, []string{KeyPrefix + key}, 0, l.max)
 	return err
 }
 
 type LimitDecision struct{ EmailTripped bool }
 
 func (l *Limiter) Check(ctx context.Context, email, ip string) (LimitDecision, error) {
-	identity := l.identity(email)
-	return l.checkKeys(ctx, []string{limiterKeyPrefix + identity + limiterIPSuffix + ip, limiterKeyPrefix + identity + limiterEmailSuffix, limiterIPKeyPrefix + ip}, limiterEmailKeyIndex, l.max, l.emailMax, l.ipMax)
+	identity := l.Identity(email)
+	return l.checkKeys(ctx, []string{KeyPrefix + identity + limiterIPSuffix + ip, KeyPrefix + identity + limiterEmailSuffix, limiterIPKeyPrefix + ip}, limiterEmailKeyIndex, l.max, l.emailMax, l.ipMax)
 }
 
-func (l *Limiter) identity(email string) string {
+func (l *Limiter) Identity(email string) string {
 	mac := hmac.New(sha256.New, l.hmacKey)
-	_, _ = mac.Write([]byte(normalizeEmail(email)))
+	_, _ = mac.Write([]byte(model.NormalizeEmail(email)))
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
@@ -117,21 +119,21 @@ func (l *Limiter) checkKeys(ctx context.Context, keys []string, emailKeyIndex in
 	decision := LimitDecision{EmailTripped: result[limiterTripIndex] == 1}
 	if result[0] == 1 {
 		remaining := max(int64(math.Ceil(float64(result[limiterTTLIndex])/float64(time.Second/time.Millisecond))), 1)
-		return decision, errors.ErrRateLimited.WithDetails(map[string]any{retryAfterSeconds: remaining})
+		return decision, errors.ErrRateLimited.WithDetails(map[string]any{RetryAfterSeconds: remaining})
 	}
 	return decision, nil
 }
 
 func (l *Limiter) Reset(ctx context.Context, key string) error {
-	if err := l.rdb.Del(ctx, limiterKeyPrefix+key).Err(); err != nil {
+	if err := l.rdb.Del(ctx, KeyPrefix+key).Err(); err != nil {
 		return errors.ErrInternalError.WithCause(fmt.Errorf("login limiter reset: %w", err))
 	}
 	return nil
 }
 
 func (l *Limiter) ResetLogin(ctx context.Context, email, ip string) error {
-	identity := l.identity(email)
-	if err := l.rdb.Del(ctx, limiterKeyPrefix+identity+limiterIPSuffix+ip, limiterKeyPrefix+identity+limiterEmailSuffix).Err(); err != nil {
+	identity := l.Identity(email)
+	if err := l.rdb.Del(ctx, KeyPrefix+identity+limiterIPSuffix+ip, KeyPrefix+identity+limiterEmailSuffix).Err(); err != nil {
 		return errors.ErrInternalError.WithCause(err)
 	}
 	return nil

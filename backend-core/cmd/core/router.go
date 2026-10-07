@@ -7,25 +7,34 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
+	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/handler"
+	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
+	authmiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/middleware"
+	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry"
+	registryhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/handler"
+	registryservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/service"
 )
 
 type routerDeps struct {
 	log                *slog.Logger
-	auth               *auth.Service
-	limiter            *auth.Limiter
+	auth               authservice.AuthService
+	limiter            *authlimiter.Limiter
 	cookieSecure       bool
 	trustedProxyHeader string
 	trustedProxyCIDRs  []netip.Prefix
-	registry           *registry.Service
+	registry           registryRouterService
 	serviceToken       string
 	health             map[string]httpx.DependencyPinger
 	metrics            httpx.HTTPMetrics
 
 	requestTimeout time.Duration // cfg.HTTP.RequestTimeout
 	maxBodyBytes   int64         // cfg.HTTP.MaxBodyBytes
+}
+
+type registryRouterService interface {
+	registryservice.RegistryService
+	registryservice.Resolver
 }
 
 func newRouter(d routerDeps) chi.Router {
@@ -35,12 +44,12 @@ func newRouter(d routerDeps) chi.Router {
 	// because their lifetime is the run deadline, not an HTTP middleware.
 	r.Group(func(api chi.Router) {
 		api.Use(httpx.LimitRequestDuration(d.requestTimeout))
-		auth.NewHandlerWithTrustedProxies(d.auth, d.limiter, d.cookieSecure, d.trustedProxyHeader, d.trustedProxyCIDRs, d.log).Mount(api)
+		authhandler.NewAuthHandlerWithTrustedProxies(d.auth, d.limiter, d.cookieSecure, d.trustedProxyHeader, d.trustedProxyCIDRs, d.log).Mount(api)
 		api.Group(func(pr chi.Router) {
-			pr.Use(auth.RequireSession(d.auth))
-			registry.NewHandler(d.registry, d.maxBodyBytes).Mount(pr)
+			pr.Use(authmiddleware.RequireSession(d.auth))
+			registryhandler.NewRegistryHandler(d.registry, d.maxBodyBytes).Mount(pr)
 		})
-		registry.MountInternal(api, d.registry, d.serviceToken)
+		registryhandler.MountInternal(api, d.registry, d.serviceToken)
 	})
 	return r
 }

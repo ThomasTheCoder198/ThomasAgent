@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 
 	"github.com/stretchr/testify/require"
@@ -97,7 +98,7 @@ func TestEventStream_HeartbeatWritesComments(t *testing.T) {
 func TestEventStream_SendAfterCloseFails(t *testing.T) {
 	stream, _ := newStream(t, time.Hour)
 	stream.Close()
-	require.ErrorIs(t, stream.Send([]byte("x")), ErrEventStreamClosed)
+	require.ErrorIs(t, stream.Send([]byte("x")), errors.ErrEventStreamClosed)
 }
 
 func TestEventStream_DoneClosesWhenClientIsGone(t *testing.T) {
@@ -112,7 +113,7 @@ func TestEventStream_DoneClosesWhenClientIsGone(t *testing.T) {
 	case <-time.After(testWaitBound):
 		t.Fatal("Done was not closed after the client went away")
 	}
-	require.ErrorIs(t, stream.Send([]byte("x")), ErrEventStreamClosed)
+	require.ErrorIs(t, stream.Send([]byte("x")), errors.ErrEventStreamClosed)
 }
 
 func TestEventStream_CloseStopsHeartbeat(t *testing.T) {

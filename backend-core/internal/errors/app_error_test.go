@@ -28,6 +28,12 @@ func TestToAppError_WrapsUnknownErrorsAsInternal(t *testing.T) {
 	require.ErrorIs(t, e, cause)
 }
 
+func TestNormalizePreservesNilErrorInterface(t *testing.T) {
+	returned := Normalize(nil)
+	require.NoError(t, returned)
+	require.ErrorIs(t, Normalize(stderrors.New("database failed")), ErrInternalError)
+}
+
 func TestToAppError_FindsWrappedAppError(t *testing.T) {
 	inner := New(CodeConflict)
 	e := ToAppError(fmt.Errorf("save: %w", inner))

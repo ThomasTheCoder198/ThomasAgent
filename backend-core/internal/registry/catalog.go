@@ -23,6 +23,7 @@ import (
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/retry"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/model"
 )
 
 const (
@@ -44,19 +45,6 @@ const (
 	modalityImage        = "image"
 	modalityText         = "text"
 )
-
-type RemoteModel struct {
-	ModelRef           string
-	DisplayName        string
-	Capabilities       []Capability
-	ContextWindow      *int
-	InputPricePerMTok  *float64
-	OutputPricePerMTok *float64
-}
-
-type Catalog interface {
-	ListModels(ctx context.Context, providerID uuid.UUID, kind ProviderKind, baseURL, apiKey string) ([]RemoteModel, error)
-}
 
 type OutboundRecorder interface {
 	ObserveOutbound(target, outcome string, elapsed time.Duration)
@@ -105,7 +93,7 @@ type statusError struct{ status int }
 
 func (e statusError) Error() string { return "provider returned status " + strconv.Itoa(e.status) }
 
-func (c *HTTPCatalog) ListModels(ctx context.Context, providerID uuid.UUID, kind ProviderKind, baseURL, apiKey string) ([]RemoteModel, error) {
+func (c *HTTPCatalog) ListModels(ctx context.Context, providerID uuid.UUID, kind model.ProviderKind, baseURL, apiKey string) ([]model.RemoteModel, error) {
 	if c.initErr != nil {
 		return nil, c.initErr
 	}
@@ -124,7 +112,7 @@ func (c *HTTPCatalog) ListModels(ctx context.Context, providerID uuid.UUID, kind
 	if err != nil {
 		return nil, err
 	}
-	if kind != KindOpenRouter {
+	if kind != model.KindOpenRouter {
 		return toPlainModels(body), nil
 	}
 	return toOpenRouterModels(body), nil
@@ -176,7 +164,7 @@ func (c *HTTPCatalog) discardIdleBreaker() bool {
 	return true
 }
 
-func (c *HTTPCatalog) fetch(ctx context.Context, kind ProviderKind, baseURL, apiKey string, out *openRouterModels) (err error) {
+func (c *HTTPCatalog) fetch(ctx context.Context, kind model.ProviderKind, baseURL, apiKey string, out *openRouterModels) (err error) {
 	start := time.Now()
 	defer func() {
 		elapsed := time.Since(start)
@@ -270,45 +258,45 @@ func withRetryAfter(err error, value string) error {
 func errorForStatus(status int) error {
 	switch {
 	case status == http.StatusTooManyRequests:
-		return errors.New(errors.CodeRateLimited)
+		return errors.ErrRateLimited
 	case status >= http.StatusInternalServerError:
-		return errors.New(errors.CodeProviderUnavailable, errors.WithCause(statusError{status}))
+		return errors.ErrProviderUnavailable.WithCause(statusError{status})
 	case status >= http.StatusBadRequest:
-		return errors.New(errors.CodeRegistryProviderRejected)
+		return errors.ErrRegistryProviderRejected
 	}
 	return nil
 }
 
-func toPlainModels(body openRouterModels) []RemoteModel {
-	out := make([]RemoteModel, 0, len(body.Data))
+func toPlainModels(body openRouterModels) []model.RemoteModel {
+	out := make([]model.RemoteModel, 0, len(body.Data))
 	for _, m := range body.Data {
-		out = append(out, RemoteModel{ModelRef: m.ID, DisplayName: m.ID})
+		out = append(out, model.RemoteModel{ModelRef: m.ID, DisplayName: m.ID})
 	}
 	return out
 }
 
-func toOpenRouterModels(body openRouterModels) []RemoteModel {
-	out := make([]RemoteModel, 0, len(body.Data))
+func toOpenRouterModels(body openRouterModels) []model.RemoteModel {
+	out := make([]model.RemoteModel, 0, len(body.Data))
 	for _, m := range body.Data {
-		caps := []Capability{}
+		caps := []model.Capability{}
 		if slices.Contains(m.Architecture.OutputModalities, modalityText) {
-			caps = append(caps, CapChat)
+			caps = append(caps, model.CapChat)
 		}
 		if slices.Contains(m.SupportedParameters, openRouterParamTool) {
-			caps = append(caps, CapTools)
+			caps = append(caps, model.CapTools)
 		}
 		if slices.Contains(m.SupportedParameters, openRouterParamThink) {
-			caps = append(caps, CapReasoning)
+			caps = append(caps, model.CapReasoning)
 		}
 		if slices.Contains(m.Architecture.InputModalities, modalityImage) {
-			caps = append(caps, CapVision)
+			caps = append(caps, model.CapVision)
 		}
 		var ctxLen *int
 		if m.ContextLength > 0 {
 			length := m.ContextLength
 			ctxLen = &length
 		}
-		out = append(out, RemoteModel{
+		out = append(out, model.RemoteModel{
 			ModelRef: m.ID, DisplayName: m.Name, Capabilities: caps, ContextWindow: ctxLen,
 			InputPricePerMTok: perMillion(m.Pricing.Prompt), OutputPricePerMTok: perMillion(m.Pricing.Completion),
 		})

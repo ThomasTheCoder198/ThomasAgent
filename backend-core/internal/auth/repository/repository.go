@@ -1,4 +1,4 @@
-package auth
+package repository
 
 import (
 	"context"
@@ -9,30 +9,27 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/model"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
-var (
-	errNotFound      = stderrors.New("auth: not found")
-	errAlreadyExists = stderrors.New("auth: already exists")
-)
-
 type Repository struct {
-	db                   postgres.DBTX
+	DB                   postgres.DBTX
 	sessionTouchInterval time.Duration
 }
 
-func NewRepository(db postgres.DBTX) *Repository {
-	return NewRepositoryWithSessionTouchInterval(db, config.DefaultSessionTouchInterval)
+func NewAuthRepository(db postgres.DBTX) *Repository {
+	return NewAuthRepositoryWithSessionTouchInterval(db, config.DefaultSessionTouchInterval)
 }
 
-func NewRepositoryWithSessionTouchInterval(db postgres.DBTX, interval time.Duration) *Repository {
+func NewAuthRepositoryWithSessionTouchInterval(db postgres.DBTX, interval time.Duration) *Repository {
 	if interval <= 0 {
 		interval = config.DefaultSessionTouchInterval
 	}
-	return &Repository{db: db, sessionTouchInterval: interval}
+	return &Repository{DB: db, sessionTouchInterval: interval}
 }
 
 func (r *Repository) CountUsers(ctx context.Context) (int, error) {
@@ -41,53 +38,53 @@ func (r *Repository) CountUsers(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	var n int
-	if err = r.db.QueryRow(ctx, `SELECT count(*) FROM users WHERE tenant_id = $1`, tenantID).Scan(&n); err != nil {
+	if err = r.DB.QueryRow(ctx, `SELECT count(*) FROM users WHERE tenant_id = $1`, tenantID).Scan(&n); err != nil {
 		return 0, fmt.Errorf("count users: %w", err)
 	}
 	return n, nil
 }
 
-func (r *Repository) CreateUser(ctx context.Context, email, passwordHash string) (User, error) {
+func (r *Repository) CreateUser(ctx context.Context, email, passwordHash string) (model.User, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
-		return User{}, err
+		return model.User{}, err
 	}
-	u := User{Email: email}
-	err = r.db.QueryRow(ctx, `INSERT INTO users (tenant_id, email, password_hash) VALUES ($3, $1, $2)
+	u := model.User{Email: email}
+	err = r.DB.QueryRow(ctx, `INSERT INTO users (tenant_id, email, password_hash) VALUES ($3, $1, $2)
 		ON CONFLICT (tenant_id, email) DO NOTHING RETURNING id, display_name`,
 		email, passwordHash, tenantID).Scan(&u.ID, &u.DisplayName)
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return User{}, errAlreadyExists
+		return model.User{}, errors.ErrConflict
 	}
 	if err != nil {
-		return User{}, fmt.Errorf("create user: %w", err)
+		return model.User{}, fmt.Errorf("create user: %w", err)
 	}
 	return u, nil
 }
 
-func (r *Repository) FindUserByEmail(ctx context.Context, email string) (User, string, error) {
+func (r *Repository) FindUserByEmail(ctx context.Context, email string) (model.User, string, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
-		return User{}, "", err
+		return model.User{}, "", err
 	}
-	var u User
+	var u model.User
 	var hash string
-	err = r.db.QueryRow(ctx, `SELECT id, email, display_name, password_hash FROM users WHERE email = $1 AND tenant_id = $2`, email, tenantID).
+	err = r.DB.QueryRow(ctx, `SELECT id, email, display_name, password_hash FROM users WHERE email = $1 AND tenant_id = $2`, email, tenantID).
 		Scan(&u.ID, &u.Email, &u.DisplayName, &hash)
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return User{}, "", errNotFound
+		return model.User{}, "", errors.ErrNotFound
 	}
 	if err != nil {
-		return User{}, "", fmt.Errorf("find user: %w", err)
+		return model.User{}, "", fmt.Errorf("find user: %w", err)
 	}
 	return u, hash, nil
 }
 
 func (r *Repository) CreateSession(ctx context.Context, userID uuid.UUID, tokenHash []byte, csrf string, expiresAt time.Time) error {
-	return r.createSession(ctx, r.db, userID, tokenHash, csrf, expiresAt)
+	return r.CreateSessionIn(ctx, r.DB, userID, tokenHash, csrf, expiresAt)
 }
 
-func (r *Repository) createSession(ctx context.Context, db postgres.DBTX, userID uuid.UUID, tokenHash []byte, csrf string, expiresAt time.Time) error {
+func (r *Repository) CreateSessionIn(ctx context.Context, db postgres.DBTX, userID uuid.UUID, tokenHash []byte, csrf string, expiresAt time.Time) error {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
 		return err
@@ -100,14 +97,14 @@ func (r *Repository) createSession(ctx context.Context, db postgres.DBTX, userID
 	return nil
 }
 
-func (r *Repository) FindSession(ctx context.Context, tokenHash []byte) (User, Session, error) {
+func (r *Repository) FindSession(ctx context.Context, tokenHash []byte) (model.User, model.Session, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
-		return User{}, Session{}, err
+		return model.User{}, model.Session{}, err
 	}
-	var u User
-	var s Session
-	err = r.db.QueryRow(ctx, `WITH touched_session AS (
+	var u model.User
+	var s model.Session
+	err = r.DB.QueryRow(ctx, `WITH touched_session AS (
   UPDATE sessions SET last_seen_at=now()
   WHERE token_hash=$1 AND tenant_id=$2 AND expires_at>now()
    AND last_seen_at<now()-($3 * interval '1 second')
@@ -116,10 +113,10 @@ func (r *Repository) FindSession(ctx context.Context, tokenHash []byte) (User, S
   WHERE s.token_hash=$1 AND s.tenant_id=$2`, tokenHash, tenantID, r.sessionTouchInterval.Seconds()).
 		Scan(&s.ID, &s.TenantID, &s.UserID, &s.CSRFToken, &s.ExpiresAt, &s.Expired, &u.ID, &u.Email, &u.DisplayName)
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return User{}, Session{}, errNotFound
+		return model.User{}, model.Session{}, errors.ErrNotFound
 	}
 	if err != nil {
-		return User{}, Session{}, fmt.Errorf("find session: %w", err)
+		return model.User{}, model.Session{}, fmt.Errorf("find session: %w", err)
 	}
 	return u, s, nil
 }
@@ -129,7 +126,7 @@ func (r *Repository) PurgeExpiredSessions(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	result, err := r.db.Exec(ctx, `DELETE FROM sessions WHERE tenant_id=$1 AND expires_at<=now()`, tenantID)
+	result, err := r.DB.Exec(ctx, `DELETE FROM sessions WHERE tenant_id=$1 AND expires_at<=now()`, tenantID)
 	if err != nil {
 		return 0, fmt.Errorf("purge expired sessions: %w", err)
 	}
@@ -139,7 +136,7 @@ func (r *Repository) PurgeExpiredSessions(ctx context.Context) (int64, error) {
 // PurgeAllExpiredSessions is reserved for the system job: request paths must
 // continue using tenant-scoped repository methods.
 func (r *Repository) PurgeAllExpiredSessions(ctx context.Context) (int64, error) {
-	result, err := r.db.Exec(ctx, `DELETE FROM sessions WHERE expires_at<=now()`)
+	result, err := r.DB.Exec(ctx, `DELETE FROM sessions WHERE expires_at<=now()`)
 	if err != nil {
 		return 0, fmt.Errorf("purge all expired sessions: %w", err)
 	}
@@ -151,7 +148,7 @@ func (r *Repository) DeleteSession(ctx context.Context, tokenHash []byte) error 
 	if err != nil {
 		return err
 	}
-	if _, err := r.db.Exec(ctx, `DELETE FROM sessions WHERE token_hash = $1 AND tenant_id = $2`, tokenHash, tenantID); err != nil {
+	if _, err := r.DB.Exec(ctx, `DELETE FROM sessions WHERE token_hash = $1 AND tenant_id = $2`, tokenHash, tenantID); err != nil {
 		return fmt.Errorf("delete session: %w", err)
 	}
 	return nil
@@ -159,14 +156,14 @@ func (r *Repository) DeleteSession(ctx context.Context, tokenHash []byte) error 
 
 // FindSessionByToken is the authentication boundary: only a verified token hash
 // may establish the tenant before any business query or expired-session cleanup.
-func (r *Repository) FindSessionByToken(ctx context.Context, tokenHash []byte) (User, Session, error) {
+func (r *Repository) FindSessionByToken(ctx context.Context, tokenHash []byte) (model.User, model.Session, error) {
 	var tenantID string
-	err := r.db.QueryRow(ctx, `SELECT tenant_id FROM sessions WHERE token_hash=$1`, tokenHash).Scan(&tenantID)
+	err := r.DB.QueryRow(ctx, `SELECT tenant_id FROM sessions WHERE token_hash=$1`, tokenHash).Scan(&tenantID)
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return User{}, Session{}, errNotFound
+		return model.User{}, model.Session{}, errors.ErrNotFound
 	}
 	if err != nil {
-		return User{}, Session{}, fmt.Errorf("lookup session tenant: %w", err)
+		return model.User{}, model.Session{}, fmt.Errorf("lookup session tenant: %w", err)
 	}
 	return r.FindSession(tenant.WithID(ctx, tenantID), tokenHash)
 }

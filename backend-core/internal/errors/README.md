@@ -8,10 +8,12 @@ HTTP serialization and boundary logging belong to `platform/httpx` and callers.
 ## Entry points
 - `FieldError`, `FieldCodeRequired` and `FieldCodeInvalid` supply validation field details without submitted values.
 - Generated `errors.go`: `ErrNotFound`, other named errors, `Code` constants and `LookupDefinition`.
+- `sentinels.go`: internal causes for vault, tenant and HTTP stream/decoder operations. These are not public HTTP codes; a boundary normalizes them to a catalog error.
 - Identity/registry definitions include authentication, service-token validation, provider/model lookup, capability, synchronization, and conflict errors.
 - `ErrorDefinition`: explicit `HTTPStatus`, `Retryable`, `MessageVI` and `MessageEN` metadata.
 - `ErrNotFound.WithCause(err)`, `.WithDetails(details)` and `.WithMessage(message)` construct fresh `*AppError` values.
 - `ToAppError` and `CodeOf`: find wrapped application errors and normalizes named errors; unknown causes become INTERNAL_ERROR.
+- `Normalize(error) error`: preserves nil when a service returns the `error` interface, then normalizes non-nil causes to the catalog.
 - `HTTPStatus`, `Retryable`, `LocalizedMessage` and `LangFromHeader`: policy and localization for boundaries.
 
 ## Dependencies
@@ -44,7 +46,7 @@ Standard `stderrors.Is` matches application codes and still traverses causes.
 Standard `stderrors.As` can normalize a named error into `*AppError`; `ToAppError` uses the same behavior.
 Generated lookup uses an immutable switch rather than a mutable package-wide map.
 Unknown codes retain their code but use INTERNAL_ERROR status, retryability and messages.
-Never edit `errors.go` manually or log here; log once at the caller's boundary.
+Never edit generated `errors.go` manually or log here; log once at the caller's boundary. Declare new named internal causes in this package, not inside a domain package. Callers use `errors.Err...` directly.
 
 ## Common failures
 - Missing named error: add its definition to `contracts/errors.yaml` and run `task gen`.

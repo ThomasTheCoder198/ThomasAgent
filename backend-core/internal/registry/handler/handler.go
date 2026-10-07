@@ -1,4 +1,4 @@
-package registry
+package handler
 
 import (
 	"net/http"
@@ -6,15 +6,19 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/dto"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/model"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/service"
 )
 
 type Handler struct {
-	svc          *Service
+	svc          service.RegistryService
 	maxBodyBytes int64
 }
 
-func NewHandler(svc *Service, maxBodyBytes int64) *Handler {
+func NewRegistryHandler(svc service.RegistryService, maxBodyBytes int64) *Handler {
 	return &Handler{svc: svc, maxBodyBytes: maxBodyBytes}
 }
 
@@ -39,7 +43,7 @@ func (h *Handler) Mount(r chi.Router) {
 func pathUUID(r *http.Request, name string) (uuid.UUID, error) {
 	id, err := uuid.Parse(chi.URLParam(r, name))
 	if err != nil {
-		return uuid.Nil, fieldError(name, validationInvalid)
+		return uuid.Nil, errors.FieldError(name, errors.FieldCodeInvalid)
 	}
 	return id, nil
 }
@@ -54,17 +58,17 @@ func respond(w http.ResponseWriter, r *http.Request, status int, data any, err e
 
 func (h *Handler) listProviders(w http.ResponseWriter, r *http.Request) {
 	out, err := h.svc.ListProviders(r.Context())
-	respond(w, r, http.StatusOK, out, err)
+	respond(w, r, http.StatusOK, dto.FromProviders(out), err)
 }
 
 func (h *Handler) createProvider(w http.ResponseWriter, r *http.Request) {
-	var in ProviderInput
+	var in dto.ProviderRequest
 	if err := httpx.DecodeJSON(w, r, &in, h.maxBodyBytes); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	out, err := h.svc.CreateProvider(r.Context(), in)
-	respond(w, r, http.StatusCreated, out, err)
+	out, err := h.svc.CreateProvider(r.Context(), in.ToModel())
+	respond(w, r, http.StatusCreated, dto.FromProvider(out), err)
 }
 
 func (h *Handler) updateProvider(w http.ResponseWriter, r *http.Request) {
@@ -73,13 +77,13 @@ func (h *Handler) updateProvider(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	var in ProviderInput
+	var in dto.ProviderRequest
 	if err := httpx.DecodeJSON(w, r, &in, h.maxBodyBytes); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	out, err := h.svc.UpdateProvider(r.Context(), id, in)
-	respond(w, r, http.StatusOK, out, err)
+	out, err := h.svc.UpdateProvider(r.Context(), id, in.ToModel())
+	respond(w, r, http.StatusOK, dto.FromProvider(out), err)
 }
 
 func (h *Handler) deleteProvider(w http.ResponseWriter, r *http.Request) {
@@ -87,7 +91,7 @@ func (h *Handler) deleteProvider(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		err = h.svc.DeleteProvider(r.Context(), id)
 	}
-	respond(w, r, http.StatusOK, map[string]bool{"deleted": true}, err)
+	respond(w, r, http.StatusOK, dto.DeleteResponse{Deleted: true}, err)
 }
 
 func (h *Handler) testProvider(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +101,7 @@ func (h *Handler) testProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	n, err := h.svc.TestProvider(r.Context(), id)
-	respond(w, r, http.StatusOK, map[string]any{"ok": true, "modelCount": n}, err)
+	respond(w, r, http.StatusOK, dto.TestProviderResponse{OK: true, ModelCount: n}, err)
 }
 
 func (h *Handler) syncProvider(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +111,7 @@ func (h *Handler) syncProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out, err := h.svc.SyncModels(r.Context(), id)
-	respond(w, r, http.StatusOK, out, err)
+	respond(w, r, http.StatusOK, dto.FromSyncResult(out), err)
 }
 
 func (h *Handler) listModels(w http.ResponseWriter, r *http.Request) {
@@ -115,32 +119,32 @@ func (h *Handler) listModels(w http.ResponseWriter, r *http.Request) {
 	if raw := r.URL.Query().Get("providerId"); raw != "" {
 		id, err := uuid.Parse(raw)
 		if err != nil {
-			httpx.WriteError(w, r, fieldError("providerId", validationInvalid))
+			httpx.WriteError(w, r, errors.FieldError("providerId", errors.FieldCodeInvalid))
 			return
 		}
 		providerID = &id
 	}
-	var capability *Capability
+	var capability *model.Capability
 	if raw := r.URL.Query().Get("capability"); raw != "" {
-		c := Capability(raw)
-		if !validCapability(c) {
-			httpx.WriteError(w, r, fieldError("capability", validationInvalid))
+		c := model.Capability(raw)
+		if !model.ValidCapability(c) {
+			httpx.WriteError(w, r, errors.FieldError("capability", errors.FieldCodeInvalid))
 			return
 		}
 		capability = &c
 	}
 	out, err := h.svc.ListModels(r.Context(), providerID, capability)
-	respond(w, r, http.StatusOK, out, err)
+	respond(w, r, http.StatusOK, dto.FromModels(out), err)
 }
 
 func (h *Handler) createModel(w http.ResponseWriter, r *http.Request) {
-	var in ModelInput
+	var in dto.ModelRequest
 	if err := httpx.DecodeJSON(w, r, &in, h.maxBodyBytes); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	out, err := h.svc.CreateModel(r.Context(), in)
-	respond(w, r, http.StatusCreated, out, err)
+	out, err := h.svc.CreateModel(r.Context(), in.ToModel())
+	respond(w, r, http.StatusCreated, dto.FromModel(out), err)
 }
 
 func (h *Handler) deleteModel(w http.ResponseWriter, r *http.Request) {
@@ -148,27 +152,25 @@ func (h *Handler) deleteModel(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		err = h.svc.DeleteModel(r.Context(), id)
 	}
-	respond(w, r, http.StatusOK, map[string]bool{"deleted": true}, err)
+	respond(w, r, http.StatusOK, dto.DeleteResponse{Deleted: true}, err)
 }
 
 func (h *Handler) listRoles(w http.ResponseWriter, r *http.Request) {
 	out, err := h.svc.ListRoles(r.Context())
-	respond(w, r, http.StatusOK, out, err)
+	respond(w, r, http.StatusOK, dto.FromRoles(out), err)
 }
 
 func (h *Handler) assignRole(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		ModelID uuid.UUID `json:"modelId"`
-	}
+	var body dto.AssignRoleRequest
 	if err := httpx.DecodeJSON(w, r, &body, h.maxBodyBytes); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	role := Role(chi.URLParam(r, "role"))
+	role := model.Role(chi.URLParam(r, "role"))
 	if body.ModelID == uuid.Nil {
-		httpx.WriteError(w, r, fieldError("modelId", validationRequired))
+		httpx.WriteError(w, r, errors.FieldError("modelId", errors.FieldCodeRequired))
 		return
 	}
 	err := h.svc.AssignRole(r.Context(), role, body.ModelID)
-	respond(w, r, http.StatusOK, RoleAssignment{Role: role, ModelID: body.ModelID}, err)
+	respond(w, r, http.StatusOK, dto.RoleAssignmentResponse{Role: role, ModelID: body.ModelID}, err)
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
@@ -57,7 +58,7 @@ func (s *Store) Replace(ctx context.Context, db postgres.DBTX, id uuid.UUID, pla
 		return fmt.Errorf("update secret: %w", err)
 	}
 	if command.RowsAffected() == 0 {
-		return ErrSecretNotFound
+		return errors.ErrVaultSecretNotFound
 	}
 	return nil
 }
@@ -72,7 +73,7 @@ func (s *Store) Get(ctx context.Context, db postgres.DBTX, id uuid.UUID) (string
 	err = db.QueryRow(ctx, `SELECT key_id, nonce, ciphertext, aad_version FROM secrets WHERE id = $1 AND tenant_id = $2`, id, tenantID).
 		Scan(&sealed.KeyID, &sealed.Nonce, &sealed.Ciphertext, &version)
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return "", fmt.Errorf("load secret: %w", ErrSecretNotFound)
+		return "", fmt.Errorf("load secret: %w", errors.ErrVaultSecretNotFound)
 	}
 	if err != nil {
 		return "", fmt.Errorf("load secret: %w", err)
@@ -110,7 +111,7 @@ func aadForVersion(version int, tenantID string, id uuid.UUID, keyID string) ([]
 	case structuredAADVersion:
 		return secretAAD(tenantID, id, keyID), nil
 	default:
-		return nil, ErrDecrypt
+		return nil, errors.ErrVaultDecrypt
 	}
 }
 
@@ -137,7 +138,7 @@ func (s *Store) Delete(ctx context.Context, db postgres.DBTX, id uuid.UUID) erro
 		return fmt.Errorf("delete secret: %w", err)
 	}
 	if command.RowsAffected() == 0 {
-		return ErrSecretNotFound
+		return errors.ErrVaultSecretNotFound
 	}
 	return nil
 }

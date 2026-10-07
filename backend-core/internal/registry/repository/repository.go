@@ -1,4 +1,4 @@
-package registry
+package repository
 
 import (
 	"context"
@@ -8,74 +8,76 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/model"
 )
 
 const providerColumns = `id, kind, name, base_url, api_key_secret_id IS NOT NULL, enabled, created_at, updated_at`
 
-type providerRow struct {
-	Provider
-	secretID *uuid.UUID
+type ProviderRow struct {
+	model.Provider
+	SecretID *uuid.UUID
 }
 
-func scanProvider(row pgx.Row) (Provider, error) {
-	var p Provider
+func ScanProvider(row pgx.Row) (model.Provider, error) {
+	var p model.Provider
 	err := row.Scan(&p.ID, &p.Kind, &p.Name, &p.BaseURL, &p.HasAPIKey, &p.Enabled, &p.CreatedAt, &p.UpdatedAt)
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return Provider{}, errProviderNotFound()
+		return model.Provider{}, errors.ErrRegistryProviderNotFound
 	}
 	if err != nil {
-		return Provider{}, fmt.Errorf("scan provider: %w", err)
+		return model.Provider{}, fmt.Errorf("scan provider: %w", err)
 	}
 	return p, nil
 }
 
-func insertProvider(ctx context.Context, db postgres.DBTX, in ProviderInput, secretID *uuid.UUID) (Provider, error) {
+func (repo PGRepository) InsertProvider(ctx context.Context, db postgres.DBTX, in model.ProviderInput, secretID *uuid.UUID) (model.Provider, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
-		return Provider{}, err
+		return model.Provider{}, err
 	}
 	enabled := in.Enabled == nil || *in.Enabled
-	p, err := scanProvider(db.QueryRow(ctx, `INSERT INTO providers (tenant_id, kind, name, base_url, api_key_secret_id, enabled)
+	p, err := ScanProvider(db.QueryRow(ctx, `INSERT INTO providers (tenant_id, kind, name, base_url, api_key_secret_id, enabled)
 		VALUES ($6, $1, $2, $3, $4, $5) RETURNING `+providerColumns, in.Kind, in.Name, in.BaseURL, secretID, enabled, tenantID))
 	if postgres.IsUniqueViolation(err) {
-		return Provider{}, errNameTaken()
+		return model.Provider{}, errors.ErrRegistryNameTaken
 	}
 	return p, err
 }
 
-func getProvider(ctx context.Context, db postgres.DBTX, id uuid.UUID) (providerRow, error) {
+func (repo PGRepository) GetProvider(ctx context.Context, db postgres.DBTX, id uuid.UUID) (ProviderRow, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
-		return providerRow{}, err
+		return ProviderRow{}, err
 	}
-	var r providerRow
+	var r ProviderRow
 	err = db.QueryRow(ctx, `SELECT `+providerColumns+`, api_key_secret_id FROM providers WHERE id = $1 AND tenant_id = $2`, id, tenantID).
-		Scan(&r.ID, &r.Kind, &r.Name, &r.BaseURL, &r.HasAPIKey, &r.Enabled, &r.CreatedAt, &r.UpdatedAt, &r.secretID)
+		Scan(&r.ID, &r.Kind, &r.Name, &r.BaseURL, &r.HasAPIKey, &r.Enabled, &r.CreatedAt, &r.UpdatedAt, &r.SecretID)
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return providerRow{}, errProviderNotFound()
+		return ProviderRow{}, errors.ErrRegistryProviderNotFound
 	}
 	if err != nil {
-		return providerRow{}, fmt.Errorf("get provider: %w", err)
+		return ProviderRow{}, fmt.Errorf("get provider: %w", err)
 	}
 	return r, nil
 }
 
-func updateProvider(ctx context.Context, db postgres.DBTX, id uuid.UUID, name, baseURL string, enabled bool, secretID *uuid.UUID) (Provider, error) {
+func (repo PGRepository) UpdateProvider(ctx context.Context, db postgres.DBTX, id uuid.UUID, name, baseURL string, enabled bool, secretID *uuid.UUID) (model.Provider, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
-		return Provider{}, err
+		return model.Provider{}, err
 	}
-	p, err := scanProvider(db.QueryRow(ctx, `UPDATE providers SET name = $2, base_url = $3, enabled = $4,
+	p, err := ScanProvider(db.QueryRow(ctx, `UPDATE providers SET name = $2, base_url = $3, enabled = $4,
 		api_key_secret_id = $5, updated_at = now() WHERE id = $1 AND tenant_id = $6 RETURNING `+providerColumns, id, name, baseURL, enabled, secretID, tenantID))
 	if postgres.IsUniqueViolation(err) {
-		return Provider{}, errNameTaken()
+		return model.Provider{}, errors.ErrRegistryNameTaken
 	}
 	return p, err
 }
 
-func deleteProvider(ctx context.Context, db postgres.DBTX, id uuid.UUID) (*uuid.UUID, error) {
+func (repo PGRepository) DeleteProvider(ctx context.Context, db postgres.DBTX, id uuid.UUID) (*uuid.UUID, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
 		return nil, err
@@ -83,10 +85,10 @@ func deleteProvider(ctx context.Context, db postgres.DBTX, id uuid.UUID) (*uuid.
 	var secretID *uuid.UUID
 	err = db.QueryRow(ctx, `DELETE FROM providers WHERE id = $1 AND tenant_id = $2 RETURNING api_key_secret_id`, id, tenantID).Scan(&secretID)
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return nil, errProviderNotFound()
+		return nil, errors.ErrRegistryProviderNotFound
 	}
 	if postgres.IsForeignKeyViolation(err) {
-		return nil, errModelInUse()
+		return nil, errors.ErrRegistryModelInUse
 	}
 	if err != nil {
 		return nil, fmt.Errorf("delete provider: %w", err)
@@ -94,7 +96,7 @@ func deleteProvider(ctx context.Context, db postgres.DBTX, id uuid.UUID) (*uuid.
 	return secretID, nil
 }
 
-func listProviders(ctx context.Context, db postgres.DBTX) ([]Provider, error) {
+func (repo PGRepository) ListProviders(ctx context.Context, db postgres.DBTX) ([]model.Provider, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
 		return nil, err
@@ -104,9 +106,9 @@ func listProviders(ctx context.Context, db postgres.DBTX) ([]Provider, error) {
 		return nil, fmt.Errorf("list providers: %w", err)
 	}
 	defer rows.Close()
-	out := []Provider{}
+	out := []model.Provider{}
 	for rows.Next() {
-		p, err := scanProvider(rows)
+		p, err := ScanProvider(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -118,25 +120,25 @@ func listProviders(ctx context.Context, db postgres.DBTX) ([]Provider, error) {
 const modelColumns = `id, provider_id, model_ref, display_name, capabilities, context_window, embedding_dims,
 	input_price_per_mtok::float8, output_price_per_mtok::float8, source`
 
-func scanModel(row pgx.Row) (Model, error) {
-	var m Model
+func ScanModel(row pgx.Row) (model.Model, error) {
+	var m model.Model
 	var caps []string
 	err := row.Scan(&m.ID, &m.ProviderID, &m.ModelRef, &m.DisplayName, &caps, &m.ContextWindow, &m.EmbeddingDims,
 		&m.InputPricePerMTok, &m.OutputPricePerMTok, &m.Source)
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return Model{}, errModelNotFound()
+		return model.Model{}, errors.ErrRegistryModelNotFound
 	}
 	if err != nil {
-		return Model{}, fmt.Errorf("scan model: %w", err)
+		return model.Model{}, fmt.Errorf("scan model: %w", err)
 	}
-	m.Capabilities = make([]Capability, len(caps))
+	m.Capabilities = make([]model.Capability, len(caps))
 	for i, c := range caps {
-		m.Capabilities[i] = Capability(c)
+		m.Capabilities[i] = model.Capability(c)
 	}
 	return m, nil
 }
 
-func capStrings(caps []Capability) []string {
+func CapStrings(caps []model.Capability) []string {
 	out := make([]string, len(caps))
 	for i, c := range caps {
 		out[i] = string(c)
@@ -144,14 +146,14 @@ func capStrings(caps []Capability) []string {
 	return out
 }
 
-// upsertModel reports whether the row was inserted (true) or updated (false); xmax = 0 marks a fresh insert.
-func upsertModel(ctx context.Context, db postgres.DBTX, in ModelInput, source string) (Model, bool, error) {
+// UpsertModel reports whether the row was inserted (true) or updated (false); xmax = 0 marks a fresh insert.
+func (repo PGRepository) UpsertModel(ctx context.Context, db postgres.DBTX, in model.ModelInput, source string) (model.Model, bool, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
-		return Model{}, false, err
+		return model.Model{}, false, err
 	}
-	if _, err := getProvider(ctx, db, in.ProviderID); err != nil {
-		return Model{}, false, err
+	if _, err := repo.GetProvider(ctx, db, in.ProviderID); err != nil {
+		return model.Model{}, false, err
 	}
 	var inserted bool
 	row := db.QueryRow(ctx, `INSERT INTO models (tenant_id, provider_id, model_ref, display_name, capabilities, context_window,
@@ -163,29 +165,29 @@ func upsertModel(ctx context.Context, db postgres.DBTX, in ModelInput, source st
 			output_price_per_mtok = EXCLUDED.output_price_per_mtok, updated_at = now()
 		WHERE models.source = 'sync' AND EXCLUDED.source = 'sync' AND models.tenant_id = EXCLUDED.tenant_id
 		RETURNING `+modelColumns+`, (xmax = 0)`,
-		in.ProviderID, in.ModelRef, in.DisplayName, capStrings(in.Capabilities), in.ContextWindow, in.EmbeddingDims,
+		in.ProviderID, in.ModelRef, in.DisplayName, CapStrings(in.Capabilities), in.ContextWindow, in.EmbeddingDims,
 		in.InputPricePerMTok, in.OutputPricePerMTok, source, tenantID)
-	var m Model
+	var m model.Model
 	var caps []string
 	err = row.Scan(&m.ID, &m.ProviderID, &m.ModelRef, &m.DisplayName, &caps, &m.ContextWindow, &m.EmbeddingDims,
 		&m.InputPricePerMTok, &m.OutputPricePerMTok, &m.Source, &inserted)
 	if postgres.IsForeignKeyViolation(err) {
-		return Model{}, false, errProviderNotFound()
+		return model.Model{}, false, errors.ErrRegistryProviderNotFound
 	}
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return Model{}, false, errNameTaken()
+		return model.Model{}, false, errors.ErrRegistryNameTaken
 	}
 	if err != nil {
-		return Model{}, false, fmt.Errorf("upsert model: %w", err)
+		return model.Model{}, false, fmt.Errorf("upsert model: %w", err)
 	}
-	m.Capabilities = make([]Capability, len(caps))
+	m.Capabilities = make([]model.Capability, len(caps))
 	for i, c := range caps {
-		m.Capabilities[i] = Capability(c)
+		m.Capabilities[i] = model.Capability(c)
 	}
 	return m, inserted, nil
 }
 
-func deleteStaleSyncModels(ctx context.Context, db postgres.DBTX, providerID uuid.UUID, keep []uuid.UUID) error {
+func (repo PGRepository) DeleteStaleSyncModels(ctx context.Context, db postgres.DBTX, providerID uuid.UUID, keep []uuid.UUID) error {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
 		return err
@@ -200,15 +202,15 @@ func deleteStaleSyncModels(ctx context.Context, db postgres.DBTX, providerID uui
 	return nil
 }
 
-func getModel(ctx context.Context, db postgres.DBTX, id uuid.UUID) (Model, error) {
+func (repo PGRepository) GetModel(ctx context.Context, db postgres.DBTX, id uuid.UUID) (model.Model, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
-		return Model{}, err
+		return model.Model{}, err
 	}
-	return scanModel(db.QueryRow(ctx, `SELECT `+modelColumns+` FROM models WHERE id = $1 AND tenant_id = $2`, id, tenantID))
+	return ScanModel(db.QueryRow(ctx, `SELECT `+modelColumns+` FROM models WHERE id = $1 AND tenant_id = $2`, id, tenantID))
 }
 
-func listModels(ctx context.Context, db postgres.DBTX, providerID *uuid.UUID, capability *Capability) ([]Model, error) {
+func (repo PGRepository) ListModels(ctx context.Context, db postgres.DBTX, providerID *uuid.UUID, capability *model.Capability) ([]model.Model, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
 		return nil, err
@@ -225,9 +227,9 @@ func listModels(ctx context.Context, db postgres.DBTX, providerID *uuid.UUID, ca
 		return nil, fmt.Errorf("list models: %w", err)
 	}
 	defer rows.Close()
-	out := []Model{}
+	out := []model.Model{}
 	for rows.Next() {
-		m, err := scanModel(rows)
+		m, err := ScanModel(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -236,25 +238,25 @@ func listModels(ctx context.Context, db postgres.DBTX, providerID *uuid.UUID, ca
 	return out, rows.Err()
 }
 
-func deleteModel(ctx context.Context, db postgres.DBTX, id uuid.UUID) error {
+func (repo PGRepository) DeleteModel(ctx context.Context, db postgres.DBTX, id uuid.UUID) error {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
 		return err
 	}
 	tag, err := db.Exec(ctx, `DELETE FROM models WHERE id = $1 AND tenant_id = $2`, id, tenantID)
 	if postgres.IsForeignKeyViolation(err) {
-		return errModelInUse()
+		return errors.ErrRegistryModelInUse
 	}
 	if err != nil {
 		return fmt.Errorf("delete model: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return errModelNotFound()
+		return errors.ErrRegistryModelNotFound
 	}
 	return nil
 }
 
-func upsertRole(ctx context.Context, db postgres.DBTX, role Role, modelID uuid.UUID) error {
+func (repo PGRepository) UpsertRole(ctx context.Context, db postgres.DBTX, role model.Role, modelID uuid.UUID) error {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
 		return err
@@ -267,7 +269,7 @@ func upsertRole(ctx context.Context, db postgres.DBTX, role Role, modelID uuid.U
 	return nil
 }
 
-func listRoles(ctx context.Context, db postgres.DBTX) ([]RoleAssignment, error) {
+func (repo PGRepository) ListRoles(ctx context.Context, db postgres.DBTX) ([]model.RoleAssignment, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
 		return nil, err
@@ -277,9 +279,9 @@ func listRoles(ctx context.Context, db postgres.DBTX) ([]RoleAssignment, error) 
 		return nil, fmt.Errorf("list roles: %w", err)
 	}
 	defer rows.Close()
-	out := []RoleAssignment{}
+	out := []model.RoleAssignment{}
 	for rows.Next() {
-		var a RoleAssignment
+		var a model.RoleAssignment
 		if err := rows.Scan(&a.Role, &a.ModelID); err != nil {
 			return nil, fmt.Errorf("scan role: %w", err)
 		}
@@ -288,7 +290,7 @@ func listRoles(ctx context.Context, db postgres.DBTX) ([]RoleAssignment, error) 
 	return out, rows.Err()
 }
 
-func roleModelID(ctx context.Context, db postgres.DBTX, role Role) (uuid.UUID, bool, error) {
+func (repo PGRepository) RoleModelID(ctx context.Context, db postgres.DBTX, role model.Role) (uuid.UUID, bool, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
 		return uuid.Nil, false, err
@@ -304,23 +306,23 @@ func roleModelID(ctx context.Context, db postgres.DBTX, role Role) (uuid.UUID, b
 	return id, true, nil
 }
 
-func getProviderForUpdate(ctx context.Context, db postgres.DBTX, id uuid.UUID) (providerRow, error) {
+func (repo PGRepository) GetProviderForUpdate(ctx context.Context, db postgres.DBTX, id uuid.UUID) (ProviderRow, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
-		return providerRow{}, err
+		return ProviderRow{}, err
 	}
 	if _, err = db.Exec(ctx, `SELECT id FROM providers WHERE id=$1 AND tenant_id=$2 FOR UPDATE`, id, tenantID); err != nil {
-		return providerRow{}, fmt.Errorf("lock provider: %w", err)
+		return ProviderRow{}, fmt.Errorf("lock provider: %w", err)
 	}
-	return getProvider(ctx, db, id)
+	return repo.GetProvider(ctx, db, id)
 }
-func getModelForShare(ctx context.Context, db postgres.DBTX, id uuid.UUID) (Model, error) {
+func (repo PGRepository) GetModelForShare(ctx context.Context, db postgres.DBTX, id uuid.UUID) (model.Model, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
-		return Model{}, err
+		return model.Model{}, err
 	}
 	if _, err = db.Exec(ctx, `SELECT id FROM models WHERE id=$1 AND tenant_id=$2 FOR SHARE`, id, tenantID); err != nil {
-		return Model{}, fmt.Errorf("lock model: %w", err)
+		return model.Model{}, fmt.Errorf("lock model: %w", err)
 	}
-	return getModel(ctx, db, id)
+	return repo.GetModel(ctx, db, id)
 }

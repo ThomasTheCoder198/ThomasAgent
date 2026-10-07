@@ -7,6 +7,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 
 	"github.com/stretchr/testify/require"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
@@ -52,7 +53,7 @@ func TestRecordUsesTrustedTenantContext(t *testing.T) {
 
 func TestRecordRejectsMissingTenantAndIgnoresEventTenant(t *testing.T) {
 	pool := pgtest.Start(t)
-	require.ErrorIs(t, Record(t.Context(), pool, Event{TenantID: "default", Actor: "owner", Action: "auth.login", TargetType: "user"}), tenant.ErrMissingTenant)
+	require.ErrorIs(t, Record(t.Context(), pool, Event{TenantID: "default", Actor: "owner", Action: "auth.login", TargetType: "user"}), errors.ErrMissingTenant)
 	ctx := tenant.WithID(t.Context(), "other")
 	require.NoError(t, Record(ctx, pool, Event{TenantID: "default", Actor: "owner", Action: "auth.login", TargetType: "user"}))
 	var scope string

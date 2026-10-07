@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
@@ -31,7 +32,7 @@ func TestNewCipherRejectsBadMasterKey(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := NewCipher("v1", key)
-			require.ErrorIs(t, err, ErrInvalidMasterKey)
+			require.ErrorIs(t, err, errors.ErrVaultInvalidMasterKey)
 		})
 	}
 }
@@ -55,13 +56,13 @@ func TestOpenFailsWithWrongAADOrKey(t *testing.T) {
 	sealed, err := c1.Seal([]byte("secret"), []byte("row-1"))
 	require.NoError(t, err)
 	_, err = c1.Open(sealed, []byte("row-2"))
-	require.ErrorIs(t, err, ErrDecrypt)
+	require.ErrorIs(t, err, errors.ErrVaultDecrypt)
 	_, err = c2.Open(sealed, []byte("row-1"))
-	require.ErrorIs(t, err, ErrDecrypt)
+	require.ErrorIs(t, err, errors.ErrVaultDecrypt)
 	c3, err := NewCipher("v2", randomKey(t))
 	require.NoError(t, err)
 	_, err = c3.Open(sealed, []byte("row-1"))
-	require.ErrorIs(t, err, ErrDecrypt)
+	require.ErrorIs(t, err, errors.ErrVaultDecrypt)
 }
 
 func TestOpenRejectsMismatchedKeyIDWithSameKeyBytes(t *testing.T) {
@@ -73,7 +74,7 @@ func TestOpenRejectsMismatchedKeyIDWithSameKeyBytes(t *testing.T) {
 	sealed, err := first.Seal([]byte("secret"), []byte("row"))
 	require.NoError(t, err)
 	_, err = second.Open(sealed, []byte("row"))
-	require.ErrorIs(t, err, ErrDecrypt)
+	require.ErrorIs(t, err, errors.ErrVaultDecrypt)
 }
 
 func TestStorePersistsEncrypted(t *testing.T) {
@@ -96,7 +97,7 @@ func TestStorePersistsEncrypted(t *testing.T) {
 
 	require.NoError(t, s.Delete(ctx, pool, id))
 	_, err = s.Get(ctx, pool, id)
-	require.ErrorIs(t, err, ErrSecretNotFound)
+	require.ErrorIs(t, err, errors.ErrVaultSecretNotFound)
 }
 
 func TestStoreUpgradesLegacyAADWithoutLosingSecret(t *testing.T) {
@@ -125,9 +126,9 @@ func TestStoreUpgradesLegacyAADWithoutLosingSecret(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "existing-provider-key", string(plain))
 	_, err = cipher.Open(upgraded, []byte("default:"+id.String()+":v1"))
-	require.ErrorIs(t, err, ErrDecrypt)
+	require.ErrorIs(t, err, errors.ErrVaultDecrypt)
 	_, err = cipher.Open(upgraded, id[:])
-	require.ErrorIs(t, err, ErrDecrypt)
+	require.ErrorIs(t, err, errors.ErrVaultDecrypt)
 }
 
 func TestStoreScopesAndAuthenticatesTenant(t *testing.T) {
@@ -139,16 +140,16 @@ func TestStoreScopesAndAuthenticatesTenant(t *testing.T) {
 	id, err := store.Put(otherCtx, pool, "other-secret")
 	require.NoError(t, err)
 	_, err = store.Get(tenant.WithID(t.Context(), tenant.PlatformID), pool, id)
-	require.ErrorIs(t, err, ErrSecretNotFound)
-	require.ErrorIs(t, store.Replace(tenant.WithID(t.Context(), tenant.PlatformID), pool, id, "wrong"), ErrSecretNotFound)
-	require.ErrorIs(t, store.Delete(tenant.WithID(t.Context(), tenant.PlatformID), pool, id), ErrSecretNotFound)
+	require.ErrorIs(t, err, errors.ErrVaultSecretNotFound)
+	require.ErrorIs(t, store.Replace(tenant.WithID(t.Context(), tenant.PlatformID), pool, id, "wrong"), errors.ErrVaultSecretNotFound)
+	require.ErrorIs(t, store.Delete(tenant.WithID(t.Context(), tenant.PlatformID), pool, id), errors.ErrVaultSecretNotFound)
 	value, err := store.Get(otherCtx, pool, id)
 	require.NoError(t, err)
 	require.Equal(t, "other-secret", value)
 	_, err = pool.Exec(tenant.WithID(t.Context(), tenant.PlatformID), `UPDATE secrets SET tenant_id='default' WHERE id=$1`, id)
 	require.NoError(t, err)
 	_, err = store.Get(tenant.WithID(t.Context(), tenant.PlatformID), pool, id)
-	require.ErrorIs(t, err, ErrDecrypt)
+	require.ErrorIs(t, err, errors.ErrVaultDecrypt)
 }
 
 func TestStoreRejectsMissingTenant(t *testing.T) {
@@ -157,11 +158,11 @@ func TestStoreRejectsMissingTenant(t *testing.T) {
 	require.NoError(t, err)
 	store := NewStore(cipher)
 	_, err = store.Put(t.Context(), pool, "secret")
-	require.ErrorIs(t, err, tenant.ErrMissingTenant, "missing tenant must not insert in the platform scope")
+	require.ErrorIs(t, err, errors.ErrMissingTenant, "missing tenant must not insert in the platform scope")
 	_, err = store.Get(t.Context(), pool, uuid.New())
-	require.ErrorIs(t, err, tenant.ErrMissingTenant)
-	require.ErrorIs(t, store.Replace(t.Context(), pool, uuid.New(), "secret"), tenant.ErrMissingTenant)
-	require.ErrorIs(t, store.Delete(t.Context(), pool, uuid.New()), tenant.ErrMissingTenant)
+	require.ErrorIs(t, err, errors.ErrMissingTenant)
+	require.ErrorIs(t, store.Replace(t.Context(), pool, uuid.New(), "secret"), errors.ErrMissingTenant)
+	require.ErrorIs(t, store.Delete(t.Context(), pool, uuid.New()), errors.ErrMissingTenant)
 }
 
 func TestStoreDeleteCannotCrossTenants(t *testing.T) {
@@ -172,7 +173,7 @@ func TestStoreDeleteCannotCrossTenants(t *testing.T) {
 	otherCtx := tenant.WithID(t.Context(), "other")
 	id, err := store.Put(otherCtx, pool, "other-secret")
 	require.NoError(t, err)
-	require.ErrorIs(t, store.Delete(tenant.WithID(t.Context(), tenant.PlatformID), pool, id), ErrSecretNotFound)
+	require.ErrorIs(t, store.Delete(tenant.WithID(t.Context(), tenant.PlatformID), pool, id), errors.ErrVaultSecretNotFound)
 	value, err := store.Get(otherCtx, pool, id)
 	require.NoError(t, err)
 	require.Equal(t, "other-secret", value)
@@ -185,7 +186,7 @@ func TestStore_GetMissingSecret(t *testing.T) {
 	store := NewStore(c)
 
 	_, err = store.Get(tenant.WithID(context.Background(), tenant.PlatformID), pool, uuid.New())
-	require.ErrorIs(t, err, ErrSecretNotFound)
+	require.ErrorIs(t, err, errors.ErrVaultSecretNotFound)
 }
 
 func TestStore_ReplaceMissingSecret(t *testing.T) {
@@ -200,7 +201,7 @@ func TestStore_ReplaceMissingSecret(t *testing.T) {
 	var exists bool
 	require.NoError(t, pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM secrets WHERE id = $1)", id).Scan(&exists))
 	require.False(t, exists)
-	require.ErrorIs(t, err, ErrSecretNotFound)
+	require.ErrorIs(t, err, errors.ErrVaultSecretNotFound)
 }
 
 func TestStore_DeleteMissingSecret(t *testing.T) {
@@ -209,7 +210,7 @@ func TestStore_DeleteMissingSecret(t *testing.T) {
 	require.NoError(t, err)
 	store := NewStore(c)
 
-	require.ErrorIs(t, store.Delete(tenant.WithID(context.Background(), tenant.PlatformID), pool, uuid.New()), ErrSecretNotFound)
+	require.ErrorIs(t, store.Delete(tenant.WithID(context.Background(), tenant.PlatformID), pool, uuid.New()), errors.ErrVaultSecretNotFound)
 }
 
 func TestSealUsesFreshNonce(t *testing.T) {
@@ -242,7 +243,7 @@ func TestOpenRejectsTamperedOrMalformedSealed(t *testing.T) {
 				sealed.Nonce = append(sealed.Nonce, 0)
 			}
 			_, err = c.Open(sealed, []byte("row"))
-			require.ErrorIs(t, err, ErrDecrypt)
+			require.ErrorIs(t, err, errors.ErrVaultDecrypt)
 		})
 	}
 }
@@ -259,7 +260,7 @@ func TestStoreRejectsCiphertextCopiedToAnotherRow(t *testing.T) {
 	_, err = pool.Exec(ctx, `UPDATE secrets SET key_id = s.key_id, nonce = s.nonce, ciphertext = s.ciphertext FROM secrets s WHERE secrets.id = $1 AND s.id = $2`, target, source)
 	require.NoError(t, err)
 	_, err = store.Get(ctx, pool, target)
-	require.ErrorIs(t, err, ErrDecrypt)
+	require.ErrorIs(t, err, errors.ErrVaultDecrypt)
 	got, err := store.Get(ctx, pool, source)
 	require.NoError(t, err)
 	require.Equal(t, "source-secret", got)
@@ -300,7 +301,7 @@ func TestSecretAAD_ColonFieldsCannotCollide(t *testing.T) {
 	sealed, err := cipher.Seal([]byte("secret"), a)
 	require.NoError(t, err)
 	_, err = cipher.Open(sealed, b)
-	require.ErrorIs(t, err, ErrDecrypt)
+	require.ErrorIs(t, err, errors.ErrVaultDecrypt)
 }
 
 func TestStore_UpgradesPreviousBoundAAD(t *testing.T) {
@@ -324,7 +325,7 @@ func TestStore_UpgradesPreviousBoundAAD(t *testing.T) {
 	require.NotEqual(t, old.Nonce, upgraded.Nonce)
 	require.NotEqual(t, old.Ciphertext, upgraded.Ciphertext)
 	_, err = cipher.Open(upgraded, []byte("org:team:"+id.String()+":key:v1"))
-	require.ErrorIs(t, err, ErrDecrypt)
+	require.ErrorIs(t, err, errors.ErrVaultDecrypt)
 	value, err = store.Get(ctx, pool, id)
 	require.NoError(t, err)
 	require.Equal(t, "old-bound-secret", value)

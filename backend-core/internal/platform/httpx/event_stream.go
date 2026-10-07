@@ -25,13 +25,6 @@ const (
 	carriageReturn          = '\r'
 )
 
-var (
-	ErrEventStreamClosed = stderrors.New("event stream closed")
-	errMultiLinePayload  = stderrors.New("event payload must be a single line")
-	errHeartbeatInterval = stderrors.New("event stream heartbeat must be positive")
-	errWriteTimeout      = stderrors.New("event stream write timeout must be positive")
-)
-
 // EventStream writes Server-Sent Events. no-transform and X-Accel-Buffering stop intermediaries (Next.js rewrites,
 // nginx-style proxies) from compressing or buffering frames; the heartbeat comment keeps idle connections open
 // through proxy idle timeouts. The payload encoding (UI Message Stream) belongs to the caller.
@@ -52,17 +45,17 @@ type EventStream struct {
 // The caller must `defer stream.Close()`.
 func NewEventStream(w http.ResponseWriter, r *http.Request, cfg config.HTTPConfig) (*EventStream, error) {
 	if cfg.EventStreamWriteTimeout <= 0 {
-		return nil, errors.ErrInternalError.WithCause(errWriteTimeout)
+		return nil, errors.ErrInternalError.WithCause(errors.ErrEventWriteTimeout)
 	}
 	return newEventStream(w, r, cfg.EventStreamHeartbeat, cfg.EventStreamWriteTimeout)
 }
 
 func newEventStream(w http.ResponseWriter, r *http.Request, heartbeat, writeTimeout time.Duration) (*EventStream, error) {
 	if heartbeat <= 0 {
-		return nil, errors.ErrInternalError.WithCause(errHeartbeatInterval)
+		return nil, errors.ErrInternalError.WithCause(errors.ErrEventHeartbeatInvalid)
 	}
 	if writeTimeout <= 0 {
-		return nil, errors.ErrInternalError.WithCause(errWriteTimeout)
+		return nil, errors.ErrInternalError.WithCause(errors.ErrEventWriteTimeout)
 	}
 	header := w.Header()
 	header.Set(headerContentType, contentTypeEventStream)
@@ -90,7 +83,7 @@ func newEventStream(w http.ResponseWriter, r *http.Request, heartbeat, writeTime
 
 func (s *EventStream) Send(payload []byte) error {
 	if bytes.IndexByte(payload, newline) >= 0 || bytes.IndexByte(payload, carriageReturn) >= 0 {
-		return errMultiLinePayload
+		return errors.ErrEventPayloadMultiLine
 	}
 	frame := make([]byte, 0, len(eventDataPrefix)+len(payload)+len(eventTerminator))
 	frame = append(frame, eventDataPrefix...)
@@ -115,7 +108,7 @@ func (s *EventStream) write(frame []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed || s.request.Context().Err() != nil {
-		return ErrEventStreamClosed
+		return errors.ErrEventStreamClosed
 	}
 	if err := setEventStreamDeadline(s.controller, time.Now().Add(s.writeTimeout)); err != nil {
 		s.stopOnce.Do(func() { close(s.stop) })

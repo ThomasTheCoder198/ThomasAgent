@@ -6,7 +6,7 @@ or model parameters and does not choose a tenant when context is absent.
 
 ## Entry points
 - `WithID` sets the tenant at a trusted server boundary.
-- `ID` returns the tenant or `ErrMissingTenant`, a catalog `INTERNAL_ERROR`.
+- `ID` returns the tenant or `errors.ErrMissingTenant`; an HTTP boundary normalizes that internal cause to `INTERNAL_ERROR`.
 - `PlatformID` identifies the platform tenant for explicit boundary setup.
 
 ## Dependencies

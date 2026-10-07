@@ -14,13 +14,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
+	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
+	authrepo "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
+	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/redisx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/retry"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry"
+	registryservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/service"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/vault"
 )
 
@@ -49,7 +52,7 @@ func (a *application) serveHTTP(ctx context.Context) error {
 }
 
 func (a *application) buildRouter(ctx context.Context, pool *pgxpool.Pool, redisClient *redis.Client, cipher *vault.Cipher) (http.Handler, error) {
-	authService := auth.NewService(auth.NewRepositoryWithSessionTouchInterval(pool, a.cfg.Auth.SessionTouchInterval), pool, a.cfg.Auth, time.Now)
+	authService := authservice.NewAuthService(authrepo.NewAuthRepositoryWithSessionTouchInterval(pool, a.cfg.Auth.SessionTouchInterval), pool, a.cfg.Auth, time.Now)
 	if err := authService.EnsureOwner(tenant.WithID(ctx, tenant.PlatformID)); err != nil {
 		return nil, err
 	}
@@ -63,7 +66,7 @@ func (a *application) buildRouter(ctx context.Context, pool *pgxpool.Pool, redis
 	if a.metrics != nil {
 		catalog.Metrics = a.metrics
 	}
-	registryService := registry.NewService(pool, vault.NewStore(cipher), catalog, a.cfg.ProviderMaxRemoteModels)
+	registryService := registryservice.NewRegistryService(pool, vault.NewStore(cipher), catalog, a.cfg.ProviderMaxRemoteModels)
 	var proxyNetworks []netip.Prefix
 	for _, cidr := range a.cfg.Auth.TrustedProxyCIDRs {
 		network, err := netip.ParsePrefix(cidr)
@@ -75,7 +78,7 @@ func (a *application) buildRouter(ctx context.Context, pool *pgxpool.Pool, redis
 	deps := routerDeps{
 		log:                a.log,
 		auth:               authService,
-		limiter:            auth.NewLoginLimiter(redisClient, a.cfg.Auth, []byte(a.cfg.ServiceToken)),
+		limiter:            authlimiter.NewLoginLimiter(redisClient, a.cfg.Auth, []byte(a.cfg.ServiceToken)),
 		cookieSecure:       a.cfg.Auth.CookieSecure,
 		trustedProxyHeader: a.cfg.Auth.TrustedProxyHeader,
 		trustedProxyCIDRs:  proxyNetworks,
@@ -89,7 +92,11 @@ func (a *application) buildRouter(ctx context.Context, pool *pgxpool.Pool, redis
 	return newRouter(deps), nil
 }
 
-func (a *application) purgeExpiredSessions(ctx context.Context, service *auth.Service) {
+type sessionPurger interface {
+	PurgeAllExpiredSessions(context.Context) (int64, error)
+}
+
+func (a *application) purgeExpiredSessions(ctx context.Context, service sessionPurger) {
 	if a.cfg.Auth.SessionPurgeInterval <= 0 {
 		return
 	}
@@ -106,7 +113,7 @@ func (a *application) purgeExpiredSessions(ctx context.Context, service *auth.Se
 }
 
 // runSessionPurge is a scheduled job: each run gets its own job id so its log lines can be found together.
-func (a *application) runSessionPurge(ctx context.Context, service *auth.Service) {
+func (a *application) runSessionPurge(ctx context.Context, service sessionPurger) {
 	ctx = logging.ContextWithRequestID(ctx, requestid.NewJob())
 	start := time.Now()
 	count, err := service.PurgeAllExpiredSessions(ctx)

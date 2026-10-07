@@ -7,6 +7,9 @@ import (
 	"testing"
 	"time"
 
+	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/handler"
+	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
+
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 
 	"github.com/stretchr/testify/require"
@@ -20,9 +23,9 @@ func TestLogin_ThresholdAuditBoundedAndWarningsRedacted(t *testing.T) {
 	var logs bytes.Buffer
 	logger, err := logging.NewLogger(&logs, "info", "auth-test", "test", nil)
 	require.NoError(t, err)
-	lim := NewLoginLimiter(client, config.AuthConfig{LoginMaxAttempts: 10, LoginEmailMaxAttempts: 2, LoginIPMaxAttempts: 100, LoginWindow: time.Minute}, []byte("test-hmac-key-with-at-least-32-bytes"))
+	lim := authlimiter.NewLoginLimiter(client, config.AuthConfig{LoginMaxAttempts: 10, LoginEmailMaxAttempts: 2, LoginIPMaxAttempts: 100, LoginWindow: time.Minute}, []byte("test-hmac-key-with-at-least-32-bytes"))
 	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger))
-	NewHandlerWithProxyHeader(svc, lim, false, "", logger).Mount(router)
+	authhandler.NewAuthHandlerWithProxyHeader(svc, lim, false, "", logger).Mount(router)
 	for index, want := range []int{401, 401, 429, 429, 429} {
 		require.Equal(t, want, attemptFrom(router, ownerEmail, "192.0.2.1:9999", "").Code, "attempt %d", index)
 	}
@@ -39,7 +42,7 @@ func TestLogin_ThresholdAuditBoundedAndWarningsRedacted(t *testing.T) {
 		require.Contains(t, record, "request_id")
 	}
 	require.NoError(t, client.FlushDB(t.Context()).Err())
-	svc.db = failingExecDB{DBTX: svc.db, statement: "INSERT INTO audit_events", failure: stderrors.New("audit unavailable")}
+	svc.db.inner = failingExecDB{DBTX: svc.db.inner, statement: "INSERT INTO audit_events", failure: stderrors.New("audit unavailable")}
 	for _, want := range []int{401, 401, 429, 429} {
 		require.Equal(t, want, attemptFrom(router, ownerEmail, "192.0.2.1:9999", "").Code)
 	}

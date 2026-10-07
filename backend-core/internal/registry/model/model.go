@@ -1,4 +1,4 @@
-package registry
+package model
 
 import (
 	"time"
@@ -46,7 +46,7 @@ func DefaultBaseURL(kind ProviderKind) string {
 	}
 }
 
-func validKind(k ProviderKind) bool {
+func ValidKind(k ProviderKind) bool {
 	switch k {
 	case KindOpenRouter, KindOpenAI, KindAnthropic, KindGoogle, KindAzure, KindOllama, KindOpenAICompatible, KindCohere, KindVoyage, KindJina, KindTypeSafe:
 		return true
@@ -66,7 +66,7 @@ const (
 	CapDecision  Capability = "decision"
 )
 
-func validCapability(c Capability) bool {
+func ValidCapability(c Capability) bool {
 	switch c {
 	case CapChat, CapTools, CapVision, CapReasoning, CapEmbedding, CapRerank, CapDecision:
 		return true
@@ -86,7 +86,7 @@ const (
 )
 
 // Each role is satisfied by every capability in at least one set.
-func requirementsForRole(role Role) [][]Capability {
+func RequirementsForRole(role Role) [][]Capability {
 	switch role {
 	case RoleChatDefault:
 		return [][]Capability{{CapChat, CapTools}}
@@ -106,60 +106,75 @@ func requirementsForRole(role Role) [][]Capability {
 }
 
 type Provider struct {
-	ID        uuid.UUID    `json:"id"`
-	Kind      ProviderKind `json:"kind"`
-	Name      string       `json:"name"`
-	BaseURL   string       `json:"baseUrl"`
-	HasAPIKey bool         `json:"hasApiKey"`
-	Enabled   bool         `json:"enabled"`
-	CreatedAt time.Time    `json:"createdAt"`
-	UpdatedAt time.Time    `json:"updatedAt"`
+	ID        uuid.UUID
+	Kind      ProviderKind
+	Name      string
+	BaseURL   string
+	HasAPIKey bool
+	Enabled   bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type ProviderInput struct {
-	Kind    ProviderKind `json:"kind"`
-	Name    string       `json:"name"`
-	BaseURL string       `json:"baseUrl"`
-	APIKey  *string      `json:"apiKey"`
-	Enabled *bool        `json:"enabled"`
+	Kind    ProviderKind
+	Name    string
+	BaseURL string
+	APIKey  *string
+	Enabled *bool
 }
 
 type Model struct {
-	ID                 uuid.UUID    `json:"id"`
-	ProviderID         uuid.UUID    `json:"providerId"`
-	ModelRef           string       `json:"modelRef"`
-	DisplayName        string       `json:"displayName"`
-	Capabilities       []Capability `json:"capabilities"`
-	ContextWindow      *int         `json:"contextWindow,omitempty"`
-	EmbeddingDims      *int         `json:"embeddingDims,omitempty"`
-	InputPricePerMTok  *float64     `json:"inputPricePerMTok,omitempty"`
-	OutputPricePerMTok *float64     `json:"outputPricePerMTok,omitempty"`
-	Source             string       `json:"source"`
+	ID                 uuid.UUID
+	ProviderID         uuid.UUID
+	ModelRef           string
+	DisplayName        string
+	Capabilities       []Capability
+	ContextWindow      *int
+	EmbeddingDims      *int
+	InputPricePerMTok  *float64
+	OutputPricePerMTok *float64
+	Source             string
 }
 
 type ModelInput struct {
-	ProviderID         uuid.UUID    `json:"providerId"`
-	ModelRef           string       `json:"modelRef"`
-	DisplayName        string       `json:"displayName"`
-	Capabilities       []Capability `json:"capabilities"`
-	ContextWindow      *int         `json:"contextWindow"`
-	EmbeddingDims      *int         `json:"embeddingDims"`
-	InputPricePerMTok  *float64     `json:"inputPricePerMTok"`
-	OutputPricePerMTok *float64     `json:"outputPricePerMTok"`
+	ProviderID         uuid.UUID
+	ModelRef           string
+	DisplayName        string
+	Capabilities       []Capability
+	ContextWindow      *int
+	EmbeddingDims      *int
+	InputPricePerMTok  *float64
+	OutputPricePerMTok *float64
 }
 
 type RoleAssignment struct {
-	Role    Role      `json:"role"`
-	ModelID uuid.UUID `json:"modelId"`
+	Role    Role
+	ModelID uuid.UUID
 }
 
 type ResolvedModel struct {
-	Role          Role         `json:"role"`
-	ProviderKind  ProviderKind `json:"providerKind"`
-	BaseURL       string       `json:"baseUrl"`
-	APIKey        string       `json:"apiKey"`
-	ModelRef      string       `json:"modelRef"`
-	Capabilities  []Capability `json:"capabilities"`
-	EmbeddingDims *int         `json:"embeddingDims,omitempty"`
-	FallbackFrom  Role         `json:"fallbackFrom,omitempty"`
+	Role          Role
+	ProviderKind  ProviderKind
+	BaseURL       string
+	APIKey        string
+	ModelRef      string
+	Capabilities  []Capability
+	EmbeddingDims *int
+	FallbackFrom  Role
+}
+
+type SyncResult struct {
+	Added   int
+	Updated int
+	Skipped int
+}
+
+type RemoteModel struct {
+	ModelRef           string
+	DisplayName        string
+	Capabilities       []Capability
+	ContextWindow      *int
+	InputPricePerMTok  *float64
+	OutputPricePerMTok *float64
 }

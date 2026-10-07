@@ -6,7 +6,7 @@ Owns the platform provider/model catalog, write-only vaulted provider keys, capa
 
 ## Entry points
 
-- `NewService` injects PostgreSQL, the vault, a `Catalog`, and the remote model count limit from typed config.
+- `service.NewRegistryService` injects PostgreSQL, the vault, a `Catalog`, and the remote model count limit from typed config. `service.NewRegistryServiceWithRepository` accepts a repository interface.
 - Provider create/update/delete/list/test methods keep keys out of returned records and commit mutations with audit events.
 - Model create/delete/list/sync methods validate metadata and atomically import OpenRouter models.
 - `AssignRole`, `ListRoles`, `Resolve` enforce capability requirements; an unassigned decision role falls back to chat.fast. Disabled providers cannot resolve.
@@ -14,7 +14,7 @@ Owns the platform provider/model catalog, write-only vaulted provider keys, capa
 
 ## Dependencies
 
-- Uses: vault, audit, PostgreSQL DBTX, catalog errors, retry/breaker, platform outbound/config and OpenTelemetry.
+- Uses: domain `model`, HTTP `dto`, SQL `repository`, service interface, vault, audit, PostgreSQL DBTX, named catalog errors, retry/breaker and platform outbound/config.
 - Used by: public Registry HTTP handlers and the service-token protected internal resolver.
 
 ## Run & test
@@ -43,7 +43,7 @@ Each catalog attempt emits one safe structured outcome log with `success` and `d
 
 ## HTTP interface (Task 7)
 
-`NewHandler(service, maxBodyBytes).Mount(router)` adds provider CRUD/test/sync, model create/list/delete and model-role list/assignment under `/api/v1`. The caller mounts public handlers behind `auth.RequireSession`; unsafe methods require the session CSRF header. JSON body decoding enforces the configured byte cap and field-only errors. Output uses the shared `data/meta` or `error` response and camelCase fields. Provider responses expose `hasApiKey` only; absent/null `apiKey` preserves the existing key unless `baseUrl` changes, which clears it, while an empty string removes it.
+`handler.NewRegistryHandler(service, maxBodyBytes).Mount(router)` adds provider CRUD/test/sync, model create/list/delete and model-role list/assignment under `/api/v1`. The caller mounts public handlers behind `auth/middleware.RequireSession`; unsafe methods require the session CSRF header. JSON body decoding enforces the configured byte cap and field-only errors. The handler maps request DTOs into domain inputs and maps domain results into response DTOs. Provider responses expose `hasApiKey` only; absent/null `apiKey` preserves an existing key unless `baseUrl` changes (then it is cleared), while an empty string removes it.
 
 `MountInternal(router, service, serviceToken)` exposes `GET /internal/models/resolve?role=chat.fast` with case-insensitive `Authorization: Bearer <token>` authentication. SHA-256 token digests are compared in constant time, and resolve responses use `Cache-Control: no-store`. The trusted internal `data` response includes `role`, `providerKind`, `baseUrl`, `apiKey`, `modelRef`, `capabilities`, optional `embeddingDims` and `fallbackFrom`; provider keys appear only here, never in the public API. The caller supplies the shared access-log router; HTTP handlers report errors once through `httpx.WriteError` and never log bodies or credentials.
 

@@ -124,6 +124,14 @@ func ToAppError(err error) *AppError {
 	return ErrInternalError.WithCause(err)
 }
 
+// Normalize preserves a nil error when the caller returns the error interface.
+func Normalize(err error) error {
+	if err == nil {
+		return nil
+	}
+	return ToAppError(err)
+}
+
 func CodeOf(err error) Code {
 	return ToAppError(err).Code
 }

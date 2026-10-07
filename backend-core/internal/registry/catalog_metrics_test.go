@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	registrymodel "github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/model"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -34,7 +36,7 @@ func TestCatalog_RecordsOutboundByProviderKind(t *testing.T) {
 	catalog := NewHTTPCatalogWithClient(policy, server.Client(), config.DefaultProviderMaxResponseBytes,
 		retry.NewBreaker("test", config.BreakerConfig{FailureThreshold: 5, OpenTimeout: time.Second, HalfOpenMaxCalls: 1}), nil)
 	catalog.Metrics = fake
-	_, err := catalog.ListModels(context.Background(), uuid.New(), KindOpenRouter, server.URL, "")
+	_, err := catalog.ListModels(context.Background(), uuid.New(), registrymodel.KindOpenRouter, server.URL, "")
 	require.NoError(t, err)
-	require.Equal(t, []recordedOutbound{{target: string(KindOpenRouter), outcome: metrics.OutcomeSuccess}}, fake.calls)
+	require.Equal(t, []recordedOutbound{{target: string(registrymodel.KindOpenRouter), outcome: metrics.OutcomeSuccess}}, fake.calls)
 }

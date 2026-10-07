@@ -10,13 +10,20 @@ import (
 	"testing"
 	"time"
 
+	registryhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/handler"
+	registrymodel "github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/model"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
+	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/handler"
+	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
+	authmiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/middleware"
+	authrepo "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
+	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
@@ -29,7 +36,7 @@ const (
 	testMaxBodyBytes = 64 << 10
 )
 
-func newRouter(t *testing.T, logs *bytes.Buffer) (chi.Router, *Service) {
+func newRouter(t *testing.T, logs *bytes.Buffer) (chi.Router, *registryFixture) {
 	t.Helper()
 	s := newTestService(t, &fakeCatalog{})
 	log, err := logging.NewLogger(logs, "debug", "test", "test", nil)
@@ -40,13 +47,13 @@ func newRouter(t *testing.T, logs *bytes.Buffer) (chi.Router, *Service) {
 			next.ServeHTTP(w, r.WithContext(platformContext(r.Context())))
 		})
 	})
-	NewHandler(s, testMaxBodyBytes).Mount(r)
-	MountInternal(r, s, serviceToken)
+	registryhandler.NewRegistryHandler(s, testMaxBodyBytes).Mount(r)
+	registryhandler.MountInternal(r, s, serviceToken)
 	return r, s
 }
 
 func TestServiceTokenSetsExplicitPlatformTenant(t *testing.T) {
-	handler := requireServiceToken(serviceToken)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := registryhandler.RequireServiceToken(serviceToken)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got, err := tenant.ID(r.Context())
 		require.NoError(t, err)
 		require.Equal(t, "default", got)
@@ -64,7 +71,7 @@ func TestServiceToken_RejectsMissingBearerPrefixAndEmptyConfiguration(t *testing
 		for _, header := range []string{"", serviceToken, "Basic " + serviceToken, "Bearer ", "Bearer wrong"} {
 			called := false
 			router := httpx.NewRouter(func(context.Context, *errors.AppError) {})
-			router.With(requireServiceToken(token)).Get("/probe", func(w http.ResponseWriter, _ *http.Request) { called = true; w.WriteHeader(http.StatusNoContent) })
+			router.With(registryhandler.RequireServiceToken(token)).Get("/probe", func(w http.ResponseWriter, _ *http.Request) { called = true; w.WriteHeader(http.StatusNoContent) })
 			res := send(router, http.MethodGet, "/probe", "", map[string]string{"Authorization": header})
 			require.Equal(t, http.StatusUnauthorized, res.Code, token+"/"+header)
 			require.False(t, called)
@@ -75,7 +82,7 @@ func TestServiceToken_RejectsMissingBearerPrefixAndEmptyConfiguration(t *testing
 
 func TestServiceTokenAcceptsMixedCaseBearerAndNeverCaches(t *testing.T) {
 	router := httpx.NewRouter(nil)
-	router.With(requireServiceToken(serviceToken)).Get("/probe", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	router.With(registryhandler.RequireServiceToken(serviceToken)).Get("/probe", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	for _, fixture := range []struct {
 		header string
 		status int
@@ -88,7 +95,7 @@ func TestServiceTokenAcceptsMixedCaseBearerAndNeverCaches(t *testing.T) {
 
 func TestRegistryHTTP_RejectsInvalidPathsQueriesAndSecretBodies(t *testing.T) {
 	router := httpx.NewRouter(func(context.Context, *errors.AppError) {})
-	NewHandler(nil, 128).Mount(router)
+	registryhandler.NewRegistryHandler(nil, 128).Mount(router)
 	for _, tc := range []struct {
 		method, path, body string
 		status             int
@@ -109,7 +116,7 @@ func TestRegistryHTTP_RejectsInvalidPathsQueriesAndSecretBodies(t *testing.T) {
 
 func TestAssignRoleRequiresModelIDField(t *testing.T) {
 	router := httpx.NewRouter(nil)
-	NewHandler(nil, 128).Mount(router)
+	registryhandler.NewRegistryHandler(nil, 128).Mount(router)
 	response := send(router, http.MethodPut, "/api/v1/model-roles/chat.fast", `{}`, nil)
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"modelId"`)
@@ -134,14 +141,14 @@ func TestRegistryHTTP_RealLoginSessionAndCSRF(t *testing.T) {
 	var logs bytes.Buffer
 	router, svc := newRouter(t, &logs)
 	authCfg := config.AuthConfig{OwnerEmail: "owner@example.com", OwnerPassword: "strong-test-password", SessionTTL: time.Hour, MinPasswordLength: 12}
-	authSvc := auth.NewService(auth.NewRepository(svc.pool), svc.pool, authCfg, time.Now)
+	authSvc := authservice.NewAuthService(authrepo.NewAuthRepository(svc.pool), svc.pool, authCfg, time.Now)
 	require.NoError(t, authSvc.EnsureOwner(platformContext(t.Context())))
-	auth.NewHandler(authSvc, auth.NewLimiter(registryRedis(t), 10, time.Minute), false).Mount(router)
+	authhandler.NewAuthHandler(authSvc, authlimiter.NewLimiter(registryRedis(t), 10, time.Minute), false).Mount(router)
 	logger, err := logging.NewLogger(&logs, "debug", "registry-test", "test", nil)
 	require.NoError(t, err)
 	protected := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
-	protected.Use(auth.RequireSession(authSvc))
-	NewHandler(svc, testMaxBodyBytes).Mount(protected)
+	protected.Use(authmiddleware.RequireSession(authSvc))
+	registryhandler.NewRegistryHandler(svc, testMaxBodyBytes).Mount(protected)
 	unauth := send(protected, http.MethodGet, "/api/v1/providers", "", nil)
 	require.Equal(t, http.StatusUnauthorized, unauth.Code)
 	login := send(router, http.MethodPost, "/api/v1/auth/login", `{"email":"owner@example.com","password":"strong-test-password"}`, nil)
@@ -161,7 +168,7 @@ func TestRegistryHTTP_RealLoginSessionAndCSRF(t *testing.T) {
 	require.Equal(t, http.StatusOK, list.Code)
 	denied := send(protected, http.MethodPost, "/api/v1/providers", `{"kind":"openrouter","name":"Protected","apiKey":"`+secretKey+`"}`, headers)
 	require.Equal(t, http.StatusForbidden, denied.Code)
-	headers[auth.HeaderCSRF] = response.Data.CSRFToken
+	headers[authmiddleware.HeaderCSRF] = response.Data.CSRFToken
 	created := send(protected, http.MethodPost, "/api/v1/providers", `{"kind":"openrouter","name":"Protected","apiKey":"`+secretKey+`"}`, headers)
 	require.Equal(t, http.StatusCreated, created.Code)
 	require.NotContains(t, created.Body.String(), secretKey)
@@ -174,7 +181,7 @@ func TestRegistryHTTP_CRUDRoutesAndWriteOnlyKeyUpdates(t *testing.T) {
 	router, svc := newRouter(t, &logs)
 	created := send(router, http.MethodPost, "/api/v1/providers", `{"kind":"openrouter","name":"Routes","apiKey":"`+secretKey+`"}`, nil)
 	require.Equal(t, http.StatusCreated, created.Code)
-	var providerResponse struct{ Data Provider }
+	var providerResponse struct{ Data registrymodel.Provider }
 	require.NoError(t, json.Unmarshal(created.Body.Bytes(), &providerResponse))
 	providerPath := "/api/v1/providers/" + providerResponse.Data.ID.String()
 	updated := send(router, http.MethodPatch, providerPath, `{"name":"Routes renamed","apiKey":"replacement-secret"}`, nil)
@@ -184,17 +191,17 @@ func TestRegistryHTTP_CRUDRoutesAndWriteOnlyKeyUpdates(t *testing.T) {
 	tested := send(router, http.MethodPost, providerPath+"/test", "", nil)
 	require.Equal(t, http.StatusOK, tested.Code)
 	require.Contains(t, tested.Body.String(), `"modelCount":0`)
-	svc.catalog.(*fakeCatalog).models = []RemoteModel{{ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []Capability{CapChat}}}
+	svc.catalog.(*fakeCatalog).models = []registrymodel.RemoteModel{{ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []registrymodel.Capability{registrymodel.CapChat}}}
 	synced := send(router, http.MethodPost, providerPath+"/sync", "", nil)
 	require.Equal(t, http.StatusOK, synced.Code)
 	require.Contains(t, synced.Body.String(), `"added":1`)
 	modelCreated := send(router, http.MethodPost, "/api/v1/models", `{"providerId":"`+providerResponse.Data.ID.String()+`","modelRef":"x/manual","displayName":"Manual","capabilities":["chat","tools"]}`, nil)
 	require.Equal(t, http.StatusCreated, modelCreated.Code)
-	var modelResponse struct{ Data Model }
+	var modelResponse struct{ Data registrymodel.Model }
 	require.NoError(t, json.Unmarshal(modelCreated.Body.Bytes(), &modelResponse))
 	models := send(router, http.MethodGet, "/api/v1/models?providerId="+providerResponse.Data.ID.String()+"&capability=tools", "", nil)
 	require.Equal(t, http.StatusOK, models.Code)
-	var listResponse struct{ Data []Model }
+	var listResponse struct{ Data []registrymodel.Model }
 	require.NoError(t, json.Unmarshal(models.Body.Bytes(), &listResponse))
 	require.Len(t, listResponse.Data, 1)
 	require.Equal(t, modelResponse.Data.ID, listResponse.Data[0].ID)
@@ -222,7 +229,7 @@ func TestRegistryHTTP_CRUDRoutesAndWriteOnlyKeyUpdates(t *testing.T) {
 	deletedModel := send(router, http.MethodDelete, "/api/v1/models/"+removableID.String(), "", nil)
 	require.Equal(t, http.StatusOK, deletedModel.Code)
 	require.Contains(t, deletedModel.Body.String(), `"deleted":true`)
-	emptyProvider, err := svc.CreateProvider(platformContext(t.Context()), ProviderInput{Kind: KindOpenRouter, Name: "Empty"})
+	emptyProvider, err := svc.CreateProvider(platformContext(t.Context()), registrymodel.ProviderInput{Kind: registrymodel.KindOpenRouter, Name: "Empty"})
 	require.NoError(t, err)
 	deletedProvider := send(router, http.MethodDelete, "/api/v1/providers/"+emptyProvider.ID.String(), "", nil)
 	require.Equal(t, http.StatusOK, deletedProvider.Code)
@@ -282,7 +289,7 @@ func TestRoleAssignmentOverHTTP(t *testing.T) {
 	var logs bytes.Buffer
 	r, s := newRouter(t, &logs)
 	p := seedProvider(t, s)
-	m, err := s.CreateModel(platformContext(context.Background()), ModelInput{ProviderID: p.ID, ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []Capability{CapChat}})
+	m, err := s.CreateModel(platformContext(context.Background()), registrymodel.ModelInput{ProviderID: p.ID, ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []registrymodel.Capability{registrymodel.CapChat}})
 	require.NoError(t, err)
 
 	bad := send(r, http.MethodPut, "/api/v1/model-roles/chat.default", `{"modelId":"`+m.ID.String()+`"}`, nil)

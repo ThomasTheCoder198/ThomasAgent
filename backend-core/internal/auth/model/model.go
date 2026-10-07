@@ -1,10 +1,17 @@
-package auth
+package model
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+const ActionLoginFailed = "auth.login.failed"
+
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
 
 type User struct {
 	ID          uuid.UUID

@@ -15,6 +15,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	registrymodel "github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/model"
+
 	"testing"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
@@ -26,6 +29,9 @@ import (
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/dto"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/repository"
+	registryservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/service"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/vault"
 )
 
@@ -36,24 +42,35 @@ func platformContext(ctx context.Context) context.Context {
 }
 
 type fakeCatalog struct {
-	models []RemoteModel
+	models []registrymodel.RemoteModel
 	err    error
 	gotKey string
 }
 
-func (f *fakeCatalog) ListModels(_ context.Context, _ uuid.UUID, _ ProviderKind, _ string, apiKey string) ([]RemoteModel, error) {
+func (f *fakeCatalog) ListModels(_ context.Context, _ uuid.UUID, _ registrymodel.ProviderKind, _ string, apiKey string) ([]registrymodel.RemoteModel, error) {
 	f.gotKey = apiKey
 	return f.models, f.err
 }
 
-func newTestService(t *testing.T, cat Catalog) *Service {
+type registryFixture struct {
+	*registryservice.Service
+	pool    *pgxpool.Pool
+	secrets *vault.Store
+	catalog registryservice.Catalog
+}
+
+func newTestService(t *testing.T, cat registryservice.Catalog) *registryFixture {
 	t.Helper()
 	pool := pgtest.Start(t)
 	key := make([]byte, 32)
 	_, _ = rand.Read(key)
 	c, err := vault.NewCipher("v1", base64.StdEncoding.EncodeToString(key))
 	require.NoError(t, err)
-	return NewService(pool, vault.NewStore(c), cat)
+	secrets := vault.NewStore(c)
+	return &registryFixture{
+		Service: registryservice.NewRegistryService(pool, secrets, cat, config.DefaultProviderMaxRemoteModels),
+		pool:    pool, secrets: secrets, catalog: cat,
+	}
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -68,7 +85,7 @@ func TestCreateProviderStoresKeyWriteOnly(t *testing.T) {
 	cat := &fakeCatalog{}
 	s := newTestService(t, cat)
 	ctx := platformContext(context.Background())
-	p, err := s.CreateProvider(ctx, ProviderInput{Kind: KindOpenRouter, Name: "OpenRouter", APIKey: ptr(secretKey)})
+	p, err := s.CreateProvider(ctx, registrymodel.ProviderInput{Kind: registrymodel.KindOpenRouter, Name: "OpenRouter", APIKey: ptr(secretKey)})
 	require.NoError(t, err)
 	require.True(t, p.HasAPIKey)
 	require.Equal(t, "https://openrouter.ai/api/v1", p.BaseURL)
@@ -81,31 +98,31 @@ func TestCreateProviderStoresKeyWriteOnly(t *testing.T) {
 func TestCreateProviderValidates(t *testing.T) {
 	s := newTestService(t, &fakeCatalog{})
 	ctx := platformContext(context.Background())
-	_, err := s.CreateProvider(ctx, ProviderInput{Kind: "nope", Name: "x"})
+	_, err := s.CreateProvider(ctx, registrymodel.ProviderInput{Kind: "nope", Name: "x"})
 	require.Equal(t, errors.CodeValidationFailed, code(t, err))
-	_, err = s.CreateProvider(ctx, ProviderInput{Kind: KindOpenAICompatible, Name: "local"})
+	_, err = s.CreateProvider(ctx, registrymodel.ProviderInput{Kind: registrymodel.KindOpenAICompatible, Name: "local"})
 	require.Equal(t, errors.CodeValidationFailed, code(t, err), "openai_compatible needs a base URL")
-	_, err = s.CreateProvider(ctx, ProviderInput{Kind: KindOpenRouter, Name: " "})
+	_, err = s.CreateProvider(ctx, registrymodel.ProviderInput{Kind: registrymodel.KindOpenRouter, Name: " "})
 	require.Equal(t, errors.CodeValidationFailed, code(t, err))
 }
 
 func TestProviderNameIsUnique(t *testing.T) {
 	s := newTestService(t, &fakeCatalog{})
 	ctx := platformContext(context.Background())
-	_, err := s.CreateProvider(ctx, ProviderInput{Kind: KindOpenRouter, Name: "OR"})
+	_, err := s.CreateProvider(ctx, registrymodel.ProviderInput{Kind: registrymodel.KindOpenRouter, Name: "OR"})
 	require.NoError(t, err)
-	_, err = s.CreateProvider(ctx, ProviderInput{Kind: KindOpenAI, Name: "OR"})
+	_, err = s.CreateProvider(ctx, registrymodel.ProviderInput{Kind: registrymodel.KindOpenAI, Name: "OR"})
 	require.Equal(t, errors.CodeRegistryNameTaken, code(t, err))
 }
 
 func TestUpdateProviderKeySemantics(t *testing.T) {
 	s := newTestService(t, &fakeCatalog{})
 	ctx := platformContext(context.Background())
-	p, _ := s.CreateProvider(ctx, ProviderInput{Kind: KindOpenRouter, Name: "OR", APIKey: ptr(secretKey)})
-	p, err := s.UpdateProvider(ctx, p.ID, ProviderInput{Name: "OR renamed"})
+	p, _ := s.CreateProvider(ctx, registrymodel.ProviderInput{Kind: registrymodel.KindOpenRouter, Name: "OR", APIKey: ptr(secretKey)})
+	p, err := s.UpdateProvider(ctx, p.ID, registrymodel.ProviderInput{Name: "OR renamed"})
 	require.NoError(t, err)
 	require.True(t, p.HasAPIKey, "nil APIKey leaves the key unchanged")
-	p, err = s.UpdateProvider(ctx, p.ID, ProviderInput{APIKey: ptr("")})
+	p, err = s.UpdateProvider(ctx, p.ID, registrymodel.ProviderInput{APIKey: ptr("")})
 	require.NoError(t, err)
 	require.False(t, p.HasAPIKey, "empty APIKey removes the key")
 }
@@ -115,17 +132,17 @@ func TestDeleteUnknownProvider(t *testing.T) {
 	require.Equal(t, errors.CodeRegistryProviderNotFound, code(t, s.DeleteProvider(platformContext(context.Background()), uuid.New())))
 }
 
-func seedProvider(t *testing.T, s *Service) Provider {
+func seedProvider(t *testing.T, s *registryFixture) registrymodel.Provider {
 	t.Helper()
-	p, err := s.CreateProvider(platformContext(context.Background()), ProviderInput{Kind: KindOpenRouter, Name: "OR", APIKey: ptr(secretKey)})
+	p, err := s.CreateProvider(platformContext(context.Background()), registrymodel.ProviderInput{Kind: registrymodel.KindOpenRouter, Name: "OR", APIKey: ptr(secretKey)})
 	require.NoError(t, err)
 	return p
 }
 
 func TestSyncModelsUpsertsFromCatalog(t *testing.T) {
-	cat := &fakeCatalog{models: []RemoteModel{
-		{ModelRef: "anthropic/claude-sonnet-5", DisplayName: "Claude Sonnet 5", Capabilities: []Capability{CapChat, CapTools, CapVision}},
-		{ModelRef: "openai/gpt-5-mini", DisplayName: "GPT-5 mini", Capabilities: []Capability{CapChat}},
+	cat := &fakeCatalog{models: []registrymodel.RemoteModel{
+		{ModelRef: "anthropic/claude-sonnet-5", DisplayName: "Claude Sonnet 5", Capabilities: []registrymodel.Capability{registrymodel.CapChat, registrymodel.CapTools, registrymodel.CapVision}},
+		{ModelRef: "openai/gpt-5-mini", DisplayName: "GPT-5 mini", Capabilities: []registrymodel.Capability{registrymodel.CapChat}},
 	}}
 	s := newTestService(t, cat)
 	ctx := platformContext(context.Background())
@@ -133,12 +150,12 @@ func TestSyncModelsUpsertsFromCatalog(t *testing.T) {
 
 	res, err := s.SyncModels(ctx, p.ID)
 	require.NoError(t, err)
-	require.Equal(t, SyncResult{Added: 2}, res)
+	require.Equal(t, registrymodel.SyncResult{Added: 2}, res)
 	res, err = s.SyncModels(ctx, p.ID)
 	require.NoError(t, err)
-	require.Equal(t, SyncResult{Updated: 2}, res)
+	require.Equal(t, registrymodel.SyncResult{Updated: 2}, res)
 
-	vision := CapVision
+	vision := registrymodel.CapVision
 	models, err := s.ListModels(ctx, nil, &vision)
 	require.NoError(t, err)
 	require.Len(t, models, 1)
@@ -146,16 +163,16 @@ func TestSyncModelsUpsertsFromCatalog(t *testing.T) {
 }
 
 func TestSyncSkipsInvalidAndManualCollisionsAndRemovesUnreferencedStaleRows(t *testing.T) {
-	cat := &fakeCatalog{models: []RemoteModel{{ModelRef: "manual", Capabilities: []Capability{CapChat}}, {ModelRef: "keep", Capabilities: []Capability{CapChat}}}}
+	cat := &fakeCatalog{models: []registrymodel.RemoteModel{{ModelRef: "manual", Capabilities: []registrymodel.Capability{registrymodel.CapChat}}, {ModelRef: "keep", Capabilities: []registrymodel.Capability{registrymodel.CapChat}}}}
 	s := newTestService(t, cat)
 	ctx := platformContext(context.Background())
 	p := seedProvider(t, s)
-	manual, err := s.CreateModel(ctx, ModelInput{ProviderID: p.ID, ModelRef: "manual", Capabilities: []Capability{CapVision}, EmbeddingDims: ptr(384)})
+	manual, err := s.CreateModel(ctx, registrymodel.ModelInput{ProviderID: p.ID, ModelRef: "manual", Capabilities: []registrymodel.Capability{registrymodel.CapVision}, EmbeddingDims: ptr(384)})
 	require.NoError(t, err)
 	first, err := s.SyncModels(ctx, p.ID)
 	require.NoError(t, err)
 	require.Equal(t, 1, first.Skipped)
-	_, err = s.CreateModel(ctx, ModelInput{ProviderID: p.ID, ModelRef: "keep", Capabilities: []Capability{CapVision}})
+	_, err = s.CreateModel(ctx, registrymodel.ModelInput{ProviderID: p.ID, ModelRef: "keep", Capabilities: []registrymodel.Capability{registrymodel.CapVision}})
 	require.Equal(t, errors.CodeRegistryNameTaken, code(t, err))
 	modelsBefore, err := s.ListModels(ctx, &p.ID, nil)
 	require.NoError(t, err)
@@ -166,14 +183,14 @@ func TestSyncSkipsInvalidAndManualCollisionsAndRemovesUnreferencedStaleRows(t *t
 		}
 	}
 	require.NotEqual(t, uuid.Nil, keepID)
-	require.NoError(t, s.AssignRole(ctx, RoleChatFast, keepID))
-	cat.models = []RemoteModel{{ModelRef: "new", Capabilities: []Capability{CapChat}}, {ModelRef: "bad", Capabilities: []Capability{"invalid"}}}
+	require.NoError(t, s.AssignRole(ctx, registrymodel.RoleChatFast, keepID))
+	cat.models = []registrymodel.RemoteModel{{ModelRef: "new", Capabilities: []registrymodel.Capability{registrymodel.CapChat}}, {ModelRef: "bad", Capabilities: []registrymodel.Capability{"invalid"}}}
 	_, err = s.SyncModels(ctx, p.ID)
 	require.Equal(t, errors.CodeRegistryProviderRejected, code(t, err))
 	unchanged, err := s.ListModels(ctx, &p.ID, nil)
 	require.NoError(t, err)
 	require.Equal(t, modelsBefore, unchanged, "malformed snapshots preserve existing models and roll back valid siblings")
-	cat.models = []RemoteModel{{ModelRef: "new", Capabilities: []Capability{CapChat}}}
+	cat.models = []registrymodel.RemoteModel{{ModelRef: "new", Capabilities: []registrymodel.Capability{registrymodel.CapChat}}}
 	second, err := s.SyncModels(ctx, p.ID)
 	require.NoError(t, err)
 	require.Equal(t, 1, second.Added)
@@ -182,7 +199,7 @@ func TestSyncSkipsInvalidAndManualCollisionsAndRemovesUnreferencedStaleRows(t *t
 	require.Len(t, models, 3, "a stale sync row referenced by a role remains available")
 	for _, model := range models {
 		if model.ID == manual.ID {
-			require.Equal(t, []Capability{CapVision}, model.Capabilities)
+			require.Equal(t, []registrymodel.Capability{registrymodel.CapVision}, model.Capabilities)
 			require.Equal(t, ptr(384), model.EmbeddingDims)
 		}
 	}
@@ -191,14 +208,14 @@ func TestSyncSkipsInvalidAndManualCollisionsAndRemovesUnreferencedStaleRows(t *t
 func TestUpdateProviderBaseURLClearsStoredKey(t *testing.T) {
 	s := newTestService(t, &fakeCatalog{})
 	p := seedProvider(t, s)
-	updated, err := s.UpdateProvider(platformContext(context.Background()), p.ID, ProviderInput{BaseURL: "https://new.example/v1"})
+	updated, err := s.UpdateProvider(platformContext(context.Background()), p.ID, registrymodel.ProviderInput{BaseURL: "https://new.example/v1"})
 	require.NoError(t, err)
 	require.False(t, updated.HasAPIKey)
 }
 
 func TestSyncUnsupportedKind(t *testing.T) {
 	s := newTestService(t, &fakeCatalog{})
-	p, err := s.CreateProvider(platformContext(context.Background()), ProviderInput{Kind: KindCohere, Name: "Cohere"})
+	p, err := s.CreateProvider(platformContext(context.Background()), registrymodel.ProviderInput{Kind: registrymodel.KindCohere, Name: "Cohere"})
 	require.NoError(t, err)
 	_, err = s.SyncModels(platformContext(context.Background()), p.ID)
 	require.Equal(t, errors.CodeRegistrySyncUnsupported, code(t, err))
@@ -208,18 +225,18 @@ func TestAssignRoleRejectsMissingCapability(t *testing.T) {
 	s := newTestService(t, &fakeCatalog{})
 	ctx := platformContext(context.Background())
 	p := seedProvider(t, s)
-	m, err := s.CreateModel(ctx, ModelInput{ProviderID: p.ID, ModelRef: "x/chat-only", DisplayName: "Chat only", Capabilities: []Capability{CapChat}})
+	m, err := s.CreateModel(ctx, registrymodel.ModelInput{ProviderID: p.ID, ModelRef: "x/chat-only", DisplayName: "Chat only", Capabilities: []registrymodel.Capability{registrymodel.CapChat}})
 	require.NoError(t, err)
-	require.Equal(t, errors.CodeRegistryCapabilityMismatch, code(t, s.AssignRole(ctx, RoleChatDefault, m.ID)))
-	require.NoError(t, s.AssignRole(ctx, RoleChatFast, m.ID))
+	require.Equal(t, errors.CodeRegistryCapabilityMismatch, code(t, s.AssignRole(ctx, registrymodel.RoleChatDefault, m.ID)))
+	require.NoError(t, s.AssignRole(ctx, registrymodel.RoleChatFast, m.ID))
 }
 
 func TestDeleteModelInUseIsConflict(t *testing.T) {
 	s := newTestService(t, &fakeCatalog{})
 	ctx := platformContext(context.Background())
 	p := seedProvider(t, s)
-	m, _ := s.CreateModel(ctx, ModelInput{ProviderID: p.ID, ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []Capability{CapChat}})
-	require.NoError(t, s.AssignRole(ctx, RoleChatFast, m.ID))
+	m, _ := s.CreateModel(ctx, registrymodel.ModelInput{ProviderID: p.ID, ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []registrymodel.Capability{registrymodel.CapChat}})
+	require.NoError(t, s.AssignRole(ctx, registrymodel.RoleChatFast, m.ID))
 	require.Equal(t, errors.CodeRegistryModelInUse, code(t, s.DeleteModel(ctx, m.ID)))
 	require.Equal(t, errors.CodeRegistryModelInUse, code(t, s.DeleteProvider(ctx, p.ID)))
 }
@@ -228,38 +245,38 @@ func TestResolveReturnsDecryptedKeyAndFallsBack(t *testing.T) {
 	s := newTestService(t, &fakeCatalog{})
 	ctx := platformContext(context.Background())
 	p := seedProvider(t, s)
-	m, _ := s.CreateModel(ctx, ModelInput{ProviderID: p.ID, ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []Capability{CapChat}})
-	require.NoError(t, s.AssignRole(ctx, RoleChatFast, m.ID))
+	m, _ := s.CreateModel(ctx, registrymodel.ModelInput{ProviderID: p.ID, ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []registrymodel.Capability{registrymodel.CapChat}})
+	require.NoError(t, s.AssignRole(ctx, registrymodel.RoleChatFast, m.ID))
 
-	got, err := s.Resolve(ctx, RoleChatFast)
+	got, err := s.Resolve(ctx, registrymodel.RoleChatFast)
 	require.NoError(t, err)
 	require.Equal(t, secretKey, got.APIKey)
 	require.Equal(t, "x/fast", got.ModelRef)
 
-	got, err = s.Resolve(ctx, RoleDecision)
+	got, err = s.Resolve(ctx, registrymodel.RoleDecision)
 	require.NoError(t, err)
-	require.Equal(t, RoleChatFast, got.Role)
-	require.Equal(t, RoleDecision, got.FallbackFrom)
+	require.Equal(t, registrymodel.RoleChatFast, got.Role)
+	require.Equal(t, registrymodel.RoleDecision, got.FallbackFrom)
 
-	_, err = s.Resolve(ctx, RoleEmbedding)
+	_, err = s.Resolve(ctx, registrymodel.RoleEmbedding)
 	require.Equal(t, errors.CodeRegistryRoleNotAssigned, code(t, err))
 }
 
 func TestCreateModelValidatesCapabilities(t *testing.T) {
 	s := newTestService(t, &fakeCatalog{})
 	p := seedProvider(t, s)
-	_, err := s.CreateModel(platformContext(context.Background()), ModelInput{ProviderID: p.ID, ModelRef: "x", DisplayName: "x", Capabilities: []Capability{"telepathy"}})
+	_, err := s.CreateModel(platformContext(context.Background()), registrymodel.ModelInput{ProviderID: p.ID, ModelRef: "x", DisplayName: "x", Capabilities: []registrymodel.Capability{"telepathy"}})
 	require.Equal(t, errors.CodeValidationFailed, code(t, err))
-	_, err = s.CreateModel(platformContext(context.Background()), ModelInput{ProviderID: p.ID, ModelRef: "e", DisplayName: "e", Capabilities: []Capability{CapEmbedding}})
+	_, err = s.CreateModel(platformContext(context.Background()), registrymodel.ModelInput{ProviderID: p.ID, ModelRef: "e", DisplayName: "e", Capabilities: []registrymodel.Capability{registrymodel.CapEmbedding}})
 	require.Equal(t, errors.CodeValidationFailed, code(t, err), "embedding models need embeddingDims")
 }
 
 func TestCreateModelRejectsCollisionAndPreservesOriginal(t *testing.T) {
 	s := newTestService(t, &fakeCatalog{})
 	provider := seedProvider(t, s)
-	original, err := s.CreateModel(platformContext(t.Context()), ModelInput{ProviderID: provider.ID, ModelRef: "manual", Capabilities: []Capability{CapEmbedding}, EmbeddingDims: ptr(384)})
+	original, err := s.CreateModel(platformContext(t.Context()), registrymodel.ModelInput{ProviderID: provider.ID, ModelRef: "manual", Capabilities: []registrymodel.Capability{registrymodel.CapEmbedding}, EmbeddingDims: ptr(384)})
 	require.NoError(t, err)
-	_, err = s.CreateModel(platformContext(t.Context()), ModelInput{ProviderID: provider.ID, ModelRef: "manual", Capabilities: []Capability{CapChat}})
+	_, err = s.CreateModel(platformContext(t.Context()), registrymodel.ModelInput{ProviderID: provider.ID, ModelRef: "manual", Capabilities: []registrymodel.Capability{registrymodel.CapChat}})
 	require.Error(t, err)
 	require.Equal(t, errors.CodeRegistryNameTaken, errors.ToAppError(err).Code)
 	models, err := s.ListModels(platformContext(t.Context()), &provider.ID, nil)
@@ -287,14 +304,14 @@ func TestCatalogMapsOpenRouterAndBoundsBody(t *testing.T) {
 	}))
 	defer srv.Close()
 	cat := catalogForTest(srv.Client(), 4096, 1, nil)
-	models, err := cat.ListModels(platformContext(context.Background()), uuid.New(), KindOpenRouter, srv.URL, secretKey)
+	models, err := cat.ListModels(platformContext(context.Background()), uuid.New(), registrymodel.KindOpenRouter, srv.URL, secretKey)
 	require.NoError(t, err)
 	require.Len(t, models, 1)
-	require.ElementsMatch(t, []Capability{CapChat, CapTools, CapVision, CapReasoning}, models[0].Capabilities)
+	require.ElementsMatch(t, []registrymodel.Capability{registrymodel.CapChat, registrymodel.CapTools, registrymodel.CapVision, registrymodel.CapReasoning}, models[0].Capabilities)
 	require.Equal(t, 1.0, *models[0].InputPricePerMTok)
 	require.Equal(t, 2.0, *models[0].OutputPricePerMTok)
 	cat = catalogForTest(srv.Client(), 10, 1, nil)
-	_, err = cat.ListModels(platformContext(context.Background()), uuid.New(), KindOpenRouter, srv.URL, secretKey)
+	_, err = cat.ListModels(platformContext(context.Background()), uuid.New(), registrymodel.KindOpenRouter, srv.URL, secretKey)
 	require.Equal(t, errors.CodeRegistryProviderRejected, code(t, err))
 	require.NotContains(t, err.Error(), secretKey)
 }
@@ -305,7 +322,7 @@ func TestCatalogKeepsValidEntriesWhenOneRemoteModelIsMalformed(t *testing.T) {
 	}))
 	defer server.Close()
 	cat := catalogForTest(server.Client(), 4096, 1, nil)
-	models, err := cat.ListModels(platformContext(t.Context()), uuid.New(), KindOpenRouter, server.URL, "")
+	models, err := cat.ListModels(platformContext(t.Context()), uuid.New(), registrymodel.KindOpenRouter, server.URL, "")
 	require.NoError(t, err)
 	require.Len(t, models, 4)
 	require.Equal(t, "valid", models[0].ModelRef)
@@ -315,7 +332,7 @@ func TestCatalogKeepsValidEntriesWhenOneRemoteModelIsMalformed(t *testing.T) {
 }
 
 func TestSyncRollsBackMalformedRemoteModel(t *testing.T) {
-	cat := &fakeCatalog{models: []RemoteModel{{ModelRef: "seed", Capabilities: []Capability{CapChat}}}}
+	cat := &fakeCatalog{models: []registrymodel.RemoteModel{{ModelRef: "seed", Capabilities: []registrymodel.Capability{registrymodel.CapChat}}}}
 	s := newTestService(t, cat)
 	ctx := platformContext(t.Context())
 	p := seedProvider(t, s)
@@ -325,7 +342,7 @@ func TestSyncRollsBackMalformedRemoteModel(t *testing.T) {
 	require.NoError(t, err)
 	var auditBefore int
 	require.NoError(t, s.pool.QueryRow(ctx, `SELECT count(*) FROM audit_events WHERE action='model.sync'`).Scan(&auditBefore))
-	cat.models = []RemoteModel{{ModelRef: "valid", Capabilities: []Capability{CapChat}}, {ModelRef: " ", Capabilities: []Capability{CapChat}}}
+	cat.models = []registrymodel.RemoteModel{{ModelRef: "valid", Capabilities: []registrymodel.Capability{registrymodel.CapChat}}, {ModelRef: " ", Capabilities: []registrymodel.Capability{registrymodel.CapChat}}}
 	_, err = s.SyncModels(ctx, p.ID)
 	require.Error(t, err)
 	models, err := s.ListModels(ctx, &p.ID, nil)
@@ -337,7 +354,7 @@ func TestSyncRollsBackMalformedRemoteModel(t *testing.T) {
 }
 
 func TestSyncEmptyAndFailedSnapshotsPreserveModels(t *testing.T) {
-	cat := &fakeCatalog{models: []RemoteModel{{ModelRef: "seed"}}}
+	cat := &fakeCatalog{models: []registrymodel.RemoteModel{{ModelRef: "seed"}}}
 	s := newTestService(t, cat)
 	ctx := platformContext(t.Context())
 	p := seedProvider(t, s)
@@ -366,7 +383,7 @@ func TestSyncRejectsMissingTenantAndIsolatesContextTenant(t *testing.T) {
 	provider := seedProvider(t, s)
 	_, err = s.TestProvider(tenant.WithID(t.Context(), "other"), provider.ID)
 	require.Equal(t, errors.CodeRegistryProviderNotFound, code(t, err))
-	other, err := s.CreateProvider(tenant.WithID(t.Context(), "other"), ProviderInput{Kind: KindOpenRouter, Name: "OR"})
+	other, err := s.CreateProvider(tenant.WithID(t.Context(), "other"), registrymodel.ProviderInput{Kind: registrymodel.KindOpenRouter, Name: "OR"})
 	require.NoError(t, err, "same provider name can exist in different context tenants")
 	providers, err := s.ListProviders(platformContext(t.Context()))
 	require.NoError(t, err)
@@ -383,12 +400,12 @@ func TestCatalogMaintainsIndependentProviderBreakers(t *testing.T) {
 	cat := catalogForTest(http.DefaultClient, 1024, 1, nil)
 	cat.Breaker = retry.NewBreaker("test", config.BreakerConfig{FailureThreshold: 1, OpenTimeout: time.Hour, HalfOpenMaxCalls: 1})
 	oneID, anotherID := uuid.New(), uuid.New()
-	_, err := cat.ListModels(platformContext(t.Context()), oneID, KindOpenRouter, failing.URL, "")
+	_, err := cat.ListModels(platformContext(t.Context()), oneID, registrymodel.KindOpenRouter, failing.URL, "")
 	require.Error(t, err)
 	// The first provider stays open even if its next URL responds successfully.
-	_, err = cat.ListModels(platformContext(t.Context()), oneID, KindOpenRouter, healthy.URL, "")
+	_, err = cat.ListModels(platformContext(t.Context()), oneID, registrymodel.KindOpenRouter, healthy.URL, "")
 	require.Error(t, err)
-	models, err := cat.ListModels(platformContext(t.Context()), anotherID, KindOpenRouter, healthy.URL, "")
+	models, err := cat.ListModels(platformContext(t.Context()), anotherID, registrymodel.KindOpenRouter, healthy.URL, "")
 	require.NoError(t, err)
 	require.Len(t, models, 1)
 	require.Equal(t, "healthy", models[0].ModelRef)
@@ -408,13 +425,13 @@ func TestCatalogBoundsBreakerCacheAndKeepsOpenProvidersProtected(t *testing.T) {
 	cat := catalogForTest(server.Client(), 1024, 1, nil)
 	cat.Breaker = retry.NewBreaker("test", config.BreakerConfig{FailureThreshold: 1, OpenTimeout: time.Hour, HalfOpenMaxCalls: 1})
 	failedProvider := uuid.New()
-	_, err := cat.ListModels(t.Context(), failedProvider, KindOpenRouter, server.URL+"/fail", "")
+	_, err := cat.ListModels(t.Context(), failedProvider, registrymodel.KindOpenRouter, server.URL+"/fail", "")
 	require.Error(t, err)
 	for range 300 {
-		_, err = cat.ListModels(t.Context(), uuid.New(), KindOpenRouter, server.URL, "")
+		_, err = cat.ListModels(t.Context(), uuid.New(), registrymodel.KindOpenRouter, server.URL, "")
 		require.NoError(t, err)
 	}
-	_, err = cat.ListModels(t.Context(), failedProvider, KindOpenRouter, server.URL+"/fail", "")
+	_, err = cat.ListModels(t.Context(), failedProvider, registrymodel.KindOpenRouter, server.URL+"/fail", "")
 	require.Error(t, err)
 	require.Equal(t, int32(1), failingCalls.Load(), "cache churn cannot reset an open circuit")
 	require.LessOrEqual(t, len(cat.breakers), 256)
@@ -437,13 +454,13 @@ func TestCatalogCachePressureDoesNotEvictActiveProvider(t *testing.T) {
 	id := uuid.New()
 	done := make(chan error, 1)
 	go func() {
-		_, err := cat.ListModels(t.Context(), id, KindOpenRouter, server.URL+"/blocked", "")
+		_, err := cat.ListModels(t.Context(), id, registrymodel.KindOpenRouter, server.URL+"/blocked", "")
 		done <- err
 	}()
 	<-entered
 	original := cat.breakers[id]
 	for range 300 {
-		_, err := cat.ListModels(t.Context(), uuid.New(), KindOpenRouter, server.URL, "")
+		_, err := cat.ListModels(t.Context(), uuid.New(), registrymodel.KindOpenRouter, server.URL, "")
 		require.NoError(t, err)
 	}
 	require.Same(t, original, cat.breakers[id], "in-flight provider circuit cannot be replaced")
@@ -453,7 +470,7 @@ func TestCatalogCachePressureDoesNotEvictActiveProvider(t *testing.T) {
 }
 
 func TestSyncKeepsStaleModelsReferencedByAnotherTenantRole(t *testing.T) {
-	cat := &fakeCatalog{models: []RemoteModel{{ModelRef: "shared", Capabilities: []Capability{CapChat}}}}
+	cat := &fakeCatalog{models: []registrymodel.RemoteModel{{ModelRef: "shared", Capabilities: []registrymodel.Capability{registrymodel.CapChat}}}}
 	s := newTestService(t, cat)
 	provider := seedProvider(t, s)
 	_, err := s.SyncModels(platformContext(t.Context()), provider.ID)
@@ -462,7 +479,7 @@ func TestSyncKeepsStaleModelsReferencedByAnotherTenantRole(t *testing.T) {
 	require.NoError(t, err)
 	_, err = s.pool.Exec(platformContext(t.Context()), `INSERT INTO model_roles (tenant_id,role,model_id) VALUES ('other','chat.fast',$1)`, models[0].ID)
 	require.NoError(t, err)
-	cat.models = []RemoteModel{{ModelRef: "new"}}
+	cat.models = []registrymodel.RemoteModel{{ModelRef: "new"}}
 	_, err = s.SyncModels(platformContext(t.Context()), provider.ID)
 	require.NoError(t, err)
 	models, err = s.ListModels(platformContext(t.Context()), &provider.ID, nil)
@@ -471,16 +488,16 @@ func TestSyncKeepsStaleModelsReferencedByAnotherTenantRole(t *testing.T) {
 }
 
 func TestSyncCapsRemoteCountWithoutDeletingRowsOutsidePartialSnapshot(t *testing.T) {
-	cat := &fakeCatalog{models: []RemoteModel{{ModelRef: "last"}}}
+	cat := &fakeCatalog{models: []registrymodel.RemoteModel{{ModelRef: "last"}}}
 	s := newTestService(t, cat)
 	provider := seedProvider(t, s)
 	_, err := s.SyncModels(platformContext(t.Context()), provider.ID)
 	require.NoError(t, err)
-	cat.models = make([]RemoteModel, 1001)
+	cat.models = make([]registrymodel.RemoteModel, 1001)
 	for i := range 1000 {
-		cat.models[i] = RemoteModel{ModelRef: "model-" + strconv.Itoa(i)}
+		cat.models[i] = registrymodel.RemoteModel{ModelRef: "model-" + strconv.Itoa(i)}
 	}
-	cat.models[1000] = RemoteModel{ModelRef: "last"}
+	cat.models[1000] = registrymodel.RemoteModel{ModelRef: "last"}
 	result, err := s.SyncModels(platformContext(t.Context()), provider.ID)
 	require.NoError(t, err)
 	require.Equal(t, 1000, result.Added)
@@ -517,7 +534,7 @@ func TestCatalogStatusRetryAfterAndMalformedBody(t *testing.T) {
 			}))
 			defer srv.Close()
 			cat := catalogForTest(srv.Client(), 4096, 2, func(_ context.Context, d time.Duration) error { delays = append(delays, d); return nil })
-			_, err := cat.ListModels(platformContext(context.Background()), uuid.New(), KindOpenRouter, srv.URL, secretKey)
+			_, err := cat.ListModels(platformContext(context.Background()), uuid.New(), registrymodel.KindOpenRouter, srv.URL, secretKey)
 			require.Equal(t, tc.want, code(t, err))
 			require.Equal(t, tc.attempts, calls)
 			require.NotContains(t, err.Error(), secretKey)
@@ -536,7 +553,7 @@ func TestCatalogDefaultClientRejectsPrivateAndCredentialURLs(t *testing.T) {
 	defer srv.Close()
 	cat := NewHTTPCatalog(retry.NewPolicy(config.RetryConfig{MaxAttempts: 1, BaseDelay: time.Millisecond, MaxDelay: time.Second}), time.Second, retry.NewBreaker("test", config.BreakerConfig{FailureThreshold: 2, OpenTimeout: time.Second, HalfOpenMaxCalls: 1}))
 	for _, endpoint := range []string{srv.URL, "https://username:" + secretKey + "@api.example.com/v1"} {
-		_, err := cat.ListModels(platformContext(context.Background()), uuid.New(), KindOpenRouter, endpoint, secretKey)
+		_, err := cat.ListModels(platformContext(context.Background()), uuid.New(), registrymodel.KindOpenRouter, endpoint, secretKey)
 		require.Error(t, err)
 		require.NotContains(t, err.Error(), secretKey)
 	}
@@ -545,12 +562,12 @@ func TestCatalogDefaultClientRejectsPrivateAndCredentialURLs(t *testing.T) {
 func TestProviderResponseNeverContainsAPIKey(t *testing.T) {
 	s := newTestService(t, &fakeCatalog{})
 	p := seedProvider(t, s)
-	raw, err := json.Marshal(p)
+	raw, err := json.Marshal(dto.FromProvider(p))
 	require.NoError(t, err)
 	require.NotContains(t, string(raw), secretKey)
 	providers, err := s.ListProviders(platformContext(context.Background()))
 	require.NoError(t, err)
-	raw, err = json.Marshal(providers)
+	raw, err = json.Marshal(dto.FromProviders(providers))
 	require.NoError(t, err)
 	require.NotContains(t, string(raw), secretKey)
 	var ciphertext []byte
@@ -563,34 +580,40 @@ func TestProviderAuditRollback(t *testing.T) {
 	p := seedProvider(t, s)
 	_, err := s.pool.Exec(platformContext(context.Background()), "CREATE FUNCTION fail_registry_audit() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'audit unavailable'; END; $$ LANGUAGE plpgsql; CREATE TRIGGER fail_registry_audit BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION fail_registry_audit()")
 	require.NoError(t, err)
-	_, err = s.UpdateProvider(platformContext(context.Background()), p.ID, ProviderInput{APIKey: ptr("replacement")})
+	_, err = s.UpdateProvider(platformContext(context.Background()), p.ID, registrymodel.ProviderInput{APIKey: ptr("replacement")})
 	require.Error(t, err)
-	_, key, err := s.providerWithKey(platformContext(context.Background()), p.ID)
+	stored, err := repository.NewRegistryRepository().GetProvider(platformContext(context.Background()), s.pool, p.ID)
+	require.NoError(t, err)
+	require.NotNil(t, stored.SecretID)
+	key, err := s.secrets.Get(platformContext(context.Background()), s.pool, *stored.SecretID)
 	require.NoError(t, err)
 	require.Equal(t, secretKey, key)
 }
 
 func TestProviderRejectsUnsafeStoredURL(t *testing.T) {
+	s := newTestService(t, &fakeCatalog{})
 	for _, endpoint := range []string{"https://username:" + secretKey + "@example.com/v1", "https://example.com/v1#fragment", "not-a-url"} {
-		in := ProviderInput{Kind: KindOpenAICompatible, Name: "custom", BaseURL: endpoint}
-		err := normalizeProvider(&in)
+		in := registrymodel.ProviderInput{Kind: registrymodel.KindOpenAICompatible, Name: "custom", BaseURL: endpoint}
+		_, err := s.CreateProvider(platformContext(t.Context()), in)
 		require.Equal(t, errors.CodeValidationFailed, code(t, err))
 		require.NotContains(t, err.Error(), secretKey)
 	}
 }
 
 func TestModelRejectsInvalidNumericMetadata(t *testing.T) {
-	for _, in := range []ModelInput{
+	s := newTestService(t, &fakeCatalog{})
+	for _, in := range []registrymodel.ModelInput{
 		{ModelRef: "x", ContextWindow: ptr(-1)},
 		{ModelRef: "x", EmbeddingDims: ptr(0)},
 		{ModelRef: "x", InputPricePerMTok: ptr(-1.0)},
 	} {
-		require.Equal(t, errors.CodeValidationFailed, code(t, validateModel(&in)))
+		_, err := s.CreateModel(platformContext(t.Context()), in)
+		require.Equal(t, errors.CodeValidationFailed, code(t, err))
 	}
 }
 
 func TestSyncSkipsAndCountsMalformedRemoteModel(t *testing.T) {
-	cat := &fakeCatalog{models: []RemoteModel{{ModelRef: "valid", Capabilities: []Capability{CapChat}}, {ModelRef: " ", Capabilities: []Capability{CapChat}}}}
+	cat := &fakeCatalog{models: []registrymodel.RemoteModel{{ModelRef: "valid", Capabilities: []registrymodel.Capability{registrymodel.CapChat}}, {ModelRef: " ", Capabilities: []registrymodel.Capability{registrymodel.CapChat}}}}
 	s := newTestService(t, cat)
 	p := seedProvider(t, s)
 	_, err := s.SyncModels(platformContext(context.Background()), p.ID)
@@ -601,7 +624,7 @@ func TestSyncSkipsAndCountsMalformedRemoteModel(t *testing.T) {
 	cat.models = cat.models[:1]
 	result, err := s.SyncModels(platformContext(context.Background()), p.ID)
 	require.NoError(t, err)
-	require.Equal(t, SyncResult{Added: 1}, result)
+	require.Equal(t, registrymodel.SyncResult{Added: 1}, result)
 	models, err = s.ListModels(platformContext(context.Background()), nil, nil)
 	require.NoError(t, err)
 	require.Len(t, models, 1)
@@ -610,12 +633,12 @@ func TestSyncSkipsAndCountsMalformedRemoteModel(t *testing.T) {
 func TestResolveDisabledProviderIsUnavailable(t *testing.T) {
 	s := newTestService(t, &fakeCatalog{})
 	p := seedProvider(t, s)
-	m, err := s.CreateModel(platformContext(context.Background()), ModelInput{ProviderID: p.ID, ModelRef: "x", Capabilities: []Capability{CapChat}})
+	m, err := s.CreateModel(platformContext(context.Background()), registrymodel.ModelInput{ProviderID: p.ID, ModelRef: "x", Capabilities: []registrymodel.Capability{registrymodel.CapChat}})
 	require.NoError(t, err)
-	require.NoError(t, s.AssignRole(platformContext(context.Background()), RoleChatFast, m.ID))
-	_, err = s.UpdateProvider(platformContext(context.Background()), p.ID, ProviderInput{Enabled: ptr(false)})
+	require.NoError(t, s.AssignRole(platformContext(context.Background()), registrymodel.RoleChatFast, m.ID))
+	_, err = s.UpdateProvider(platformContext(context.Background()), p.ID, registrymodel.ProviderInput{Enabled: ptr(false)})
 	require.NoError(t, err)
-	_, err = s.Resolve(platformContext(context.Background()), RoleChatFast)
+	_, err = s.Resolve(platformContext(context.Background()), registrymodel.RoleChatFast)
 	require.Equal(t, errors.CodeProviderUnavailable, code(t, err))
 }
 
@@ -627,7 +650,7 @@ func TestCatalogChunkedOversizeResponse(t *testing.T) {
 	}))
 	defer srv.Close()
 	cat := catalogForTest(srv.Client(), 64, 1, nil)
-	_, err := cat.ListModels(platformContext(context.Background()), uuid.New(), KindOpenRouter, srv.URL, secretKey)
+	_, err := cat.ListModels(platformContext(context.Background()), uuid.New(), registrymodel.KindOpenRouter, srv.URL, secretKey)
 	require.Equal(t, errors.CodeRegistryProviderRejected, code(t, err))
 }
 

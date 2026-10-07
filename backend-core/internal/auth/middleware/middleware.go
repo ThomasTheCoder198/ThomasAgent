@@ -1,10 +1,12 @@
-package auth
+package middleware
 
 import (
 	"context"
 	"crypto/subtle"
 	"net/http"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/model"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
@@ -22,18 +24,18 @@ func isSafeMethod(method string) bool {
 
 type userKey struct{}
 
-func UserFrom(ctx context.Context) (User, bool) {
-	u, ok := ctx.Value(userKey{}).(User)
+func UserFrom(ctx context.Context) (model.User, bool) {
+	u, ok := ctx.Value(userKey{}).(model.User)
 	return u, ok
 }
 
-func RequireSession(svc *Service) func(http.Handler) http.Handler {
+func RequireSession(svc service.SessionAuthenticator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set(httpx.HeaderCacheControl, httpx.CacheControlNoStore)
 			c, err := r.Cookie(CookieSession)
 			if err != nil {
-				httpx.WriteError(w, r, errors.New(errors.CodeUnauthenticated))
+				httpx.WriteError(w, r, errors.ErrUnauthenticated)
 				return
 			}
 			user, sess, err := svc.Authenticate(r.Context(), c.Value)
@@ -42,7 +44,7 @@ func RequireSession(svc *Service) func(http.Handler) http.Handler {
 				return
 			}
 			if !isSafeMethod(r.Method) && subtle.ConstantTimeCompare([]byte(r.Header.Get(HeaderCSRF)), []byte(sess.CSRFToken)) != 1 {
-				httpx.WriteError(w, r, errors.New(errors.CodeAuthCsrfInvalid))
+				httpx.WriteError(w, r, errors.ErrAuthCsrfInvalid)
 				return
 			}
 			ctx := tenant.WithID(r.Context(), sess.TenantID)

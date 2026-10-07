@@ -5,16 +5,12 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
-	"errors"
 	"fmt"
+
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
 
 const masterKeyBytes = 32
-
-var (
-	ErrInvalidMasterKey = errors.New("vault: master key must be base64 of exactly 32 bytes")
-	ErrDecrypt          = errors.New("vault: cannot decrypt secret")
-)
 
 type Sealed struct {
 	KeyID      string
@@ -30,7 +26,7 @@ type Cipher struct {
 func NewCipher(keyID, masterKeyBase64 string) (*Cipher, error) {
 	key, err := base64.StdEncoding.DecodeString(masterKeyBase64)
 	if err != nil || len(key) != masterKeyBytes {
-		return nil, ErrInvalidMasterKey
+		return nil, errors.ErrVaultInvalidMasterKey
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -53,11 +49,11 @@ func (c *Cipher) Seal(plaintext, aad []byte) (Sealed, error) {
 
 func (c *Cipher) Open(s Sealed, aad []byte) ([]byte, error) {
 	if s.KeyID != c.keyID || len(s.Nonce) != c.aead.NonceSize() {
-		return nil, ErrDecrypt
+		return nil, errors.ErrVaultDecrypt
 	}
 	plain, err := c.aead.Open(nil, s.Nonce, s.Ciphertext, aad)
 	if err != nil {
-		return nil, ErrDecrypt
+		return nil, errors.ErrVaultDecrypt
 	}
 	return plain, nil
 }

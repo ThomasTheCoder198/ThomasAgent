@@ -1,19 +1,20 @@
-package auth
+package service
 
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	stderrors "errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/alexedwards/argon2id"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/audit"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/model"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
+	authtoken "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/token"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
@@ -21,11 +22,9 @@ import (
 )
 
 const (
-	tokenBytes        = 32
-	actorOwner        = "owner"
-	actionLogin       = "auth.login"
-	actionLoginFailed = "auth.login.failed"
-	targetTypeUser    = "user"
+	actorOwner     = "owner"
+	actionLogin    = "auth.login"
+	targetTypeUser = "user"
 	// A real hash of a throwaway password: comparing against it when the email is unknown
 	// keeps the response time of "unknown email" and "wrong password" the same.
 	timingDecoyPassword = "timing-decoy-password"
@@ -38,7 +37,7 @@ type transactionDB interface {
 }
 
 type Service struct {
-	repo        *Repository
+	repo        repository.AuthRepository
 	db          transactionDB
 	cfg         config.AuthConfig
 	now         func() time.Time
@@ -48,7 +47,9 @@ type Service struct {
 	hashSlots   chan struct{}
 }
 
-func NewService(repo *Repository, db transactionDB, cfg config.AuthConfig, now func() time.Time) *Service {
+var _ AuthService = (*Service)(nil)
+
+func NewAuthService(repo repository.AuthRepository, db transactionDB, cfg config.AuthConfig, now func() time.Time) *Service {
 	if cfg.PasswordHash.Iterations < config.MinimumArgonIterations {
 		cfg.PasswordHash.Iterations = config.MinimumArgonIterations
 	}
@@ -91,8 +92,6 @@ func (s *Service) acquireHashSlot(ctx context.Context) error {
 	}
 }
 
-func normalizeEmail(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
-
 func (s *Service) EnsureOwner(ctx context.Context) error {
 	if s.decoyErr != nil {
 		return fmt.Errorf("initialize auth timing hash: %w", s.decoyErr)
@@ -106,7 +105,7 @@ func (s *Service) EnsureOwner(ctx context.Context) error {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, ownerBootstrapLock); err != nil {
 		return errors.ErrInternalError.WithCause(err)
 	}
-	repo := NewRepository(tx)
+	repo := repository.NewAuthRepository(tx)
 	n, err := repo.CountUsers(ctx)
 	if err != nil || n > 0 {
 		return err
@@ -117,8 +116,8 @@ func (s *Service) EnsureOwner(ctx context.Context) error {
 	return tx.Commit(ctx)
 }
 
-func (s *Service) createOwner(ctx context.Context, repo *Repository) error {
-	email := normalizeEmail(s.cfg.OwnerEmail)
+func (s *Service) createOwner(ctx context.Context, repo repository.AuthRepository) error {
+	email := model.NormalizeEmail(s.cfg.OwnerEmail)
 	if email == "" || len(s.cfg.OwnerPassword) < s.cfg.MinPasswordLength {
 		return fmt.Errorf("no owner exists: set CORE_AUTH_OWNER_EMAIL and CORE_AUTH_OWNER_PASSWORD (min %d chars)", s.cfg.MinPasswordLength)
 	}
@@ -127,97 +126,97 @@ func (s *Service) createOwner(ctx context.Context, repo *Repository) error {
 		return fmt.Errorf("hash owner password: %w", err)
 	}
 	_, err = repo.CreateUser(ctx, email, hash)
-	if stderrors.Is(err, errAlreadyExists) {
+	if stderrors.Is(err, errors.ErrConflict) {
 		return nil
 	}
 	return err
 }
 
-func (s *Service) Login(ctx context.Context, email, password string) (User, IssuedSession, error) {
+func (s *Service) Login(ctx context.Context, email, password string) (model.User, model.IssuedSession, error) {
 	if s.decoyErr != nil {
-		return User{}, IssuedSession{}, fmt.Errorf("initialize auth timing hash: %w", s.decoyErr)
+		return model.User{}, model.IssuedSession{}, fmt.Errorf("initialize auth timing hash: %w", s.decoyErr)
 	}
-	user, hash, err := s.repo.FindUserByEmail(ctx, normalizeEmail(email))
-	if stderrors.Is(err, errNotFound) {
+	user, hash, err := s.repo.FindUserByEmail(ctx, model.NormalizeEmail(email))
+	if stderrors.Is(err, errors.ErrNotFound) {
 		if _, err := s.compareHash(ctx, password, s.decoy); err != nil {
-			return User{}, IssuedSession{}, fmt.Errorf("compare timing hash: %w", err)
+			return model.User{}, model.IssuedSession{}, fmt.Errorf("compare timing hash: %w", err)
 		}
-		return User{}, IssuedSession{}, errInvalidCredentials()
+		return model.User{}, model.IssuedSession{}, errors.ErrAuthInvalidCredentials
 	}
 	if err != nil {
-		return User{}, IssuedSession{}, err
+		return model.User{}, model.IssuedSession{}, err
 	}
 	ok, err := s.compareHash(ctx, password, hash)
 	if err != nil {
-		return User{}, IssuedSession{}, fmt.Errorf("compare password: %w", err)
+		return model.User{}, model.IssuedSession{}, fmt.Errorf("compare password: %w", err)
 	}
 	if !ok {
-		return User{}, IssuedSession{}, errInvalidCredentials()
+		return model.User{}, model.IssuedSession{}, errors.ErrAuthInvalidCredentials
 	}
 	issued, err := s.issue(ctx, user)
 	if err != nil {
-		return User{}, IssuedSession{}, err
+		return model.User{}, model.IssuedSession{}, err
 	}
 	return user, issued, nil
 }
 
-func (s *Service) recordFailedLogin(ctx context.Context) error {
-	return audit.Record(ctx, s.db, audit.Event{Actor: actorOwner, Action: actionLoginFailed, TargetType: "auth"})
+func (s *Service) RecordFailedLogin(ctx context.Context) error {
+	return audit.Record(ctx, s.db, audit.Event{Actor: actorOwner, Action: model.ActionLoginFailed, TargetType: "auth"})
 }
 
-func (s *Service) issue(ctx context.Context, user User) (session IssuedSession, resultErr error) {
+func (s *Service) issue(ctx context.Context, user model.User) (session model.IssuedSession, resultErr error) {
 	token, err := randomToken()
 	if err != nil {
-		return IssuedSession{}, err
+		return model.IssuedSession{}, err
 	}
 	csrf, err := randomToken()
 	if err != nil {
-		return IssuedSession{}, err
+		return model.IssuedSession{}, err
 	}
 	expires := s.now().Add(s.cfg.SessionTTL)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return IssuedSession{}, errors.ErrInternalError.WithCause(err)
+		return model.IssuedSession{}, errors.ErrInternalError.WithCause(err)
 	}
 	defer func() {
 		if err := tx.Rollback(ctx); err != nil && !stderrors.Is(err, pgx.ErrTxClosed) && resultErr != nil {
 			resultErr = errors.ErrInternalError.WithCause(stderrors.Join(resultErr, err))
 		}
 	}()
-	if err := s.repo.createSession(ctx, tx, user.ID, hashToken(token), csrf, expires); err != nil {
-		return IssuedSession{}, err
+	if err := s.repo.CreateSessionIn(ctx, tx, user.ID, authtoken.Hash(token), csrf, expires); err != nil {
+		return model.IssuedSession{}, err
 	}
 	if err := audit.Record(ctx, tx, audit.Event{Actor: actorOwner, Action: actionLogin, TargetType: targetTypeUser, TargetID: user.ID.String()}); err != nil {
-		return IssuedSession{}, errors.ErrInternalError.WithCause(err)
+		return model.IssuedSession{}, errors.ErrInternalError.WithCause(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return IssuedSession{}, errors.ErrInternalError.WithCause(err)
+		return model.IssuedSession{}, errors.ErrInternalError.WithCause(err)
 	}
-	return IssuedSession{Token: token, CSRFToken: csrf, ExpiresAt: expires}, nil
+	return model.IssuedSession{Token: token, CSRFToken: csrf, ExpiresAt: expires}, nil
 }
 
-func (s *Service) Authenticate(ctx context.Context, rawToken string) (User, Session, error) {
+func (s *Service) Authenticate(ctx context.Context, rawToken string) (model.User, model.Session, error) {
 	if rawToken == "" {
-		return User{}, Session{}, errUnauthenticated()
+		return model.User{}, model.Session{}, errors.ErrUnauthenticated
 	}
-	user, sess, err := s.repo.FindSessionByToken(ctx, hashToken(rawToken))
-	if stderrors.Is(err, errNotFound) {
-		return User{}, Session{}, errUnauthenticated()
+	user, sess, err := s.repo.FindSessionByToken(ctx, authtoken.Hash(rawToken))
+	if stderrors.Is(err, errors.ErrNotFound) {
+		return model.User{}, model.Session{}, errors.ErrUnauthenticated
 	}
 	if err != nil {
-		return User{}, Session{}, err
+		return model.User{}, model.Session{}, err
 	}
 	if sess.Expired {
-		if err := s.repo.DeleteSession(tenant.WithID(ctx, sess.TenantID), hashToken(rawToken)); err != nil {
-			return User{}, Session{}, errors.ErrInternalError.WithCause(err)
+		if err := s.repo.DeleteSession(tenant.WithID(ctx, sess.TenantID), authtoken.Hash(rawToken)); err != nil {
+			return model.User{}, model.Session{}, errors.ErrInternalError.WithCause(err)
 		}
-		return User{}, Session{}, errSessionExpired()
+		return model.User{}, model.Session{}, errors.ErrAuthSessionExpired
 	}
 	return user, sess, nil
 }
 
 func (s *Service) Logout(ctx context.Context, rawToken string) error {
-	return s.repo.DeleteSession(ctx, hashToken(rawToken))
+	return s.repo.DeleteSession(ctx, authtoken.Hash(rawToken))
 }
 
 func (s *Service) PurgeExpiredSessions(ctx context.Context) (int64, error) {
@@ -229,16 +228,11 @@ func (s *Service) PurgeAllExpiredSessions(ctx context.Context) (int64, error) {
 }
 
 func randomToken() (string, error) {
-	b := make([]byte, tokenBytes)
+	b := make([]byte, authtoken.Bytes)
 	if _, err := rand.Read(b); err != nil {
 		return "", fmt.Errorf("random token: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
-}
-
-func hashToken(token string) []byte {
-	sum := sha256.Sum256([]byte(token))
-	return sum[:]
 }
 
 func (s *Service) createHash(ctx context.Context, password string) (string, error) {

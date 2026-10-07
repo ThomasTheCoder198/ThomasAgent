@@ -41,7 +41,7 @@ Callers must supply access logging middleware before registering routes.
 
 ## Common failures
 - Stream arrives all at once: a proxy or middleware is buffering — see spike S8.
-- `Send` returns `ErrEventStreamClosed`: the client is gone, stop producing.
+- `Send` returns `errors.ErrEventStreamClosed`: the client is gone, stop producing.
 - Middleware registration panic: supply middleware to NewRouter before adding routes.
 - Panic after headers were sent: recovery cannot replace an already committed response.
 

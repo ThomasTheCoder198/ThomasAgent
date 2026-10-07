@@ -5,7 +5,7 @@ Runs ragx with its own Qdrant, MinIO and authenticated Phoenix, separate from th
 
 ## Entry points
 - `compose.yaml` starts bootstrap and API processes with Qdrant and MinIO.
-- `.env.example` documents required credentials and deployment settings.
+- `.env.example` documents required credentials and deployment settings; non-secret runtime defaults live in `ragx/src/thomas_ragx/platform/config.yaml`.
 
 ## Dependencies
 - Uses: ragx Docker image, Qdrant, MinIO and Phoenix.
@@ -23,7 +23,8 @@ task down:ragx
 ```
 
 ## Conventions
-The compose project is `thomas-ragx`; it shares no network with core. `RAG_CORE_INTERNAL_URL` is temporary until the ragx custom-app spec removes ragx-to-core calls. `RAG_OTLP_ENDPOINT` defaults to `http://phoenix:6006`; an explicitly empty value disables export. Ragx has no startup dependency on Phoenix and keeps serving if tracing is unavailable.
+The compose project is `thomas-ragx`; it shares no network with core. `ragx-bootstrap` and `ragx-api` read `.env` directly through `env_file`; Compose only derives topology-specific URLs and shared MinIO/Phoenix credentials. `RAG_CORE_INTERNAL_URL` is temporary until the ragx custom-app spec removes ragx-to-core calls. `RAG_OTLP_ENDPOINT` defaults to `http://phoenix:6006`; an explicitly empty value disables export. Ragx has no startup dependency on Phoenix and keeps serving if tracing is unavailable.
+Bootstrap explicitly sets an empty `RAG_OTLP_ENDPOINT`: it still logs its work and creates local spans, but does not send startup spans to Phoenix before Phoenix is ready. The API retains the configured Phoenix exporter.
 
 `PHOENIX_SECRET` and `PHOENIX_ADMIN_SECRET` must each have at least 32 characters, a digit and a lowercase letter, and must differ. In dev, `RAG_PHOENIX_API_KEY` equals the admin secret. Production uses a Phoenix system API key instead; remove the admin secret after replacing the ragx key.
 
@@ -35,7 +36,7 @@ The compose project is `thomas-ragx`; it shares no network with core. `RAG_CORE_
 
 Core-only smoke skips ragx only when its API container is absent. An existing ragx API with a failing health endpoint makes smoke fail, including a stopped or crashed API.
 
-Named volumes and Docker log rotation preserve data and bound log growth. Bootstrap is a one-shot gate; the API image provides its healthcheck.
+Named volumes preserve data; container log rotation follows Docker daemon defaults. Bootstrap is a one-shot gate; the API image provides its healthcheck.
 
 ## Common failures
 - Bootstrap fails: inspect MinIO/Qdrant health and compose logs.

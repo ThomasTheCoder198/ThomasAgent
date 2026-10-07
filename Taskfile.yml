@@ -80,8 +80,10 @@ tasks:
     desc: Run database migrations
     cmds: ["{{.COMPOSE}} run --rm migrate"]
   core:serve:
-    desc: Run the core API locally using exported CORE_* environment variables
+    desc: Run core locally with deploy/core/.env and exported host DB/Redis URLs
     dir: backend-core
+    env:
+      CORE_ENV_FILE: ../deploy/core/.env
     cmds: [go run ./cmd/core serve]
   api-test:
     desc: Run the Postman collection against the running core API

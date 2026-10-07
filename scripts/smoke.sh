@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SMOKE_WAIT_SECONDS=60
+DEFAULT_PHOENIX_HOST_PORT=6006
 
 check() {
   local name="$1" url="$2"
@@ -41,7 +42,11 @@ wait_for "http metrics in prometheus" bash -c \
 
 if curl -fsS http://localhost:8090/healthz >/dev/null 2>&1; then
   echo "ok   ragx-health"
-  phoenix_host_port="${PHOENIX_HOST_PORT:-$(uv run --directory ragx python -c 'from dotenv import dotenv_values; print(dotenv_values("../deploy/ragx/.env").get("PHOENIX_HOST_PORT") or "6006")')}"
+  phoenix_host_port="${PHOENIX_HOST_PORT:-}"
+  if [[ -z "$phoenix_host_port" && -f deploy/ragx/.env ]]; then
+    phoenix_host_port="$(sed -n 's/^PHOENIX_HOST_PORT=//p' deploy/ragx/.env | head -n 1 | tr -d '\r')"
+  fi
+  phoenix_host_port="${phoenix_host_port:-$DEFAULT_PHOENIX_HOST_PORT}"
   check phoenix-health "http://localhost:${phoenix_host_port}/healthz"
   ragx_trace="$(curl -fsS -D - -o /dev/null -H "X-Request-Id: ${smoke_id}" http://localhost:8090/healthz | tr -d '\r' | awk -F': ' 'tolower($1)=="x-ragx-trace-id"{print $2}')"
   if [[ "$ragx_trace" =~ ^[0-9a-f]{32}$ ]] && [[ "$ragx_trace" != 00000000000000000000000000000000 ]]; then
@@ -56,4 +61,11 @@ else
   echo "skip ragx-health (ragx stack not running; start it with task up:ragx)"
 fi
 
-uv run --directory ragx python ../scripts/smoke_identity.py
+if command -v uv >/dev/null 2>&1; then
+  uv_bin=uv
+elif command -v uv.exe >/dev/null 2>&1; then
+  uv_bin=uv.exe
+else
+  echo "FAIL identity smoke: uv is unavailable"; exit 1
+fi
+"$uv_bin" run --directory ragx python ../scripts/smoke_identity.py

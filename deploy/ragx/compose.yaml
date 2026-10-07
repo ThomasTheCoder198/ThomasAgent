@@ -1,26 +1,8 @@
 name: thomas-ragx
 
-x-logging: &logging
-  driver: json-file
-  options:
-    max-size: ${LOG_MAX_SIZE:-10m}
-    max-file: ${LOG_MAX_FILE:-5}
-
-x-rag-env: &rag-env
-  RAG_CORE_SERVICE_TOKEN: ${RAG_CORE_SERVICE_TOKEN}
-  RAG_CORE_INTERNAL_URL: ${RAG_CORE_INTERNAL_URL:-http://host.docker.internal:8080}
-  RAG_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-  RAG_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-  RAG_OTLP_ENDPOINT: ${RAG_OTLP_ENDPOINT-http://phoenix:6006}
-  RAG_PHOENIX_API_KEY: ${RAG_PHOENIX_API_KEY}
-  RAG_PHOENIX_PROJECT: ${RAG_PHOENIX_PROJECT:-thomas-ragx}
-  RAG_TRACE_CONTENT: ${RAG_TRACE_CONTENT:-false}
-  RAG_BUCKETS: '["kb-raw","kb-preview","chat-attachments"]'
-
 services:
   qdrant:
     image: qdrant/qdrant:v1.19.1-unprivileged
-    logging: *logging
     volumes: [qdrant-data:/qdrant/storage]
     ports: ["${QDRANT_HOST_PORT:-6333}:6333"]
     healthcheck:
@@ -31,7 +13,6 @@ services:
 
   minio:
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
-    logging: *logging
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
@@ -46,7 +27,6 @@ services:
 
   phoenix:
     image: arizephoenix/phoenix:version-20.19.0
-    logging: *logging
     environment:
       PHOENIX_WORKING_DIR: /mnt/data
       PHOENIX_ENABLE_AUTH: "true"
@@ -64,18 +44,28 @@ services:
 
   ragx-bootstrap:
     build: ../../ragx
-    logging: *logging
     command: ["bootstrap"]
-    environment: *rag-env
+    env_file: [{path: .env, required: false}]
+    environment:
+      RAG_CORE_INTERNAL_URL: ${RAG_CORE_INTERNAL_URL:-http://host.docker.internal:8080}
+      RAG_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      RAG_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      # Bootstrap can finish before Phoenix is ready; its startup spans stay local.
+      RAG_OTLP_ENDPOINT: ""
     depends_on:
       minio: { condition: service_healthy }
       qdrant: { condition: service_healthy }
 
   ragx-api:
     build: ../../ragx
-    logging: *logging
     command: ["serve"]
-    environment: *rag-env
+    env_file: [{path: .env, required: false}]
+    environment:
+      RAG_CORE_INTERNAL_URL: ${RAG_CORE_INTERNAL_URL:-http://host.docker.internal:8080}
+      RAG_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      RAG_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      RAG_OTLP_ENDPOINT: ${RAG_OTLP_ENDPOINT-http://phoenix:6006}
+      RAG_PHOENIX_API_KEY: ${RAG_PHOENIX_API_KEY:-${PHOENIX_ADMIN_SECRET}}
     ports: ["8090:8090"]
     # Linux servers do not define host.docker.internal by default (RAG_CORE_INTERNAL_URL).
     extra_hosts: ["host.docker.internal:host-gateway"]

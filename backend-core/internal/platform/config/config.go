@@ -1,6 +1,7 @@
 package config
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"math"
@@ -11,51 +12,53 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
+	"github.com/joho/godotenv"
+	"gopkg.in/yaml.v3"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
 )
 
 type RetryConfig struct {
-	MaxAttempts int           `env:"MAX_ATTEMPTS" envDefault:"4"`
-	BaseDelay   time.Duration `env:"BASE_DELAY" envDefault:"200ms"`
-	MaxDelay    time.Duration `env:"MAX_DELAY" envDefault:"10s"`
+	MaxAttempts int           `env:"MAX_ATTEMPTS"`
+	BaseDelay   time.Duration `env:"BASE_DELAY"`
+	MaxDelay    time.Duration `env:"MAX_DELAY"`
 }
 
 type BreakerConfig struct {
-	FailureThreshold uint32        `env:"FAILURE_THRESHOLD" envDefault:"5"`
-	OpenTimeout      time.Duration `env:"OPEN_TIMEOUT" envDefault:"30s"`
-	HalfOpenMaxCalls uint32        `env:"HALF_OPEN_MAX_CALLS" envDefault:"1"`
+	FailureThreshold uint32        `env:"FAILURE_THRESHOLD"`
+	OpenTimeout      time.Duration `env:"OPEN_TIMEOUT"`
+	HalfOpenMaxCalls uint32        `env:"HALF_OPEN_MAX_CALLS"`
 }
 
 type ConsumerConfig struct {
-	MaxDeliveries     int           `env:"MAX_DELIVERIES" envDefault:"4"`
-	VisibilityTimeout time.Duration `env:"VISIBILITY_TIMEOUT" envDefault:"30s"`
-	BlockTimeout      time.Duration `env:"BLOCK_TIMEOUT" envDefault:"5s"`
-	BatchSize         int64         `env:"BATCH_SIZE" envDefault:"16"`
+	MaxDeliveries     int           `env:"MAX_DELIVERIES"`
+	VisibilityTimeout time.Duration `env:"VISIBILITY_TIMEOUT"`
+	BlockTimeout      time.Duration `env:"BLOCK_TIMEOUT"`
+	BatchSize         int64         `env:"BATCH_SIZE"`
 }
 
 type OutboxRelayConfig struct {
-	BatchSize    int           `env:"BATCH_SIZE" envDefault:"100"`
-	PollInterval time.Duration `env:"POLL_INTERVAL" envDefault:"500ms"`
+	BatchSize    int           `env:"BATCH_SIZE"`
+	PollInterval time.Duration `env:"POLL_INTERVAL"`
 }
 
 type HTTPConfig struct {
-	MaxBodyBytes            int64         `env:"MAX_BODY_BYTES" envDefault:"1048576"`
-	RequestTimeout          time.Duration `env:"REQUEST_TIMEOUT" envDefault:"30s"`
-	EventStreamHeartbeat    time.Duration `env:"EVENT_STREAM_HEARTBEAT" envDefault:"15s"`
-	EventStreamWriteTimeout time.Duration `env:"EVENT_STREAM_WRITE_TIMEOUT" envDefault:"10s"`
+	MaxBodyBytes            int64         `env:"MAX_BODY_BYTES"`
+	RequestTimeout          time.Duration `env:"REQUEST_TIMEOUT"`
+	EventStreamHeartbeat    time.Duration `env:"EVENT_STREAM_HEARTBEAT"`
+	EventStreamWriteTimeout time.Duration `env:"EVENT_STREAM_WRITE_TIMEOUT"`
 }
 
 type MetricsConfig struct {
-	Addr        string    `env:"ADDR" envDefault:":9464"`
-	HTTPBuckets []float64 `env:"HTTP_BUCKETS" envSeparator:"," envDefault:"0.005,0.01,0.025,0.05,0.1,0.25,0.5,1,2.5,5,10"`
-	LLMBuckets  []float64 `env:"LLM_BUCKETS" envSeparator:"," envDefault:"0.25,0.5,1,2,4,8,16,32,64"`
+	Addr        string    `env:"ADDR"`
+	HTTPBuckets []float64 `env:"HTTP_BUCKETS" envSeparator:","`
+	LLMBuckets  []float64 `env:"LLM_BUCKETS" envSeparator:","`
 }
 
 type LLMLogConfig struct {
-	Content         bool `env:"CONTENT" envDefault:"false"`
-	ContentMaxBytes int  `env:"CONTENT_MAX_BYTES" envDefault:"16384"`
+	Content         bool `env:"CONTENT"`
+	ContentMaxBytes int  `env:"CONTENT_MAX_BYTES"`
 }
 
 func (c MetricsConfig) validate() []error {
@@ -100,33 +103,33 @@ func (c HTTPConfig) validate() []error {
 
 type VaultConfig struct {
 	MasterKey string `env:"MASTER_KEY,required,notEmpty"`
-	KeyID     string `env:"KEY_ID" envDefault:"v1"`
+	KeyID     string `env:"KEY_ID"`
 }
 
 type AuthConfig struct {
 	OwnerEmail            string             `env:"OWNER_EMAIL"`
 	OwnerPassword         string             `env:"OWNER_PASSWORD"`
-	SessionTTL            time.Duration      `env:"SESSION_TTL" envDefault:"720h"`
-	CookieSecure          bool               `env:"COOKIE_SECURE" envDefault:"false"`
-	LoginMaxAttempts      int                `env:"LOGIN_MAX_ATTEMPTS" envDefault:"10"`
-	LoginEmailMaxAttempts int                `env:"LOGIN_EMAIL_MAX_ATTEMPTS" envDefault:"20"`
-	LoginIPMaxAttempts    int                `env:"LOGIN_IP_MAX_ATTEMPTS" envDefault:"100"`
-	LoginWindow           time.Duration      `env:"LOGIN_WINDOW" envDefault:"15m"`
-	MinPasswordLength     int                `env:"MIN_PASSWORD_LENGTH" envDefault:"12"`
+	SessionTTL            time.Duration      `env:"SESSION_TTL"`
+	CookieSecure          bool               `env:"COOKIE_SECURE"`
+	LoginMaxAttempts      int                `env:"LOGIN_MAX_ATTEMPTS"`
+	LoginEmailMaxAttempts int                `env:"LOGIN_EMAIL_MAX_ATTEMPTS"`
+	LoginIPMaxAttempts    int                `env:"LOGIN_IP_MAX_ATTEMPTS"`
+	LoginWindow           time.Duration      `env:"LOGIN_WINDOW"`
+	MinPasswordLength     int                `env:"MIN_PASSWORD_LENGTH"`
 	TrustedProxyHeader    string             `env:"TRUSTED_PROXY_HEADER"`
 	TrustedProxyCIDRs     []string           `env:"TRUSTED_PROXY_CIDRS" envSeparator:","`
-	SessionPurgeInterval  time.Duration      `env:"SESSION_PURGE_INTERVAL" envDefault:"1h"`
-	SessionTouchInterval  time.Duration      `env:"SESSION_TOUCH_INTERVAL" envDefault:"5m"`
+	SessionPurgeInterval  time.Duration      `env:"SESSION_PURGE_INTERVAL"`
+	SessionTouchInterval  time.Duration      `env:"SESSION_TOUCH_INTERVAL"`
 	PasswordHash          PasswordHashConfig `envPrefix:"PASSWORD_HASH_"`
 }
 
 type PasswordHashConfig struct {
-	Iterations     uint32 `env:"ITERATIONS" envDefault:"2"`
-	MemoryKiB      uint32 `env:"MEMORY_KIB" envDefault:"65536"`
-	MaxConcurrency int    `env:"MAX_CONCURRENCY" envDefault:"4"`
-	Parallelism    uint8  `env:"PARALLELISM" envDefault:"1"`
-	SaltLength     uint32 `env:"SALT_LENGTH" envDefault:"16"`
-	KeyLength      uint32 `env:"KEY_LENGTH" envDefault:"32"`
+	Iterations     uint32 `env:"ITERATIONS"`
+	MemoryKiB      uint32 `env:"MEMORY_KIB"`
+	MaxConcurrency int    `env:"MAX_CONCURRENCY"`
+	Parallelism    uint8  `env:"PARALLELISM"`
+	SaltLength     uint32 `env:"SALT_LENGTH"`
+	KeyLength      uint32 `env:"KEY_LENGTH"`
 }
 
 func (c AuthConfig) validate() []error {
@@ -193,9 +196,9 @@ func (c PasswordHashConfig) validate() []error {
 }
 
 type Config struct {
-	ProviderMaxRemoteModels  int               `env:"PROVIDER_MAX_REMOTE_MODELS" envDefault:"1000"`
-	ProviderMaxBreakers      int               `env:"PROVIDER_MAX_BREAKERS" envDefault:"256"`
-	ProviderHTTPTimeout      time.Duration     `env:"PROVIDER_HTTP_TIMEOUT" envDefault:"20s"`
+	ProviderMaxRemoteModels  int               `env:"PROVIDER_MAX_REMOTE_MODELS"`
+	ProviderMaxBreakers      int               `env:"PROVIDER_MAX_BREAKERS"`
+	ProviderHTTPTimeout      time.Duration     `env:"PROVIDER_HTTP_TIMEOUT"`
 	ProviderBreaker          BreakerConfig     `envPrefix:"PROVIDER_BREAKER_"`
 	ProviderMaxResponseBytes int64             `env:"PROVIDER_MAX_RESPONSE_BYTES"`
 	ProviderPrivateAllowlist []string          `env:"PROVIDER_PRIVATE_ALLOWLIST" envSeparator:","`
@@ -205,15 +208,15 @@ type Config struct {
 	HTTP                     HTTPConfig        `envPrefix:"HTTP_"`
 	Metrics                  MetricsConfig     `envPrefix:"METRICS_"`
 	LLMLog                   LLMLogConfig      `envPrefix:"LLM_LOG_"`
-	Environment              string            `env:"ENV" envDefault:"dev"`
-	ServiceName              string            `env:"SERVICE_NAME" envDefault:"thomas-core"`
-	HTTPAddr                 string            `env:"HTTP_ADDR" envDefault:":8080"`
-	ShutdownTimeout          time.Duration     `env:"SHUTDOWN_TIMEOUT" envDefault:"15s"`
-	ReadHeaderTimeout        time.Duration     `env:"READ_HEADER_TIMEOUT" envDefault:"10s"`
+	Environment              string            `env:"ENV"`
+	ServiceName              string            `env:"SERVICE_NAME"`
+	HTTPAddr                 string            `env:"HTTP_ADDR"`
+	ShutdownTimeout          time.Duration     `env:"SHUTDOWN_TIMEOUT"`
+	ReadHeaderTimeout        time.Duration     `env:"READ_HEADER_TIMEOUT"`
 	DatabaseURL              string            `env:"DATABASE_URL,required,notEmpty"`
 	RedisURL                 string            `env:"REDIS_URL,required,notEmpty"`
 	LogsOTLPEndpoint         string            `env:"LOGS_OTLP_ENDPOINT"`
-	LogLevel                 string            `env:"LOG_LEVEL" envDefault:"info"`
+	LogLevel                 string            `env:"LOG_LEVEL"`
 	Retry                    RetryConfig       `envPrefix:"RETRY_"`
 	Stream                   ConsumerConfig    `envPrefix:"STREAM_"`
 	OutboxRelay              OutboxRelayConfig `envPrefix:"RELAY_"`
@@ -221,7 +224,14 @@ type Config struct {
 
 const envPrefix = "CORE_"
 
-const metricsAddrEnv = envPrefix + "METRICS_ADDR"
+const (
+	metricsAddrEnv = envPrefix + "METRICS_ADDR"
+	envFileEnv     = envPrefix + "ENV_FILE"
+	defaultEnvFile = ".env"
+)
+
+//go:embed config.yaml
+var defaultConfigYAML []byte
 
 const DefaultProviderMaxResponseBytes int64 = 8388608
 
@@ -243,19 +253,55 @@ const (
 )
 
 func Load() (Config, error) {
-	cfg := Config{ProviderMaxResponseBytes: DefaultProviderMaxResponseBytes}
-	err := env.ParseWithOptions(&cfg, env.Options{Prefix: envPrefix})
+	values, err := loadEnvironment()
+	if err != nil {
+		return Config{}, err
+	}
+	var cfg Config
+	err = env.ParseWithOptions(&cfg, env.Options{Prefix: envPrefix, Environment: values})
 	if err != nil {
 		return Config{}, fmt.Errorf("load config: %w", err)
-	}
-	// envDefault replaces an explicit empty value; here empty intentionally disables the listener.
-	if addr, exists := os.LookupEnv(metricsAddrEnv); exists && addr == "" {
-		cfg.Metrics.Addr = addr
 	}
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+// loadEnvironment keeps defaults, local dotenv overrides and process overrides separate from global process state.
+func loadEnvironment() (map[string]string, error) {
+	values := make(map[string]string)
+	if err := yaml.Unmarshal(defaultConfigYAML, &values); err != nil {
+		return nil, fmt.Errorf("load config.yaml: %w", err)
+	}
+	file := defaultEnvFile
+	if configured, ok := os.LookupEnv(envFileEnv); ok {
+		file = configured
+	}
+	if file != "" {
+		fromFile, err := godotenv.Read(file)
+		if err != nil && (!os.IsNotExist(err) || file != defaultEnvFile) {
+			return nil, fmt.Errorf("load dotenv: %w", err)
+		}
+		for key, value := range fromFile {
+			mergeOverride(values, key, value)
+		}
+	}
+	for _, assignment := range os.Environ() {
+		key, value, ok := strings.Cut(assignment, "=")
+		if ok {
+			mergeOverride(values, key, value)
+		}
+	}
+	return values, nil
+}
+
+func mergeOverride(values map[string]string, key, value string) {
+	// Empty retains a configured default, except the metrics listener supports an explicit off switch.
+	if value == "" && key != metricsAddrEnv && values[key] != "" {
+		return
+	}
+	values[key] = value
 }
 
 func (c Config) validate() error {

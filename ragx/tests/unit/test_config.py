@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from thomas_ragx.platform.config import Config
@@ -54,3 +56,26 @@ def test_config_preserves_renamed_field_defaults(monkeypatch: pytest.MonkeyPatch
     assert config.environment == "dev"
     assert config.retry_base_delay_seconds == 0.2
     assert config.retry_max_delay_seconds == 10.0
+
+
+def test_config_layers_yaml_dotenv_environment_and_constructor(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "RAG_CORE_SERVICE_TOKEN=local-token\n"
+        "RAG_MINIO_ACCESS_KEY=local-access\n"
+        "RAG_MINIO_SECRET_KEY=local-secret\n"
+        "RAG_RETRY_MAX_ATTEMPTS=7\n"
+        "POSTGRES_USER=unrelated-value\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("RAG_RETRY_MAX_ATTEMPTS", raising=False)
+    config = Config(_env_file=env_file)
+    assert config.retry_max_attempts == 7
+    assert config.http_port == 8090
+    assert config.core_service_token.get_secret_value() == "local-token"
+
+    monkeypatch.setenv("RAG_RETRY_MAX_ATTEMPTS", "3")
+    assert Config(_env_file=env_file).retry_max_attempts == 3
+    assert Config(_env_file=env_file, retry_max_attempts=2).retry_max_attempts == 2

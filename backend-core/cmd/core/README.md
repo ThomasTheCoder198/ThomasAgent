@@ -49,9 +49,10 @@ go run ./cmd/core healthcheck
 go test ./cmd/core -count=1
 ```
 
-Core reads process environment variables. Compose supplies them through
-`deploy/core/.env` and service environment blocks. Export CORE_* variables
-yourself when running the binary outside Docker.
+Core loads embedded `config.yaml` defaults, an optional `.env` file, and then
+process environment variables. Compose supplies `deploy/core/.env` through
+`env_file`; `task core:serve` points a host process at that file with `CORE_ENV_FILE`.
+Host execution still needs reachable `CORE_DATABASE_URL` and `CORE_REDIS_URL`.
 
 ## Conventions
 

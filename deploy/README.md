@@ -26,7 +26,7 @@ task down
 ```
 
 ## Conventions
-Core sends OTLP logs directly to VictoriaLogs and exposes metrics on port 9464 inside its compose network. Core and ragx have independent compose projects and networks. Retention and Docker log rotation come from each stack's `.env`.
+Core sends OTLP logs directly to VictoriaLogs and exposes metrics on port 9464 inside its compose network. Core and ragx have independent compose projects and networks. Retention can be overridden from each stack's `.env`; container log rotation follows Docker daemon defaults.
 
 | Service | Host port |
 | --- | --- |

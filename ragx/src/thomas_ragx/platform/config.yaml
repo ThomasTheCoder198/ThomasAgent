@@ -1,0 +1,16 @@
+RAG_ENV: dev
+service_name: thomas-ragx
+http_host: 0.0.0.0
+http_port: 8090
+log_level: info
+otlp_endpoint: ""
+phoenix_project: thomas-ragx
+trace_content: false
+core_internal_url: http://core:8080
+qdrant_url: http://qdrant:6333
+minio_endpoint: minio:9000
+minio_secure: false
+buckets: [kb-raw, kb-preview, chat-attachments]
+retry_max_attempts: 4
+RAG_RETRY_BASE_DELAY_S: 0.2
+RAG_RETRY_MAX_DELAY_S: 10.0

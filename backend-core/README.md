@@ -15,7 +15,7 @@ Go API and agent runtime for ThomasAgent.
 - Used by the frontend and service clients.
 
 ## Run & test
-Run core through Compose. To run core outside Docker, export the CORE_* variables yourself; CORE_DATABASE_URL and CORE_REDIS_URL are required.
+Run core through Compose. Outside Docker, core reads `.env` in its working directory or the file named by `CORE_ENV_FILE`, then applies exported CORE_* overrides. CORE_DATABASE_URL and CORE_REDIS_URL must point to reachable services.
 
 Database changes use hand-written Goose SQL files under `migrations/`. Add a
 new timestamped migration, verify Up and Down in dev, then run `task migrate`.
@@ -39,7 +39,7 @@ golangci-lint run ./...
 
 ## Conventions
 See the [shared naming glossary](../docs/glossary.md) for terms used across services.
-Go 1.27.1 is pinned. CORE_ variables configure startup. Optional CORE_LOGS_OTLP_ENDPOINT (full logs URL) enables OTLP HTTP log export; core has no traces and correlates by `request_id`. Serve opens and pings Postgres and Redis before listening; readiness checks both dependencies. All HTTP responses use the shared response.
+Go 1.27.1 is pinned. Non-secret defaults are in `internal/platform/config/config.yaml`; dotenv and process variables override them. Optional CORE_LOGS_OTLP_ENDPOINT (full logs URL) enables OTLP HTTP log export. Core currently has no spans and correlates by `request_id`; minimal HTTP-to-LLM tracing is planned with the M2 runtime. Serve opens and pings Postgres and Redis before listening; readiness checks both dependencies. All HTTP responses use the shared response.
 Process, HTTP, and worker logs follow the shared [log field contract](internal/platform/logging/README.md#log-field-contract).
 
 ## Common failures

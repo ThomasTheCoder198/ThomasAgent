@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -72,11 +71,19 @@ func TestCompose_ExampleBreakerSettingsReachProvider(t *testing.T) {
 	}
 }
 
-func TestCompose_ForwardsEveryCoreSetting(t *testing.T) {
-	require.Contains(t, composeExample(t), "CORE_AUTH_LOGIN_IP_MAX_ATTEMPTS")
+func TestCompose_EnvFileProvidesRuntimeValuesWithoutRepeatingDefaults(t *testing.T) {
 	composeDir := filepath.Join("..", "..", "..", "..", "deploy", "core")
-	command := exec.CommandContext(t.Context(), "docker", "compose", "--env-file", ".env.example", "-f", "compose.yaml", "config", "--format", "json")
-	command.Dir = composeDir
+	isolatedDir := t.TempDir()
+	for _, name := range []string{".env.example", "compose.yaml"} {
+		raw, err := os.ReadFile(filepath.Join(composeDir, name))
+		require.NoError(t, err)
+		if name == ".env.example" {
+			name = ".env"
+		}
+		require.NoError(t, os.WriteFile(filepath.Join(isolatedDir, name), raw, 0o600))
+	}
+	command := exec.CommandContext(t.Context(), "docker", "compose", "-f", "compose.yaml", "config", "--format", "json")
+	command.Dir = isolatedDir
 	output, err := command.Output()
 	require.NoError(t, err, "compose must resolve the example without using local secrets")
 	var resolved struct {
@@ -86,27 +93,12 @@ func TestCompose_ForwardsEveryCoreSetting(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(output, &resolved))
 	for _, service := range []string{"core", "migrate", "outbox-relay"} {
-		require.Equal(t, "100", resolved.Services[service].Environment["CORE_AUTH_LOGIN_IP_MAX_ATTEMPTS"], "%s must forward the IP-only login default", service)
+		environment := resolved.Services[service].Environment
+		require.Equal(t, composeExample(t)["CORE_SERVICE_TOKEN"], environment["CORE_SERVICE_TOKEN"])
+		require.Contains(t, environment["CORE_DATABASE_URL"], "@postgres:5432/")
+		require.Equal(t, "redis://redis:6379/0", environment["CORE_REDIS_URL"])
+		require.NotContains(t, environment, "CORE_AUTH_LOGIN_MAX_ATTEMPTS", "defaults belong in config.yaml")
 	}
-	var assertSettings func(reflect.Type, string)
-	assertSettings = func(kind reflect.Type, prefix string) {
-		for index := range kind.NumField() {
-			field := kind.Field(index)
-			if nestedPrefix := field.Tag.Get("envPrefix"); nestedPrefix != "" {
-				assertSettings(field.Type, prefix+nestedPrefix)
-				continue
-			}
-			name, _, _ := strings.Cut(field.Tag.Get("env"), ",")
-			if name == "" {
-				continue
-			}
-			for _, service := range []string{"core", "migrate", "outbox-relay"} {
-				_, exists := resolved.Services[service].Environment[prefix+name]
-				require.True(t, exists, "%s must forward %s", service, prefix+name)
-			}
-		}
-	}
-	assertSettings(reflect.TypeFor[Config](), "CORE_")
 }
 
 func TestCompose_CoreStackHasNoLegacyObservability(t *testing.T) {

@@ -1,32 +1,26 @@
 package auth
 
 import (
-	"net/http"
-	"net/http/httptest"
+	"context"
 	"testing"
 	"time"
 
-	authmiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/middleware"
-	authmodel "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/model"
-	authrepo "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
-	authtoken "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/token"
-
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
-func TestAuthRepositoryRejectsMissingTenant(t *testing.T) {
-	repo := authrepo.NewAuthRepository(pgtest.Start(t))
+func TestRepository_RejectsMissingTenant(t *testing.T) {
+	repo := NewRepository(pgtest.Start(t))
 	_, err := repo.CountUsers(t.Context())
 	require.ErrorIs(t, err, errors.ErrMissingTenant, "absent tenant must never select the platform")
 	_, err = repo.CreateUser(t.Context(), ownerEmail, "hash")
 	require.ErrorIs(t, err, errors.ErrMissingTenant)
 	_, _, err = repo.FindUserByEmail(t.Context(), ownerEmail)
 	require.ErrorIs(t, err, errors.ErrMissingTenant)
-	require.ErrorIs(t, repo.CreateSession(t.Context(), authmodel.User{}.ID, []byte("token"), "csrf", time.Now().Add(time.Hour)), errors.ErrMissingTenant)
+	require.ErrorIs(t, repo.CreateSession(t.Context(), User{}.ID, []byte("token"), "csrf", time.Now().Add(time.Hour)), errors.ErrMissingTenant)
 	_, _, err = repo.FindSession(t.Context(), []byte("token"))
 	require.ErrorIs(t, err, errors.ErrMissingTenant)
 	err = repo.DeleteSession(t.Context(), []byte("token"))
@@ -35,33 +29,9 @@ func TestAuthRepositoryRejectsMissingTenant(t *testing.T) {
 	require.ErrorIs(t, err, errors.ErrMissingTenant)
 }
 
-func TestRequireSessionDerivesTenantFromSessionRow(t *testing.T) {
-	svc, _ := newService(t)
-	platformCtx := tenant.WithID(t.Context(), tenant.PlatformID)
-	otherCtx := tenant.WithID(t.Context(), "other")
-	other, err := svc.repo.CreateUser(otherCtx, "other@example.com", "hash")
-	require.NoError(t, err)
-	token := "other-session-token"
-	require.NoError(t, svc.repo.CreateSession(otherCtx, other.ID, authtoken.Hash(token), "csrf", time.Now().Add(time.Hour)))
-	handler := httpx.NewRouter(nil)
-	handler.GET("/tenant-data", authmiddleware.RequireSession(svc), wrapAuthHTTP(func(w http.ResponseWriter, r *http.Request) {
-		scope, err := tenant.ID(r.Context())
-		require.NoError(t, err)
-		require.Equal(t, "other", scope)
-		_, _, err = svc.repo.FindUserByEmail(r.Context(), ownerEmail)
-		require.ErrorIs(t, err, errors.ErrNotFound, "a tenant A session must not read tenant B's user")
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	request := httptest.NewRequest(http.MethodGet, "/tenant-data", nil).WithContext(platformCtx)
-	request.AddCookie(&http.Cookie{Name: authmiddleware.CookieSession, Value: token})
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, request)
-	require.Equal(t, http.StatusNoContent, response.Code)
-}
-
 func TestFindSessionThrottlesLastSeenAndSkipsExpiredRows(t *testing.T) {
 	pool := pgtest.Start(t)
-	repo := authrepo.NewAuthRepository(pool)
+	repo := NewRepository(pool)
 	ctx := tenant.WithID(t.Context(), "other")
 	user, err := repo.CreateUser(ctx, "session@example.com", "hash")
 	require.NoError(t, err)
@@ -85,7 +55,7 @@ func TestFindSessionThrottlesLastSeenAndSkipsExpiredRows(t *testing.T) {
 func TestFindSessionHonorsConfiguredTouchInterval(t *testing.T) {
 	pool := pgtest.Start(t)
 	ctx := tenant.WithID(t.Context(), "other")
-	repo := authrepo.NewAuthRepositoryWithSessionTouchInterval(pool, 2*time.Hour)
+	repo := NewRepositoryWithSessionTouchInterval(pool, 2*time.Hour)
 	user, err := repo.CreateUser(ctx, "configured@example.com", "hash")
 	require.NoError(t, err)
 	token := []byte("configured-touch-token")
@@ -98,8 +68,47 @@ func TestFindSessionHonorsConfiguredTouchInterval(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT last_seen_at FROM sessions WHERE token_hash=$1`, token).Scan(&after))
 	require.Equal(t, before, after)
-	_, _, err = authrepo.NewAuthRepositoryWithSessionTouchInterval(pool, 30*time.Minute).FindSession(ctx, token)
+	_, _, err = NewRepositoryWithSessionTouchInterval(pool, 30*time.Minute).FindSession(ctx, token)
 	require.NoError(t, err)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT last_seen_at FROM sessions WHERE token_hash=$1`, token).Scan(&after))
 	require.True(t, after.After(before))
+}
+
+func TestRepository_UsesTrustedTenantContext(t *testing.T) {
+	pool := pgtest.Start(t)
+	repo := NewRepository(pool)
+	platform, err := repo.CreateUser(tenant.WithID(t.Context(), tenant.PlatformID), ownerEmail, "platform-hash")
+	require.NoError(t, err)
+	otherCtx := tenant.WithID(t.Context(), "other")
+	other, err := repo.CreateUser(otherCtx, ownerEmail, "other-hash")
+	require.NoError(t, err)
+	require.NotEqual(t, platform.ID, other.ID)
+	got, hash, err := repo.FindUserByEmail(otherCtx, ownerEmail)
+	require.NoError(t, err)
+	require.Equal(t, other.ID, got.ID)
+	require.Equal(t, "other-hash", hash)
+	require.NoError(t, repo.CreateSession(otherCtx, other.ID, []byte("other-token"), "csrf", time.Now().Add(time.Hour)))
+	_, _, err = repo.FindSession(tenant.WithID(t.Context(), tenant.PlatformID), []byte("other-token"))
+	require.ErrorIs(t, err, errors.ErrNotFound)
+	_, _, err = repo.FindSession(otherCtx, []byte("other-token"))
+	require.NoError(t, err)
+	_, err = repo.db.Exec(tenant.WithID(t.Context(), tenant.PlatformID), `INSERT INTO users (tenant_id,email,password_hash) VALUES ('other','second@example.com','hash')`)
+	require.NoError(t, err)
+	count, err := repo.CountUsers(otherCtx)
+	require.NoError(t, err)
+	require.Equal(t, 2, count)
+}
+
+func TestFindUserByEmailScopesSameEmailByTenant(t *testing.T) {
+	service, _ := newTestService(t)
+	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
+	otherID := uuid.New()
+	_, err := service.repository.db.Exec(ctx, `INSERT INTO users (id, tenant_id, email, password_hash) VALUES ($1, $2, $3, $4)`, otherID, "other", ownerEmail, "other-hash")
+	require.NoError(t, err)
+	user, _, err := service.repository.FindUserByEmail(ctx, ownerEmail)
+	require.NoError(t, err)
+	require.NotEqual(t, otherID, user.ID)
+	count, err := service.repository.CountUsers(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
 }

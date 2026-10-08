@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
 	llmprovidercontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/controller"
-	llmprovidermiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/middleware"
 	llmprovidermodel "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/model"
 	llmproviderservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/service"
 
@@ -21,11 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
-	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/controller"
-	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
-	authmiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/middleware"
-	authrepo "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
-	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
@@ -66,13 +61,13 @@ func newRouter(t *testing.T, logs *bytes.Buffer) (*gin.Engine, *llmproviderFixtu
 		c.Next()
 	})
 	mountProviderForTest(r, s, testMaxBodyBytes)
-	r.GET("/internal/models/resolve", llmprovidermiddleware.RequireServiceToken(serviceToken), llmprovidercontroller.NewInternalModelController(s).HandleResolve)
+	r.GET("/internal/models/resolve", auth.RequireServiceToken(serviceToken), llmprovidercontroller.NewInternalModelController(s).HandleResolve)
 	return r, s
 }
 
 func TestServiceTokenSetsExplicitPlatformTenant(t *testing.T) {
 	handler := httpx.NewRouter(nil)
-	handler.GET("/internal/probe", llmprovidermiddleware.RequireServiceToken(serviceToken), gin.WrapF(func(w http.ResponseWriter, r *http.Request) {
+	handler.GET("/internal/probe", auth.RequireServiceToken(serviceToken), gin.WrapF(func(w http.ResponseWriter, r *http.Request) {
 		got, err := tenant.ID(r.Context())
 		require.NoError(t, err)
 		require.Equal(t, "default", got)
@@ -90,7 +85,7 @@ func TestServiceToken_RejectsMissingBearerPrefixAndEmptyConfiguration(t *testing
 		for _, header := range []string{"", serviceToken, "Basic " + serviceToken, "Bearer ", "Bearer wrong"} {
 			called := false
 			router := httpx.NewRouter(func(context.Context, *errors.AppError) {})
-			router.GET("/probe", llmprovidermiddleware.RequireServiceToken(token), gin.WrapF(func(w http.ResponseWriter, _ *http.Request) { called = true; w.WriteHeader(http.StatusNoContent) }))
+			router.GET("/probe", auth.RequireServiceToken(token), gin.WrapF(func(w http.ResponseWriter, _ *http.Request) { called = true; w.WriteHeader(http.StatusNoContent) }))
 			res := send(router, http.MethodGet, "/probe", "", map[string]string{"Authorization": header})
 			require.Equal(t, http.StatusUnauthorized, res.Code, token+"/"+header)
 			require.False(t, called)
@@ -101,7 +96,7 @@ func TestServiceToken_RejectsMissingBearerPrefixAndEmptyConfiguration(t *testing
 
 func TestServiceTokenAcceptsMixedCaseBearerAndNeverCaches(t *testing.T) {
 	router := httpx.NewRouter(nil)
-	router.GET("/probe", llmprovidermiddleware.RequireServiceToken(serviceToken), gin.WrapF(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	router.GET("/probe", auth.RequireServiceToken(serviceToken), gin.WrapF(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
 	for _, fixture := range []struct {
 		header string
 		status int
@@ -160,16 +155,16 @@ func TestLLMProviderHTTP_RealLoginSessionAndCSRF(t *testing.T) {
 	var logs bytes.Buffer
 	router, svc := newRouter(t, &logs)
 	authCfg := config.AuthConfig{OwnerEmail: "owner@example.com", OwnerPassword: "strong-test-password", SessionTTL: time.Hour, MinPasswordLength: 12}
-	authSvc := authservice.NewAuthService(authrepo.NewAuthRepository(svc.pool), svc.pool, authCfg, time.Now)
+	authSvc := auth.NewService(auth.NewRepository(svc.pool), svc.pool, authCfg, time.Now)
 	require.NoError(t, authSvc.EnsureOwner(platformContext(t.Context())))
-	auth := authhandler.NewAuthController(authhandler.AuthControllerParams{Service: authSvc, Limiter: authlimiter.NewLimiter(llmproviderRedis(t), 10, time.Minute)})
-	router.POST("/api/v1/auth/login", auth.HandleLogin)
-	router.POST("/api/v1/auth/logout", authmiddleware.RequireSession(authSvc), auth.HandleLogout)
-	router.GET("/api/v1/auth/me", authmiddleware.RequireSession(authSvc), auth.HandleMe)
+	authController := auth.NewController(auth.ControllerParams{Service: authSvc, Limiter: auth.NewLimiter(llmproviderRedis(t), 10, time.Minute)})
+	router.POST("/api/v1/auth/login", authController.HandleLogin)
+	router.POST("/api/v1/auth/logout", auth.RequireSession(authSvc), authController.HandleLogout)
+	router.GET("/api/v1/auth/me", auth.RequireSession(authSvc), authController.HandleMe)
 	logger, err := logging.NewLogger(&logs, "debug", "llmprovider-test", "test", nil)
 	require.NoError(t, err)
 	protected := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
-	mountProviderForTest(protected.Group("", authmiddleware.RequireSession(authSvc)), svc, testMaxBodyBytes)
+	mountProviderForTest(protected.Group("", auth.RequireSession(authSvc)), svc, testMaxBodyBytes)
 	unauth := send(protected, http.MethodGet, "/api/v1/providers", "", nil)
 	require.Equal(t, http.StatusUnauthorized, unauth.Code)
 	login := send(router, http.MethodPost, "/api/v1/auth/login", `{"email":"owner@example.com","password":"strong-test-password"}`, nil)
@@ -189,7 +184,7 @@ func TestLLMProviderHTTP_RealLoginSessionAndCSRF(t *testing.T) {
 	require.Equal(t, http.StatusOK, list.Code)
 	denied := send(protected, http.MethodPost, "/api/v1/providers", `{"kind":"openrouter","name":"Protected","apiKey":"`+secretKey+`"}`, headers)
 	require.Equal(t, http.StatusForbidden, denied.Code)
-	headers[authmiddleware.HeaderCSRF] = response.Data.CSRFToken
+	headers[auth.CSRFHeader] = response.Data.CSRFToken
 	created := send(protected, http.MethodPost, "/api/v1/providers", `{"kind":"openrouter","name":"Protected","apiKey":"`+secretKey+`"}`, headers)
 	require.Equal(t, http.StatusCreated, created.Code)
 	require.NotContains(t, created.Body.String(), secretKey)

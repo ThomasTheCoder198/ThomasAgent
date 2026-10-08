@@ -2,20 +2,30 @@
 
 ## Purpose
 
-Bootstraps the operator, verifies Argon2id passwords, issues hashed sessions, and serves cookie-based login, logout and current-user endpoints.
+Bootstraps the operator, verifies Argon2id passwords, issues hashed sessions, and serves cookie-based login, logout and current-user endpoints. It also authenticates internal callers by service token.
 M0.2 data belongs to the [Platform tenant](../../../docs/glossary.md) (`default`). Repository writes and reads require `tenant_id` from trusted server context through `tenant.ID`, which returns an error when scope is absent. Login and startup bootstrap explicitly establish platform scope; session middleware derives scope from the stored session row. Client and model parameters never select a tenant.
 
 ## Entry points
 
-- `repository.NewAuthRepository`, `service.NewAuthService`, `EnsureOwner`, `Login`, `Authenticate`, and `Logout`.
-- `controller.NewAuthController(AuthControllerParams)` exposes login, logout and me handlers; `cmd/core/routes.go` registers their paths.
-- `middleware.RequireSession` authenticates cookies, checks CSRF on unsafe methods and exposes `UserFrom` to protected handlers; `limiter.NewLoginLimiter` counts login attempts.
-- `PurgeAllExpiredSessions` is the explicit system-job repository/service entry point; `PurgeExpiredSessions` remains tenant-scoped for request use.
+| File | What it holds |
+|---|---|
+| `user.go` | `User`, `NormalizeEmail` |
+| `session.go` | `Session`, `IssuedSession`, cookie and header names (`SessionCookie`, `CSRFCookie`, `CSRFHeader`), token hashing |
+| `service.go` | `Service`: `NewService`, `EnsureOwner`, `Login`, `Authenticate`, `Logout`, session purge |
+| `password.go` | Argon2id hashing under a concurrency budget, plus the timing decoy |
+| `repository.go` | `Repository`: SQL for users and sessions |
+| `controller.go` | `Controller`: `HandleLogin`, `HandleLogout`, `HandleMe`, their JSON types, and cookies |
+| `client_ip.go` | Trusted-proxy client IP used by the login limiter |
+| `login_limiter.go` | `LoginLimiter`: Redis attempt budgets per email+IP, email and IP |
+| `session_middleware.go` | `RequireSession`, `UserFromContext` |
+| `service_token_middleware.go` | `RequireServiceToken` for `/internal/*` routes |
+
+`cmd/core/routes.go` registers the paths. `PurgeExpiredSessionsAcrossTenants` is the explicit system-job entry point; `PurgeExpiredSessions` stays tenant-scoped for request use.
 
 ## Dependencies
 
-- Uses: `model` for domain state, `dto` for HTTP shapes, `repository` for SQL and its interface, `service` for the HTTP-facing service interface, plus Postgres, Redis, typed `config.AuthConfig`, Argon2id, UUIDs, named catalog errors, audit recording, Gin and shared httpx boundaries.
-- Used by: core HTTP routing and the periodic expired-session purge job.
+- Uses: Postgres, Redis, typed `config.AuthConfig`, Argon2id, UUIDs, named catalog errors, `platform/audit`, Gin and shared httpx boundaries.
+- Used by: core HTTP routing, the periodic expired-session purge job, and the `llm` HTTP tests (real login).
 
 ## Run & test
 
@@ -24,13 +34,15 @@ cd backend-core
 TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/auth -count=1
 ```
 
-Tests use `pgtest.Start`, migrated Docker Postgres and Redis, with Ryuk disabled on this host. Real HTTP stream gates exercise access logging, session cookies and CSRF checks, three incremental frames, disconnect cancellation and committed-panic recovery without JSON corruption.
+Tests use `pgtest.Start`, migrated Docker Postgres and Redis, with Ryuk disabled on this host. Test files mirror the source files (`service_test.go`, `repository_test.go`, `login_limiter_test.go`, ...); `login_rate_limit_test.go` covers limiter behaviour through the HTTP login, and `session_middleware_test.go` includes the real HTTP stream gates (access logging, session cookies and CSRF checks, incremental frames, disconnect cancellation, committed-panic recovery).
 
 ## Conventions
 
 Passwords, raw session tokens and secrets must never enter logs, errors or audit metadata. Errors propagate to the boundary for one log and shared HTTP formatting.
 
-`thomas_session` is HttpOnly; `thomas_csrf` is readable by the browser. Both use Path `/`, SameSite Lax and the constructor's Secure flag. Their absolute expiry matches the session. Unsafe methods require `X-CSRF-Token` equal to the authenticated session's token with constant-time comparison; GET, HEAD and OPTIONS are safe. Logout requires CSRF, deletes the session and clears both cookies.
+The browser never sends a user or tenant id. It sends the opaque `thomas_session` cookie (HttpOnly) and, on unsafe methods, `X-CSRF-Token` copied from the readable `thomas_csrf` cookie. Core stores only the SHA-256 of the session token; the session row decides user and tenant. Both cookies use Path `/`, SameSite Lax and the constructor's Secure flag. Their absolute expiry matches the session. Unsafe methods require `X-CSRF-Token` equal to the authenticated session's token with constant-time comparison; GET, HEAD and OPTIONS are safe. Logout requires CSRF, deletes the session and clears both cookies.
+
+The service token guards `/internal/*`: a `Bearer` token compared by SHA-256 digest in constant time. Success sets the platform tenant and `Cache-Control: no-store`; failure returns `INTERNAL_TOKEN_INVALID`.
 
 The Redis limiter atomically increments expiring email/IP, email-global and IP-only counters, repairs lost TTL, and returns the longest blocked bucket's remaining TTL in `Retry-After`. The typed limits are `CORE_AUTH_LOGIN_MAX_ATTEMPTS` (10), `CORE_AUTH_LOGIN_EMAIL_MAX_ATTEMPTS` (20), and `CORE_AUTH_LOGIN_IP_MAX_ATTEMPTS` (100), each at least one. The IP-only budget blocks one address spraying different emails. Identities use keyed HMAC-SHA256 of normalized email, with the injected service-token secret. Successful login resets the email/IP and email-global counters; the aggregate IP budget remains until expiry. Redis/script failures reject the login with INTERNAL_ERROR before password validation. Rotation of the HMAC key resets email budgets.
 
@@ -42,7 +54,7 @@ Ordinary credential failures produce a warning with the request id and HMAC iden
 
 Argon2 creation and comparison acquire a bounded semaphore using request cancellation. Cancelled waits return retryable DEPENDENCY_TIMEOUT errors. Iterations, memory, parallelism, salt length, key length and concurrency come from typed config; running hashes release their slot after completion.
 
-Middleware preserves the response writer and request cancellation. Session reads compute `Expired` using database `now()` and use that same clock for last-seen refresh and purge. App-clock skew cannot override the database expiry decision. Session reads update last_seen_at only after CORE_AUTH_SESSION_TOUCH_INTERVAL and never for rows whose expiry has passed. The token lookup establishes trusted scope before the scoped session query. The periodic system job deletes expired sessions across every tenant through `PurgeAllExpiredSessions`, preserving active sessions; request-path reads/deletes and `PurgeExpiredSessions` still require tenant context.
+Middleware preserves the response writer and request cancellation. Session reads compute `Expired` using database `now()` and use that same clock for last-seen refresh and purge. App-clock skew cannot override the database expiry decision. Session reads update last_seen_at only after CORE_AUTH_SESSION_TOUCH_INTERVAL and never for rows whose expiry has passed. `FindSessionAcrossTenants` establishes trusted scope from the token hash before the scoped `FindSession` query. The periodic system job deletes expired sessions across every tenant through `PurgeExpiredSessionsAcrossTenants`, preserving active sessions; request-path reads/deletes and `PurgeExpiredSessions` still require tenant context.
 
 ## Common failures
 

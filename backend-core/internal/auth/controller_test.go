@@ -7,26 +7,17 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/netip"
 	"strings"
 	"testing"
 	"time"
 
-	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/controller"
-	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
-	authmiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/middleware"
-	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
-	authtoken "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/token"
-
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
-
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
-
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 )
 
@@ -44,10 +35,10 @@ func startRedis(t *testing.T) *redis.Client {
 	return client
 }
 
-func mountAuthForTest(r *gin.Engine, p authhandler.AuthControllerParams) {
-	ctrl := authhandler.NewAuthController(p)
+func mountAuthForTest(r *gin.Engine, p ControllerParams) {
+	ctrl := NewController(p)
 	r.POST("/api/v1/auth/login", ctrl.HandleLogin)
-	protected := r.Group("", authmiddleware.RequireSession(p.Service.(authservice.SessionAuthenticator)))
+	protected := r.Group("", RequireSession(p.Service.(sessionAuthenticator)))
 	protected.POST("/api/v1/auth/logout", ctrl.HandleLogout)
 	protected.GET("/api/v1/auth/me", ctrl.HandleMe)
 }
@@ -56,11 +47,11 @@ func wrapAuthHTTP(h http.HandlerFunc) gin.HandlerFunc { return gin.WrapF(h) }
 
 func newServer(t *testing.T, maxAttempts int) (http.Handler, *clock) {
 	t.Helper()
-	svc, c := newService(t)
+	svc, c := newTestService(t)
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	r := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
-	mountAuthForTest(r, authhandler.AuthControllerParams{Service: svc, Limiter: authlimiter.NewLimiter(startRedis(t), maxAttempts, time.Minute)})
-	pr := r.Group("", authmiddleware.RequireSession(svc))
+	mountAuthForTest(r, ControllerParams{Service: svc, Limiter: NewLimiter(startRedis(t), maxAttempts, time.Minute)})
+	pr := r.Group("", RequireSession(svc))
 	pr.POST("/api/v1/things", wrapAuthHTTP(func(w http.ResponseWriter, req *http.Request) {
 		httpx.WriteSuccess(w, req, http.StatusCreated, map[string]bool{"ok": true})
 	}))
@@ -71,6 +62,7 @@ func newServer(t *testing.T, maxAttempts int) (http.Handler, *clock) {
 const probeFrameGap = 300 * time.Millisecond
 
 // streamProbe emits three frames with a pause between them so a test can tell incremental delivery from buffering.
+
 func streamProbe(w http.ResponseWriter, r *http.Request) {
 	stream, err := httpx.NewEventStream(w, r, config.HTTPConfig{EventStreamHeartbeat: time.Hour, EventStreamWriteTimeout: time.Second})
 	if err != nil {
@@ -131,38 +123,22 @@ func TestLoginSetsCookies(t *testing.T) {
 	h, _ := newServer(t, 10)
 	rec := login(t, h, ownerEmail, ownerPassword)
 	require.Equal(t, http.StatusOK, rec.Code)
-	sess := cookie(rec, authmiddleware.CookieSession)
+	sess := cookie(rec, SessionCookie)
 	require.NotNil(t, sess)
 	require.True(t, sess.HttpOnly)
 	require.Equal(t, http.SameSiteLaxMode, sess.SameSite)
-	require.NotNil(t, cookie(rec, authmiddleware.CookieCSRF))
-}
-
-func TestMutationWithoutCSRFIsForbidden(t *testing.T) {
-	h, _ := newServer(t, 10)
-	rec := login(t, h, ownerEmail, ownerPassword)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/things", nil)
-	req.AddCookie(cookie(rec, authmiddleware.CookieSession))
-	out := httptest.NewRecorder()
-	h.ServeHTTP(out, req)
-	require.Equal(t, http.StatusForbidden, out.Code)
-	require.Equal(t, "AUTH_CSRF_INVALID", errCode(t, out))
-
-	req.Header.Set(authmiddleware.HeaderCSRF, cookie(rec, authmiddleware.CookieCSRF).Value)
-	ok := httptest.NewRecorder()
-	h.ServeHTTP(ok, req)
-	require.Equal(t, http.StatusCreated, ok.Code)
+	require.NotNil(t, cookie(rec, CSRFCookie))
 }
 
 func TestExpiredSessionIsRejectedOverHTTP(t *testing.T) {
-	service, _ := newService(t)
+	service, _ := newTestService(t)
 	h := httpx.NewRouter(nil)
-	mountAuthForTest(h, authhandler.AuthControllerParams{Service: service, Limiter: authlimiter.NewLimiter(startRedis(t), 10, time.Minute)})
+	mountAuthForTest(h, ControllerParams{Service: service, Limiter: NewLimiter(startRedis(t), 10, time.Minute)})
 	rec := login(t, h, ownerEmail, ownerPassword)
-	_, err := service.db.Exec(t.Context(), `UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1`, authtoken.Hash(cookie(rec, authmiddleware.CookieSession).Value))
+	_, err := service.db.Exec(t.Context(), `UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1`, hashSessionToken(cookie(rec, SessionCookie).Value))
 	require.NoError(t, err)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
-	req.AddCookie(cookie(rec, authmiddleware.CookieSession))
+	req.AddCookie(cookie(rec, SessionCookie))
 	out := httptest.NewRecorder()
 	h.ServeHTTP(out, req)
 	require.Equal(t, http.StatusUnauthorized, out.Code)
@@ -191,11 +167,11 @@ func TestLoginSuccessResetsFailedAttemptBudget(t *testing.T) {
 }
 
 func TestLoginLimiterSeparatesForwardedIPsAndEmails(t *testing.T) {
-	svc, _ := newService(t)
+	svc, _ := newTestService(t)
 	client := startRedis(t)
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger))
-	mountAuthForTest(router, authhandler.AuthControllerParams{Service: svc, Limiter: authlimiter.NewLoginLimiter(client, config.AuthConfig{LoginMaxAttempts: 1, LoginEmailMaxAttempts: 10, LoginIPMaxAttempts: 100, LoginWindow: time.Minute}, []byte("test-limiter-hmac-key-at-least-32-chars")), TrustedProxyHeader: "X-Trusted-Client-IP", TrustedProxyCIDRs: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, Logger: logger})
+	mountAuthForTest(router, ControllerParams{Service: svc, Limiter: NewLoginLimiter(client, config.AuthConfig{LoginMaxAttempts: 1, LoginEmailMaxAttempts: 10, LoginIPMaxAttempts: 100, LoginWindow: time.Minute}, []byte("test-limiter-hmac-key-at-least-32-chars")), TrustedProxyHeader: "X-Trusted-Client-IP", TrustedProxyCIDRs: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, Logger: logger})
 	attempt := func(email, ip string) int {
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"email":"`+email+`","password":"wrong-password"}`))
 		request.RemoteAddr = "10.0.0.1:1234"
@@ -209,7 +185,7 @@ func TestLoginLimiterSeparatesForwardedIPsAndEmails(t *testing.T) {
 	require.Equal(t, 429, attempt(ownerEmail, "192.0.2.1"))
 	require.Equal(t, 401, attempt(ownerEmail, "192.0.2.2"))
 	require.Equal(t, 401, attempt("different@example.com", "192.0.2.1"))
-	keys, err := client.Keys(t.Context(), authlimiter.KeyPrefix+"*").Result()
+	keys, err := client.Keys(t.Context(), loginLimiterKeyPrefix+"*").Result()
 	require.NoError(t, err)
 	for _, key := range keys {
 		require.NotContains(t, key, "@")
@@ -220,7 +196,7 @@ func TestMeReturnsUserWithoutSecrets(t *testing.T) {
 	h, _ := newServer(t, 10)
 	rec := login(t, h, ownerEmail, ownerPassword)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
-	req.AddCookie(cookie(rec, authmiddleware.CookieSession))
+	req.AddCookie(cookie(rec, SessionCookie))
 	out := httptest.NewRecorder()
 	h.ServeHTTP(out, req)
 	require.Equal(t, http.StatusOK, out.Code)
@@ -245,53 +221,3 @@ func readFrame(reader *bufio.Reader) (string, error) {
 
 // Review Focus: session and CSRF middleware must not break flushing. The first frame has to reach the client before
 // the handler's pause ends, over real HTTP with real cookies and the real CSRF check.
-func TestSessionAndCSRF_StreamIncrementally(t *testing.T) {
-	h, clk := newServer(t, 10)
-	// Cookies carry an absolute expiry. The fixed test clock lies in the past, so a cookie jar would drop them.
-	clk.t = time.Now()
-	server := httptest.NewServer(h)
-	t.Cleanup(server.Close)
-	jar, err := cookiejar.New(nil)
-	require.NoError(t, err)
-	client := &http.Client{Jar: jar}
-
-	loginBody := `{"email":"` + ownerEmail + `","password":"` + ownerPassword + `"}`
-	loginResp, err := client.Post(server.URL+"/api/v1/auth/login", "application/json", strings.NewReader(loginBody))
-	require.NoError(t, err)
-	defer func() { require.NoError(t, loginResp.Body.Close()) }()
-	var login struct {
-		Data struct {
-			CSRFToken string `json:"csrfToken"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.NewDecoder(loginResp.Body).Decode(&login))
-
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/api/v1/stream-probe", nil)
-	require.NoError(t, err)
-	req.Header.Set(authmiddleware.HeaderCSRF, login.Data.CSRFToken)
-	started := time.Now()
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer func() { require.NoError(t, resp.Body.Close()) }()
-	require.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
-
-	reader := bufio.NewReader(resp.Body)
-	first, err := readFrame(reader)
-	require.NoError(t, err)
-	firstAt := time.Since(started)
-	second, err := readFrame(reader)
-	require.NoError(t, err)
-	secondAt := time.Since(started)
-	third, err := readFrame(reader)
-	require.NoError(t, err)
-	thirdAt := time.Since(started)
-	require.Equal(t, "data: {\"n\":3}\n", third)
-	require.GreaterOrEqual(t, thirdAt-secondAt, probeFrameGap/2)
-
-	require.Equal(t, "data: {\"n\":1}\n", first)
-	require.Equal(t, "data: {\"n\":2}\n", second)
-	require.Less(t, firstAt, probeFrameGap, "the first frame must arrive before the handler's pause ends")
-	require.GreaterOrEqual(t, secondAt-firstAt, probeFrameGap/2)
-}

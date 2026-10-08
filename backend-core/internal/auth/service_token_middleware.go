@@ -1,4 +1,4 @@
-package middleware
+package auth
 
 import (
 	"crypto/sha256"
@@ -12,6 +12,8 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
+// RequireServiceToken authenticates internal callers by the shared bearer token and runs
+// them in the platform tenant; browser sessions never reach these routes.
 func RequireServiceToken(token string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.Header().Set(httpx.HeaderCacheControl, httpx.CacheControlNoStore)

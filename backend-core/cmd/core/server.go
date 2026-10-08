@@ -12,10 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	authcontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/controller"
-	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
-	authrepo "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
-	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider"
 	llmprovidercontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/controller"
 	llmproviderservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/service"
@@ -41,13 +38,13 @@ type providerService interface {
 }
 
 type services struct {
-	auth     authservice.AuthService
+	auth     *auth.Service
 	purger   sessionPurger
 	provider providerService
 }
 
 type controllers struct {
-	auth          *authcontroller.AuthController
+	auth          *auth.Controller
 	provider      *llmprovidercontroller.ProviderController
 	model         *llmprovidercontroller.ModelController
 	modelRole     *llmprovidercontroller.ModelRoleController
@@ -91,8 +88,8 @@ func (rt *coreRuntime) serveHTTP(ctx context.Context) error {
 }
 
 func (rt *coreRuntime) newServices(ctx context.Context, pool *pgxpool.Pool, cipher *vault.Cipher) (services, error) {
-	auth := authservice.NewAuthService(authrepo.NewAuthRepositoryWithSessionTouchInterval(pool, rt.cfg.Auth.SessionTouchInterval), pool, rt.cfg.Auth, time.Now)
-	if err := auth.EnsureOwner(tenant.WithID(ctx, tenant.PlatformID)); err != nil {
+	authService := auth.NewService(auth.NewRepositoryWithSessionTouchInterval(pool, rt.cfg.Auth.SessionTouchInterval), pool, rt.cfg.Auth, time.Now)
+	if err := authService.EnsureOwner(tenant.WithID(ctx, tenant.PlatformID)); err != nil {
 		return services{}, err
 	}
 	client, err := outbound.NewClient(rt.cfg.ProviderHTTPTimeout, rt.cfg.ProviderPrivateAllowlist)
@@ -104,8 +101,8 @@ func (rt *coreRuntime) newServices(ctx context.Context, pool *pgxpool.Pool, ciph
 	catalog.Metrics = rt.metrics
 	provider := llmproviderservice.NewLLMProviderService(pool, vault.NewStore(cipher), catalog, rt.cfg.ProviderMaxRemoteModels)
 	return services{
-		auth:     auth,
-		purger:   auth,
+		auth:     authService,
+		purger:   authService,
 		provider: provider,
 	}, nil
 }
@@ -117,9 +114,9 @@ func (rt *coreRuntime) newControllers(svc services, redisClient *redis.Client) (
 	}
 	maxBodyBytes := rt.cfg.HTTP.MaxBodyBytes
 	return controllers{
-		auth: authcontroller.NewAuthController(authcontroller.AuthControllerParams{
+		auth: auth.NewController(auth.ControllerParams{
 			Service:            svc.auth,
-			Limiter:            authlimiter.NewLoginLimiter(redisClient, rt.cfg.Auth, []byte(rt.cfg.ServiceToken)),
+			Limiter:            auth.NewLoginLimiter(redisClient, rt.cfg.Auth, []byte(rt.cfg.ServiceToken)),
 			CookieSecure:       rt.cfg.Auth.CookieSecure,
 			TrustedProxyHeader: rt.cfg.Auth.TrustedProxyHeader,
 			TrustedProxyCIDRs:  proxyNetworks,

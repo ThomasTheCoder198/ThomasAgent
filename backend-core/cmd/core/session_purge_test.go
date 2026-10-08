@@ -14,8 +14,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 
 	"github.com/stretchr/testify/require"
-	authrepo "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
-	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
@@ -23,11 +22,11 @@ import (
 
 func TestSessionPurgeJobDeletesExpiredRowsAndStopsOnCancellation(t *testing.T) {
 	pool := pgtest.Start(t)
-	repo := authrepo.NewAuthRepository(pool)
+	repo := auth.NewRepository(pool)
 	user, err := repo.CreateUser(tenant.WithID(t.Context(), tenant.PlatformID), "purge@example.com", "unused-hash")
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateSession(tenant.WithID(t.Context(), tenant.PlatformID), user.ID, []byte("expired-job-session"), "csrf", time.Now().Add(-time.Hour)))
-	service := authservice.NewAuthService(repo, pool, config.AuthConfig{}, time.Now)
+	service := auth.NewService(repo, pool, config.AuthConfig{}, time.Now)
 	app := coreRuntime{cfg: config.Config{Auth: config.AuthConfig{SessionPurgeInterval: 10 * time.Millisecond}}, log: slog.New(slog.NewJSONHandler(io.Discard, nil))}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -48,7 +47,7 @@ func TestSessionPurgeJobDeletesExpiredRowsAndStopsOnCancellation(t *testing.T) {
 
 func TestSessionPurgeJobDeletesExpiredSessionsAcrossTenants(t *testing.T) {
 	pool := pgtest.Start(t)
-	repo := authrepo.NewAuthRepository(pool)
+	repo := auth.NewRepository(pool)
 	for _, tenantID := range []string{tenant.PlatformID, "other"} {
 		ctx := tenant.WithID(t.Context(), tenantID)
 		user, err := repo.CreateUser(ctx, "purge@example.com", "unused-hash")
@@ -56,7 +55,7 @@ func TestSessionPurgeJobDeletesExpiredSessionsAcrossTenants(t *testing.T) {
 		require.NoError(t, repo.CreateSession(ctx, user.ID, []byte(tenantID+"-expired"), "csrf", time.Now().Add(-time.Hour)))
 		require.NoError(t, repo.CreateSession(ctx, user.ID, []byte(tenantID+"-active"), "csrf", time.Now().Add(time.Hour)))
 	}
-	service := authservice.NewAuthService(repo, pool, config.AuthConfig{}, time.Now)
+	service := auth.NewService(repo, pool, config.AuthConfig{}, time.Now)
 	app := coreRuntime{log: slog.New(slog.NewJSONHandler(io.Discard, nil))}
 	app.runSessionPurge(t.Context(), service)
 	var expired, active int
@@ -67,7 +66,7 @@ func TestSessionPurgeJobDeletesExpiredSessionsAcrossTenants(t *testing.T) {
 
 func TestSessionPurgeLogsCarryJobRequestID(t *testing.T) {
 	pool := pgtest.Start(t)
-	service := authservice.NewAuthService(authrepo.NewAuthRepository(pool), pool, config.AuthConfig{}, time.Now)
+	service := auth.NewService(auth.NewRepository(pool), pool, config.AuthConfig{}, time.Now)
 	var output bytes.Buffer
 	log, err := logging.NewLogger(&output, "info", "core-test", "test", nil)
 	require.NoError(t, err)

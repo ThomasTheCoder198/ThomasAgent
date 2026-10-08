@@ -8,21 +8,15 @@ import (
 	"testing"
 	"time"
 
-	authmodel "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/model"
-	authrepo "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
-	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
-	authtoken "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/token"
-
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
-
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
 func codeOf(t *testing.T, err error) errors.Code {
@@ -32,7 +26,7 @@ func codeOf(t *testing.T, err error) errors.Code {
 }
 
 func TestEnsureOwnerIsIdempotent(t *testing.T) {
-	s, _ := newService(t)
+	s, _ := newTestService(t)
 	require.NoError(t, s.EnsureOwner(tenant.WithID(context.Background(), tenant.PlatformID)))
 	_, _, err := s.Login(tenant.WithID(context.Background(), tenant.PlatformID), ownerEmail, ownerPassword)
 	require.NoError(t, err)
@@ -40,10 +34,10 @@ func TestEnsureOwnerIsIdempotent(t *testing.T) {
 
 func TestEnsureOwnerConcurrentDifferentEmailsCreatesOneOwner(t *testing.T) {
 	pool := pgtest.Start(t)
-	services := make([]*authservice.Service, 4)
+	services := make([]*Service, 4)
 	for i := range services {
 		cfg := config.AuthConfig{OwnerEmail: uuid.NewString() + "@example.com", OwnerPassword: ownerPassword, MinPasswordLength: 12}
-		services[i] = authservice.NewAuthService(authrepo.NewAuthRepository(pool), pool, cfg, time.Now)
+		services[i] = NewService(NewRepository(pool), pool, cfg, time.Now)
 	}
 	start := make(chan struct{})
 	results := make(chan error, len(services))
@@ -62,45 +56,20 @@ func TestEnsureOwnerConcurrentDifferentEmailsCreatesOneOwner(t *testing.T) {
 	for err := range results {
 		require.NoError(t, err)
 	}
-	count, err := authrepo.NewAuthRepository(pool).CountUsers(tenant.WithID(t.Context(), tenant.PlatformID))
+	count, err := NewRepository(pool).CountUsers(tenant.WithID(t.Context(), tenant.PlatformID))
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
-}
-
-func TestAuthRepositoryUsesTrustedTenantContext(t *testing.T) {
-	pool := pgtest.Start(t)
-	repo := authrepo.NewAuthRepository(pool)
-	platform, err := repo.CreateUser(tenant.WithID(t.Context(), tenant.PlatformID), ownerEmail, "platform-hash")
-	require.NoError(t, err)
-	otherCtx := tenant.WithID(t.Context(), "other")
-	other, err := repo.CreateUser(otherCtx, ownerEmail, "other-hash")
-	require.NoError(t, err)
-	require.NotEqual(t, platform.ID, other.ID)
-	got, hash, err := repo.FindUserByEmail(otherCtx, ownerEmail)
-	require.NoError(t, err)
-	require.Equal(t, other.ID, got.ID)
-	require.Equal(t, "other-hash", hash)
-	require.NoError(t, repo.CreateSession(otherCtx, other.ID, []byte("other-token"), "csrf", time.Now().Add(time.Hour)))
-	_, _, err = repo.FindSession(tenant.WithID(t.Context(), tenant.PlatformID), []byte("other-token"))
-	require.ErrorIs(t, err, errors.ErrNotFound)
-	_, _, err = repo.FindSession(otherCtx, []byte("other-token"))
-	require.NoError(t, err)
-	_, err = repo.DB.Exec(tenant.WithID(t.Context(), tenant.PlatformID), `INSERT INTO users (tenant_id,email,password_hash) VALUES ('other','second@example.com','hash')`)
-	require.NoError(t, err)
-	count, err := repo.CountUsers(otherCtx)
-	require.NoError(t, err)
-	require.Equal(t, 2, count)
 }
 
 func TestEnsureOwnerRejectsShortPassword(t *testing.T) {
 	pool := pgtest.Start(t)
 	cfg := config.AuthConfig{OwnerEmail: ownerEmail, OwnerPassword: "short", SessionTTL: time.Hour, MinPasswordLength: 12}
-	err := authservice.NewAuthService(authrepo.NewAuthRepository(pool), pool, cfg, time.Now).EnsureOwner(tenant.WithID(context.Background(), tenant.PlatformID))
+	err := NewService(NewRepository(pool), pool, cfg, time.Now).EnsureOwner(tenant.WithID(context.Background(), tenant.PlatformID))
 	require.ErrorContains(t, err, "CORE_AUTH_OWNER_PASSWORD")
 }
 
 func TestLoginIssuesSessionThatAuthenticates(t *testing.T) {
-	s, _ := newService(t)
+	s, _ := newTestService(t)
 	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
 	user, issued, err := s.Login(ctx, "  Thomas@Example.com ", ownerPassword)
 	require.NoError(t, err)
@@ -114,22 +83,8 @@ func TestLoginIssuesSessionThatAuthenticates(t *testing.T) {
 	require.Equal(t, issued.CSRFToken, sess.CSRFToken)
 }
 
-func TestFindUserByEmailScopesSameEmailByTenant(t *testing.T) {
-	service, _ := newService(t)
-	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
-	otherID := uuid.New()
-	_, err := service.repo.DB.Exec(ctx, `INSERT INTO users (id, tenant_id, email, password_hash) VALUES ($1, $2, $3, $4)`, otherID, "other", ownerEmail, "other-hash")
-	require.NoError(t, err)
-	user, _, err := service.repo.FindUserByEmail(ctx, ownerEmail)
-	require.NoError(t, err)
-	require.NotEqual(t, otherID, user.ID)
-	count, err := service.repo.CountUsers(ctx)
-	require.NoError(t, err)
-	require.Equal(t, 1, count)
-}
-
 func TestLoginErrorsAreUniform(t *testing.T) {
-	s, _ := newService(t)
+	s, _ := newTestService(t)
 	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
 	_, _, errWrongPass := s.Login(ctx, ownerEmail, "wrong password!!")
 	_, _, errUnknown := s.Login(ctx, "nobody@example.com", ownerPassword)
@@ -138,7 +93,7 @@ func TestLoginErrorsAreUniform(t *testing.T) {
 }
 
 func TestFailedLoginAuditContainsNoCredentials(t *testing.T) {
-	service, _ := newService(t)
+	service, _ := newTestService(t)
 	_, _, err := service.Login(tenant.WithID(context.Background(), tenant.PlatformID), ownerEmail, "incorrect password")
 	require.Equal(t, errors.CodeAuthInvalidCredentials, codeOf(t, err))
 	require.NoError(t, service.RecordFailedLogin(tenant.WithID(t.Context(), tenant.PlatformID)))
@@ -151,36 +106,36 @@ func TestFailedLoginAuditContainsNoCredentials(t *testing.T) {
 }
 
 func TestExpiredSessionIsRejected(t *testing.T) {
-	s, _ := newService(t)
+	s, _ := newTestService(t)
 	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
 	_, issued, err := s.Login(ctx, ownerEmail, ownerPassword)
 	require.NoError(t, err)
-	_, err = s.db.Exec(ctx, `UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1`, authtoken.Hash(issued.Token))
+	_, err = s.db.Exec(ctx, `UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1`, hashSessionToken(issued.Token))
 	require.NoError(t, err)
 	_, _, err = s.Authenticate(ctx, issued.Token)
 	require.Equal(t, errors.CodeAuthSessionExpired, codeOf(t, err))
 }
 
 func TestAuthenticateRefreshesLastSeen(t *testing.T) {
-	service, _ := newService(t)
+	service, _ := newTestService(t)
 	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
 	_, issued, err := service.Login(ctx, ownerEmail, ownerPassword)
 	require.NoError(t, err)
-	_, err = service.db.Exec(ctx, `UPDATE sessions SET last_seen_at = '2000-01-01' WHERE token_hash = $1`, authtoken.Hash(issued.Token))
+	_, err = service.db.Exec(ctx, `UPDATE sessions SET last_seen_at = '2000-01-01' WHERE token_hash = $1`, hashSessionToken(issued.Token))
 	require.NoError(t, err)
 	_, _, err = service.Authenticate(ctx, issued.Token)
 	require.NoError(t, err)
 	var lastSeen time.Time
-	require.NoError(t, service.db.QueryRow(ctx, `SELECT last_seen_at FROM sessions WHERE token_hash = $1`, authtoken.Hash(issued.Token)).Scan(&lastSeen))
+	require.NoError(t, service.db.QueryRow(ctx, `SELECT last_seen_at FROM sessions WHERE token_hash = $1`, hashSessionToken(issued.Token)).Scan(&lastSeen))
 	require.True(t, lastSeen.After(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)))
 }
 
 func TestPurgeExpiredSessionsOnlyDeletesExpiredPlatformSessions(t *testing.T) {
-	service, _ := newService(t)
+	service, _ := newTestService(t)
 	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
-	user, _, err := service.repo.FindUserByEmail(ctx, ownerEmail)
+	user, _, err := service.repository.FindUserByEmail(ctx, ownerEmail)
 	require.NoError(t, err)
-	require.NoError(t, service.repo.CreateSession(ctx, user.ID, []byte("expired-platform-session-hash"), "csrf", time.Now().Add(-time.Hour)))
+	require.NoError(t, service.repository.CreateSession(ctx, user.ID, []byte("expired-platform-session-hash"), "csrf", time.Now().Add(-time.Hour)))
 	_, err = service.db.Exec(ctx, `INSERT INTO users (tenant_id, email, password_hash) VALUES ('other', 'other@example.com', 'hash')`)
 	require.NoError(t, err)
 	deleted, err := service.PurgeExpiredSessions(ctx)
@@ -189,7 +144,7 @@ func TestPurgeExpiredSessionsOnlyDeletesExpiredPlatformSessions(t *testing.T) {
 }
 
 func TestLogoutInvalidatesSession(t *testing.T) {
-	s, _ := newService(t)
+	s, _ := newTestService(t)
 	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
 	_, issued, _ := s.Login(ctx, ownerEmail, ownerPassword)
 	require.NoError(t, s.Logout(ctx, issued.Token))
@@ -238,7 +193,7 @@ func (tx failingExecTx) Exec(ctx context.Context, query string, args ...any) (pg
 }
 
 func TestLoginAuditFailureRollsBackWithoutCompensatingDelete(t *testing.T) {
-	service, _ := newService(t)
+	service, _ := newTestService(t)
 	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
 	_, err := service.db.Exec(ctx, `CREATE FUNCTION reject_session_delete() RETURNS trigger LANGUAGE plpgsql AS $$
 		BEGIN RAISE EXCEPTION 'rollback must not issue DELETE'; END $$;
@@ -248,28 +203,28 @@ func TestLoginAuditFailureRollsBackWithoutCompensatingDelete(t *testing.T) {
 	service.db.inner = failingExecDB{DBTX: service.db.inner, statement: "INSERT INTO audit_events", failure: auditErr}
 	user, issued, err := service.Login(ctx, ownerEmail, ownerPassword)
 	require.ErrorIs(t, err, auditErr)
-	require.Equal(t, authmodel.User{}, user)
-	require.Equal(t, authmodel.IssuedSession{}, issued)
+	require.Equal(t, User{}, user)
+	require.Equal(t, IssuedSession{}, issued)
 	var count int
-	require.NoError(t, service.repo.DB.QueryRow(ctx, "SELECT count(*) FROM sessions").Scan(&count))
+	require.NoError(t, service.repository.db.QueryRow(ctx, "SELECT count(*) FROM sessions").Scan(&count))
 	require.Zero(t, count)
 	require.NotContains(t, err.Error(), ownerPassword)
 }
 
 func TestExpiredSessionCleanupFailureReturnsInternalErrorAndCause(t *testing.T) {
-	service, _ := newService(t)
+	service, _ := newTestService(t)
 	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
 	_, issued, err := service.Login(ctx, ownerEmail, ownerPassword)
 	require.NoError(t, err)
-	_, err = service.db.Exec(ctx, `UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1`, authtoken.Hash(issued.Token))
+	_, err = service.db.Exec(ctx, `UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1`, hashSessionToken(issued.Token))
 	require.NoError(t, err)
 	cleanupErr := stderrors.New("test expired session deletion failure")
-	service.repo.DB = failingExecDB{DBTX: service.repo.DB, statement: "DELETE FROM sessions", failure: cleanupErr}
+	service.repository.db = failingExecDB{DBTX: service.repository.db, statement: "DELETE FROM sessions", failure: cleanupErr}
 	user, session, err := service.Authenticate(ctx, issued.Token)
 	require.ErrorIs(t, err, cleanupErr)
 	require.Equal(t, errors.CodeInternalError, codeOf(t, err))
-	require.Equal(t, authmodel.User{}, user)
-	require.Equal(t, authmodel.Session{}, session)
+	require.Equal(t, User{}, user)
+	require.Equal(t, Session{}, session)
 	require.NotContains(t, err.Error(), issued.Token)
 	require.NotContains(t, err.Error(), issued.CSRFToken)
 	require.NotContains(t, err.Error(), ownerPassword)
@@ -280,7 +235,7 @@ func TestLoginAuditFailureRejectsAndCleansSession(t *testing.T) {
 }
 
 func TestLoginAuditAndCleanupFailuresAreRetained(t *testing.T) {
-	svc, _ := newService(t)
+	svc, _ := newTestService(t)
 	ctx := tenant.WithID(t.Context(), tenant.PlatformID)
 	auditErr := stderrors.New("audit write failed")
 	cleanupErr := stderrors.New("transaction cleanup failed")
@@ -288,10 +243,30 @@ func TestLoginAuditAndCleanupFailuresAreRetained(t *testing.T) {
 	user, issued, err := svc.Login(ctx, ownerEmail, ownerPassword)
 	require.ErrorIs(t, err, auditErr)
 	require.ErrorIs(t, err, cleanupErr)
-	require.Equal(t, authmodel.User{}, user)
-	require.Equal(t, authmodel.IssuedSession{}, issued)
+	require.Equal(t, User{}, user)
+	require.Equal(t, IssuedSession{}, issued)
 	var count int
-	require.NoError(t, svc.repo.DB.QueryRow(ctx, `SELECT count(*) FROM sessions`).Scan(&count))
+	require.NoError(t, svc.repository.db.QueryRow(ctx, `SELECT count(*) FROM sessions`).Scan(&count))
 	require.Zero(t, count)
 	require.NotContains(t, err.Error(), ownerPassword)
+}
+
+func TestAuthenticate_UsesDatabaseExpiryDespiteClockSkew(t *testing.T) {
+	service, clock := newTestService(t)
+	ctx := tenant.WithID(t.Context(), tenant.PlatformID)
+	_, valid, err := service.Login(ctx, ownerEmail, ownerPassword)
+	require.NoError(t, err)
+	_, expired, err := service.Login(ctx, ownerEmail, ownerPassword)
+	require.NoError(t, err)
+	clock.t = clock.t.Add(24 * time.Hour)
+	_, _, err = service.Authenticate(ctx, valid.Token)
+	require.NoError(t, err, "a valid DB session must survive an app clock ahead of DB")
+	_, err = service.db.Exec(ctx, `UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1`, hashSessionToken(expired.Token))
+	require.NoError(t, err)
+	clock.t = clock.t.Add(-48 * time.Hour)
+	_, _, err = service.Authenticate(ctx, expired.Token)
+	require.Equal(t, errors.CodeAuthSessionExpired, codeOf(t, err))
+	var count int
+	require.NoError(t, service.db.QueryRow(ctx, `SELECT count(*) FROM sessions WHERE token_hash=$1`, hashSessionToken(expired.Token)).Scan(&count))
+	require.Zero(t, count)
 }

@@ -1,4 +1,4 @@
-package controller
+package auth
 
 import (
 	"net/http"
@@ -10,7 +10,7 @@ import (
 )
 
 func TestLoginProxyTrustSelectsRightmostUntrustedHop(t *testing.T) {
-	h := NewAuthController(AuthControllerParams{TrustedProxyHeader: "X-Forwarded-For", TrustedProxyCIDRs: []netip.Prefix{
+	h := NewController(ControllerParams{TrustedProxyHeader: "X-Forwarded-For", TrustedProxyCIDRs: []netip.Prefix{
 		netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("2001:db8:1::/48"),
 	}})
 	for _, test := range []struct{ peer, header, want string }{
@@ -28,7 +28,7 @@ func TestLoginProxyTrustSelectsRightmostUntrustedHop(t *testing.T) {
 }
 
 func TestClientIPJoinsForwardingHeaderLines(t *testing.T) {
-	h := NewAuthController(AuthControllerParams{TrustedProxyHeader: "X-Forwarded-For", TrustedProxyCIDRs: []netip.Prefix{
+	h := NewController(ControllerParams{TrustedProxyHeader: "X-Forwarded-For", TrustedProxyCIDRs: []netip.Prefix{
 		netip.MustParsePrefix("10.0.0.0/8"),
 	}})
 	req := httptest.NewRequest(http.MethodPost, "/", nil)

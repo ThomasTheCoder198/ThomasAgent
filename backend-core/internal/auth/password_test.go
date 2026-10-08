@@ -1,4 +1,4 @@
-package service
+package auth
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
@@ -16,77 +15,71 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
-const (
-	testOwnerEmail    = "thomas@example.com"
-	testOwnerPassword = "correct horse battery"
-)
-
 func TestPasswordHashUsesConfiguredCostAndFixedParallelism(t *testing.T) {
-	cfg := config.AuthConfig{PasswordHash: config.PasswordHashConfig{Iterations: 3, MemoryKiB: 65536, MaxConcurrency: 1}}
-	s := NewAuthService(nil, nil, cfg, time.Now)
-	encoded, err := s.createHash(t.Context(), "test-password")
+	hasher := newPasswordHasher(config.PasswordHashConfig{Iterations: 3, MemoryKiB: 65536, MaxConcurrency: 1})
+	encoded, err := hasher.hash(t.Context(), "test-password")
 	require.NoError(t, err)
 	require.Contains(t, encoded, "$m=65536,t=3,p=1$")
-	matched, err := s.compareHash(t.Context(), "test-password", encoded)
+	matched, err := hasher.compare(t.Context(), "test-password", encoded)
 	require.NoError(t, err)
 	require.True(t, matched)
 }
 
 func TestPasswordHashWaitsForSemaphoreCapacity(t *testing.T) {
-	s := NewAuthService(nil, nil, config.AuthConfig{PasswordHash: config.PasswordHashConfig{Iterations: 2, MemoryKiB: 65536, MaxConcurrency: 1}}, time.Now)
-	s.hashSlots <- struct{}{}
+	hasher := newPasswordHasher(config.PasswordHashConfig{Iterations: 2, MemoryKiB: 65536, MaxConcurrency: 1})
+	hasher.slots <- struct{}{}
 	done := make(chan error, 1)
-	go func() { _, err := s.createHash(t.Context(), "test-password"); done <- err }()
+	go func() { _, err := hasher.hash(t.Context(), "test-password"); done <- err }()
 	select {
 	case <-done:
 		t.Fatal("hash ran while the configured concurrency budget was occupied")
 	case <-time.After(time.Second):
 	}
-	<-s.hashSlots
+	<-hasher.slots
 	select {
 	case err := <-done:
 		require.NoError(t, err)
 	case <-time.After(5 * time.Second):
 		t.Fatal("hash did not resume after a slot was released")
 	}
-	require.Empty(t, s.hashSlots)
+	require.Empty(t, hasher.slots)
 }
 
 func TestTimingHashInitializationFailureRejectsAuth(t *testing.T) {
 	initializationErr := errors.ErrInternalError.WithCause(context.Canceled)
-	service := &Service{decoyErr: initializationErr}
+	service := &Service{passwords: &passwordHasher{decoyErr: initializationErr}}
 	require.ErrorIs(t, service.EnsureOwner(tenant.WithID(context.Background(), tenant.PlatformID)), initializationErr)
-	_, _, err := service.Login(tenant.WithID(context.Background(), tenant.PlatformID), testOwnerEmail, testOwnerPassword)
+	_, _, err := service.Login(tenant.WithID(context.Background(), tenant.PlatformID), ownerEmail, ownerPassword)
 	require.ErrorIs(t, err, initializationErr)
 }
 
 func TestPasswordHashCancelledWaitReturnsRetryableCatalogError(t *testing.T) {
 	pool := pgtest.Start(t)
-	cfg := config.AuthConfig{OwnerEmail: testOwnerEmail, OwnerPassword: testOwnerPassword, SessionTTL: time.Hour, MinPasswordLength: 12}
-	repo := repository.NewAuthRepository(pool)
-	svc := NewAuthService(repo, pool, cfg, time.Now)
+	authConfig := config.AuthConfig{OwnerEmail: ownerEmail, OwnerPassword: ownerPassword, SessionTTL: time.Hour, MinPasswordLength: 12}
+	repository := NewRepository(pool)
+	svc := NewService(repository, pool, authConfig, time.Now)
 	ctx := tenant.WithID(t.Context(), tenant.PlatformID)
 	require.NoError(t, svc.EnsureOwner(ctx))
 	queried := make(chan struct{})
-	repo.DB = notifyQueryDB{DBTX: repo.DB, scanned: queried}
-	for range cap(svc.hashSlots) {
-		svc.hashSlots <- struct{}{}
+	repository.db = notifyQueryDB{DBTX: repository.db, scanned: queried}
+	for range cap(svc.passwords.slots) {
+		svc.passwords.slots <- struct{}{}
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	result := make(chan error, 1)
-	go func() { _, _, err := svc.Login(ctx, testOwnerEmail, "incorrect-password"); result <- err }()
+	go func() { _, _, err := svc.Login(ctx, ownerEmail, "incorrect-password"); result <- err }()
 	<-queried
 	cancel()
 	var err error
 	select {
 	case err = <-result:
 	case <-time.After(250 * time.Millisecond):
-		<-svc.hashSlots
+		<-svc.passwords.slots
 		<-result
 		t.Fatal("password hash ignores canceled context while waiting for capacity")
 	}
-	for len(svc.hashSlots) > 0 {
-		<-svc.hashSlots
+	for len(svc.passwords.slots) > 0 {
+		<-svc.passwords.slots
 	}
 	require.ErrorIs(t, err, context.Canceled)
 	var appErr *errors.AppError

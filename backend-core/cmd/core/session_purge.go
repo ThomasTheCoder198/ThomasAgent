@@ -14,7 +14,7 @@ const (
 )
 
 type sessionPurger interface {
-	PurgeAllExpiredSessions(context.Context) (int64, error)
+	PurgeExpiredSessionsAcrossTenants(context.Context) (int64, error)
 }
 
 func (rt *coreRuntime) purgeExpiredSessions(ctx context.Context, service sessionPurger) {
@@ -37,7 +37,7 @@ func (rt *coreRuntime) purgeExpiredSessions(ctx context.Context, service session
 func (rt *coreRuntime) runSessionPurge(ctx context.Context, service sessionPurger) {
 	ctx = logging.ContextWithRequestID(ctx, requestid.NewJob())
 	start := time.Now()
-	count, err := service.PurgeAllExpiredSessions(ctx)
+	count, err := service.PurgeExpiredSessionsAcrossTenants(ctx)
 	if err != nil {
 		rt.log.ErrorContext(ctx, sessionPurgeFailedMessage, logging.FieldError, err, logging.FieldDurationMS, time.Since(start).Milliseconds())
 		return

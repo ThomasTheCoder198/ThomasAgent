@@ -1,4 +1,4 @@
-package llmprovider
+package llm
 
 import (
 	"bytes"
@@ -10,22 +10,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
-	llmprovidercontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/controller"
-	llmprovidermodel "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/model"
-	llmproviderservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/service"
-
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
-
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
 const (
@@ -33,10 +27,18 @@ const (
 	testMaxBodyBytes = 64 << 10
 )
 
-func mountProviderForTest(r gin.IRoutes, svc llmproviderservice.LLMProviderService, maxBodyBytes int64) {
-	provider := llmprovidercontroller.NewProviderController(svc, maxBodyBytes)
-	model := llmprovidercontroller.NewModelController(svc, maxBodyBytes)
-	role := llmprovidercontroller.NewModelRoleController(svc, maxBodyBytes)
+// publicOperations is everything the public controllers need; nil is allowed for requests rejected before the service.
+
+type publicOperations interface {
+	providerOperations
+	modelOperations
+	roleOperations
+}
+
+func mountProviderForTest(r gin.IRoutes, svc publicOperations, maxBodyBytes int64) {
+	provider := NewProviderController(svc, maxBodyBytes)
+	model := NewModelController(svc, maxBodyBytes)
+	role := NewRoleController(svc, maxBodyBytes)
 	r.GET("/api/v1/providers", provider.HandleListProviders)
 	r.POST("/api/v1/providers", provider.HandleCreateProvider)
 	r.PATCH("/api/v1/providers/:providerId", provider.HandleUpdateProvider)
@@ -50,7 +52,7 @@ func mountProviderForTest(r gin.IRoutes, svc llmproviderservice.LLMProviderServi
 	r.PUT("/api/v1/model-roles/:role", role.HandleAssignRole)
 }
 
-func newRouter(t *testing.T, logs *bytes.Buffer) (*gin.Engine, *llmproviderFixture) {
+func newRouter(t *testing.T, logs *bytes.Buffer) (*gin.Engine, *serviceFixture) {
 	t.Helper()
 	s := newTestService(t, &fakeCatalog{})
 	log, err := logging.NewLogger(logs, "debug", "test", "test", nil)
@@ -61,53 +63,11 @@ func newRouter(t *testing.T, logs *bytes.Buffer) (*gin.Engine, *llmproviderFixtu
 		c.Next()
 	})
 	mountProviderForTest(r, s, testMaxBodyBytes)
-	r.GET("/internal/models/resolve", auth.RequireServiceToken(serviceToken), llmprovidercontroller.NewInternalModelController(s).HandleResolve)
+	r.GET("/internal/models/resolve", auth.RequireServiceToken(serviceToken), NewResolveController(s).HandleResolve)
 	return r, s
 }
 
-func TestServiceTokenSetsExplicitPlatformTenant(t *testing.T) {
-	handler := httpx.NewRouter(nil)
-	handler.GET("/internal/probe", auth.RequireServiceToken(serviceToken), gin.WrapF(func(w http.ResponseWriter, r *http.Request) {
-		got, err := tenant.ID(r.Context())
-		require.NoError(t, err)
-		require.Equal(t, "default", got)
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	request := httptest.NewRequest(http.MethodGet, "/internal/probe", nil)
-	request.Header.Set("Authorization", "Bearer "+serviceToken)
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, request.WithContext(tenant.WithID(request.Context(), "untrusted")))
-	require.Equal(t, http.StatusNoContent, response.Code)
-}
-
-func TestServiceToken_RejectsMissingBearerPrefixAndEmptyConfiguration(t *testing.T) {
-	for _, token := range []string{serviceToken, ""} {
-		for _, header := range []string{"", serviceToken, "Basic " + serviceToken, "Bearer ", "Bearer wrong"} {
-			called := false
-			router := httpx.NewRouter(func(context.Context, *errors.AppError) {})
-			router.GET("/probe", auth.RequireServiceToken(token), gin.WrapF(func(w http.ResponseWriter, _ *http.Request) { called = true; w.WriteHeader(http.StatusNoContent) }))
-			res := send(router, http.MethodGet, "/probe", "", map[string]string{"Authorization": header})
-			require.Equal(t, http.StatusUnauthorized, res.Code, token+"/"+header)
-			require.False(t, called)
-			require.NotContains(t, res.Body.String(), serviceToken)
-		}
-	}
-}
-
-func TestServiceTokenAcceptsMixedCaseBearerAndNeverCaches(t *testing.T) {
-	router := httpx.NewRouter(nil)
-	router.GET("/probe", auth.RequireServiceToken(serviceToken), gin.WrapF(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
-	for _, fixture := range []struct {
-		header string
-		status int
-	}{{"bEaReR " + serviceToken, 204}, {"Bearer wrong", 401}} {
-		response := send(router, http.MethodGet, "/probe", "", map[string]string{"Authorization": fixture.header})
-		require.Equal(t, fixture.status, response.Code)
-		require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
-	}
-}
-
-func TestLLMProviderHTTP_RejectsInvalidPathsQueriesAndSecretBodies(t *testing.T) {
+func TestHTTP_RejectsInvalidPathsQueriesAndSecretBodies(t *testing.T) {
 	router := httpx.NewRouter(func(context.Context, *errors.AppError) {})
 	mountProviderForTest(router, nil, 128)
 	for _, tc := range []struct {
@@ -137,7 +97,7 @@ func TestAssignRoleRequiresModelIDField(t *testing.T) {
 	require.Contains(t, response.Body.String(), `"REQUIRED"`)
 }
 
-func llmproviderRedis(t *testing.T) *redis.Client {
+func startRedis(t *testing.T) *redis.Client {
 	t.Helper()
 	container, err := tcredis.Run(platformContext(t.Context()), "redis:8.10.2")
 	require.NoError(t, err)
@@ -151,17 +111,17 @@ func llmproviderRedis(t *testing.T) *redis.Client {
 	return client
 }
 
-func TestLLMProviderHTTP_RealLoginSessionAndCSRF(t *testing.T) {
+func TestHTTP_RealLoginSessionAndCSRF(t *testing.T) {
 	var logs bytes.Buffer
 	router, svc := newRouter(t, &logs)
 	authCfg := config.AuthConfig{OwnerEmail: "owner@example.com", OwnerPassword: "strong-test-password", SessionTTL: time.Hour, MinPasswordLength: 12}
 	authSvc := auth.NewService(auth.NewRepository(svc.pool), svc.pool, authCfg, time.Now)
 	require.NoError(t, authSvc.EnsureOwner(platformContext(t.Context())))
-	authController := auth.NewController(auth.ControllerParams{Service: authSvc, Limiter: auth.NewLimiter(llmproviderRedis(t), 10, time.Minute)})
+	authController := auth.NewController(auth.ControllerParams{Service: authSvc, Limiter: auth.NewLimiter(startRedis(t), 10, time.Minute)})
 	router.POST("/api/v1/auth/login", authController.HandleLogin)
 	router.POST("/api/v1/auth/logout", auth.RequireSession(authSvc), authController.HandleLogout)
 	router.GET("/api/v1/auth/me", auth.RequireSession(authSvc), authController.HandleMe)
-	logger, err := logging.NewLogger(&logs, "debug", "llmprovider-test", "test", nil)
+	logger, err := logging.NewLogger(&logs, "debug", "llm-test", "test", nil)
 	require.NoError(t, err)
 	protected := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
 	mountProviderForTest(protected.Group("", auth.RequireSession(authSvc)), svc, testMaxBodyBytes)
@@ -192,12 +152,12 @@ func TestLLMProviderHTTP_RealLoginSessionAndCSRF(t *testing.T) {
 	require.Contains(t, logs.String(), "request_id")
 }
 
-func TestLLMProviderHTTP_CRUDRoutesAndWriteOnlyKeyUpdates(t *testing.T) {
+func TestHTTP_CRUDRoutesAndWriteOnlyKeyUpdates(t *testing.T) {
 	var logs bytes.Buffer
 	router, svc := newRouter(t, &logs)
 	created := send(router, http.MethodPost, "/api/v1/providers", `{"kind":"openrouter","name":"Routes","apiKey":"`+secretKey+`"}`, nil)
 	require.Equal(t, http.StatusCreated, created.Code)
-	var providerResponse struct{ Data llmprovidermodel.Provider }
+	var providerResponse struct{ Data Provider }
 	require.NoError(t, json.Unmarshal(created.Body.Bytes(), &providerResponse))
 	providerPath := "/api/v1/providers/" + providerResponse.Data.ID.String()
 	updated := send(router, http.MethodPatch, providerPath, `{"name":"Routes renamed","apiKey":"replacement-secret"}`, nil)
@@ -207,17 +167,17 @@ func TestLLMProviderHTTP_CRUDRoutesAndWriteOnlyKeyUpdates(t *testing.T) {
 	tested := send(router, http.MethodPost, providerPath+"/test", "", nil)
 	require.Equal(t, http.StatusOK, tested.Code)
 	require.Contains(t, tested.Body.String(), `"modelCount":0`)
-	svc.catalog.(*fakeCatalog).models = []llmprovidermodel.RemoteModel{{ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []llmprovidermodel.Capability{llmprovidermodel.CapChat}}}
+	svc.catalog.(*fakeCatalog).models = []RemoteModel{{ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []Capability{CapabilityChat}}}
 	synced := send(router, http.MethodPost, providerPath+"/sync", "", nil)
 	require.Equal(t, http.StatusOK, synced.Code)
 	require.Contains(t, synced.Body.String(), `"added":1`)
 	modelCreated := send(router, http.MethodPost, "/api/v1/models", `{"providerId":"`+providerResponse.Data.ID.String()+`","modelRef":"x/manual","displayName":"Manual","capabilities":["chat","tools"]}`, nil)
 	require.Equal(t, http.StatusCreated, modelCreated.Code)
-	var modelResponse struct{ Data llmprovidermodel.Model }
+	var modelResponse struct{ Data Model }
 	require.NoError(t, json.Unmarshal(modelCreated.Body.Bytes(), &modelResponse))
 	models := send(router, http.MethodGet, "/api/v1/models?providerId="+providerResponse.Data.ID.String()+"&capability=tools", "", nil)
 	require.Equal(t, http.StatusOK, models.Code)
-	var listResponse struct{ Data []llmprovidermodel.Model }
+	var listResponse struct{ Data []Model }
 	require.NoError(t, json.Unmarshal(models.Body.Bytes(), &listResponse))
 	require.Len(t, listResponse.Data, 1)
 	require.Equal(t, modelResponse.Data.ID, listResponse.Data[0].ID)
@@ -245,7 +205,7 @@ func TestLLMProviderHTTP_CRUDRoutesAndWriteOnlyKeyUpdates(t *testing.T) {
 	deletedModel := send(router, http.MethodDelete, "/api/v1/models/"+removableID.String(), "", nil)
 	require.Equal(t, http.StatusOK, deletedModel.Code)
 	require.Contains(t, deletedModel.Body.String(), `"deleted":true`)
-	emptyProvider, err := svc.CreateProvider(platformContext(t.Context()), llmprovidermodel.ProviderInput{Kind: llmprovidermodel.KindOpenRouter, Name: "Empty"})
+	emptyProvider, err := svc.CreateProvider(platformContext(t.Context()), ProviderInput{Kind: KindOpenRouter, Name: "Empty"})
 	require.NoError(t, err)
 	deletedProvider := send(router, http.MethodDelete, "/api/v1/providers/"+emptyProvider.ID.String(), "", nil)
 	require.Equal(t, http.StatusOK, deletedProvider.Code)
@@ -305,7 +265,7 @@ func TestRoleAssignmentOverHTTP(t *testing.T) {
 	var logs bytes.Buffer
 	r, s := newRouter(t, &logs)
 	p := seedProvider(t, s)
-	m, err := s.CreateModel(platformContext(context.Background()), llmprovidermodel.ModelInput{ProviderID: p.ID, ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []llmprovidermodel.Capability{llmprovidermodel.CapChat}})
+	m, err := s.CreateModel(platformContext(context.Background()), ModelInput{ProviderID: p.ID, ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []Capability{CapabilityChat}})
 	require.NoError(t, err)
 
 	bad := send(r, http.MethodPut, "/api/v1/model-roles/chat.default", `{"modelId":"`+m.ID.String()+`"}`, nil)

@@ -146,7 +146,7 @@ func (f fakePinger) Ping(context.Context) error { return f.err }
 func TestMountHealth_ReadinessReportsUnavailableDependency(t *testing.T) {
 	var logged []*errors.AppError
 	r := NewRouter(func(_ context.Context, e *errors.AppError) { logged = append(logged, e) })
-	MountHealth(r, map[string]DependencyPinger{"postgres": fakePinger{err: context.DeadlineExceeded}})
+	MountHealth(r, map[string]ReadinessDependency{"postgres": fakePinger{err: context.DeadlineExceeded}})
 	rec := performRequest(r, http.MethodGet, "/readyz", "vi")
 	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	require.Equal(t, "INTERNAL_ERROR", decodeResponse(t, rec).Error.Code)

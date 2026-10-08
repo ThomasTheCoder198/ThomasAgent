@@ -17,11 +17,11 @@ const (
 	DependencyUnreachableStatus = "unreachable"
 )
 
-type DependencyPinger interface {
+type ReadinessDependency interface {
 	Ping(ctx context.Context) error
 }
 
-func MountHealth(r gin.IRoutes, deps map[string]DependencyPinger) {
+func MountHealth(r gin.IRoutes, deps map[string]ReadinessDependency) {
 	r.GET(LivenessPath, func(c *gin.Context) {
 		Success(c, http.StatusOK, map[string]string{"status": LivenessStatus})
 	})

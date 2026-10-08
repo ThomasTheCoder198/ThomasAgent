@@ -9,7 +9,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
 
-func TestClientPinger_SuccessAndFailure(t *testing.T) {
+func TestReadinessProbe_SuccessAndFailure(t *testing.T) {
 	ctx := context.Background()
 	container, err := tcredis.Run(ctx, "redis:8.10.2")
 	require.NoError(t, err)
@@ -19,7 +19,7 @@ func TestClientPinger_SuccessAndFailure(t *testing.T) {
 	client, err := Open(ctx, url)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
-	pinger := ClientPinger{Client: client}
+	pinger := ReadinessProbe{Client: client}
 	require.NoError(t, pinger.Ping(ctx))
 	require.NoError(t, client.Close())
 	var appErr *errors.AppError

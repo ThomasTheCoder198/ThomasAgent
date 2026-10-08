@@ -1,0 +1,169 @@
+package llm
+
+import (
+	"context"
+	stderrors "errors"
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
+)
+
+const modelColumns = `id, provider_id, model_ref, display_name, capabilities, context_window, embedding_dims,
+	input_price_per_mtok::float8, output_price_per_mtok::float8, source`
+
+func scanModel(row pgx.Row) (Model, error) {
+	var model Model
+	var capabilities []string
+	err := row.Scan(&model.ID, &model.ProviderID, &model.ModelRef, &model.DisplayName, &capabilities, &model.ContextWindow, &model.EmbeddingDims,
+		&model.InputPricePerMTok, &model.OutputPricePerMTok, &model.Source)
+	if stderrors.Is(err, pgx.ErrNoRows) {
+		return Model{}, errors.ErrLLMModelNotFound
+	}
+	if err != nil {
+		return Model{}, fmt.Errorf("scan model: %w", err)
+	}
+	model.Capabilities = toCapabilities(capabilities)
+	return model, nil
+}
+
+func toCapabilities(values []string) []Capability {
+	capabilities := make([]Capability, len(values))
+	for index, value := range values {
+		capabilities[index] = Capability(value)
+	}
+	return capabilities
+}
+
+func capabilityStrings(capabilities []Capability) []string {
+	values := make([]string, len(capabilities))
+	for index, capability := range capabilities {
+		values[index] = string(capability)
+	}
+	return values
+}
+
+// UpsertModel reports whether the row was inserted (true) or updated (false); xmax = 0 marks a fresh insert.
+// Only a synced row is overwritten by a sync; a manual row with the same ref is reported as ErrLLMNameTaken.
+func (repository Repository) UpsertModel(ctx context.Context, db postgres.DBTX, input ModelInput, source string) (Model, bool, error) {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return Model{}, false, err
+	}
+	if _, err := repository.GetProvider(ctx, db, input.ProviderID); err != nil {
+		return Model{}, false, err
+	}
+	var inserted bool
+	row := db.QueryRow(ctx, `INSERT INTO models (tenant_id, provider_id, model_ref, display_name, capabilities, context_window,
+		embedding_dims, input_price_per_mtok, output_price_per_mtok, source)
+		VALUES ($10,$1,$2,$3,$4,$5,$6,$7,$8,$9)
+		ON CONFLICT (provider_id, model_ref) DO UPDATE SET display_name = EXCLUDED.display_name,
+			capabilities = EXCLUDED.capabilities, context_window = EXCLUDED.context_window,
+			embedding_dims = EXCLUDED.embedding_dims, input_price_per_mtok = EXCLUDED.input_price_per_mtok,
+			output_price_per_mtok = EXCLUDED.output_price_per_mtok, updated_at = now()
+		WHERE models.source = 'sync' AND EXCLUDED.source = 'sync' AND models.tenant_id = EXCLUDED.tenant_id
+		RETURNING `+modelColumns+`, (xmax = 0)`,
+		input.ProviderID, input.ModelRef, input.DisplayName, capabilityStrings(input.Capabilities), input.ContextWindow, input.EmbeddingDims,
+		input.InputPricePerMTok, input.OutputPricePerMTok, source, tenantID)
+	var model Model
+	var capabilities []string
+	err = row.Scan(&model.ID, &model.ProviderID, &model.ModelRef, &model.DisplayName, &capabilities, &model.ContextWindow, &model.EmbeddingDims,
+		&model.InputPricePerMTok, &model.OutputPricePerMTok, &model.Source, &inserted)
+	if postgres.IsForeignKeyViolation(err) {
+		return Model{}, false, errors.ErrLLMProviderNotFound
+	}
+	if stderrors.Is(err, pgx.ErrNoRows) {
+		return Model{}, false, errors.ErrLLMNameTaken
+	}
+	if err != nil {
+		return Model{}, false, fmt.Errorf("upsert model: %w", err)
+	}
+	model.Capabilities = toCapabilities(capabilities)
+	return model, inserted, nil
+}
+
+// DeleteStaleSyncModels removes synced models missing from the latest catalog, except those a role still uses.
+func (Repository) DeleteStaleSyncModels(ctx context.Context, db postgres.DBTX, providerID uuid.UUID, keep []uuid.UUID) error {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(ctx, `DELETE FROM models m WHERE m.tenant_id = $1 AND m.provider_id = $2 AND m.source = 'sync'
+		AND NOT (m.id = ANY($3::uuid[])) AND NOT EXISTS (
+			SELECT 1 FROM model_roles mr WHERE mr.model_id = m.id
+		)`, tenantID, providerID, keep)
+	if err != nil {
+		return fmt.Errorf("delete stale synced models: %w", err)
+	}
+	return nil
+}
+
+func (Repository) GetModel(ctx context.Context, db postgres.DBTX, id uuid.UUID) (Model, error) {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return Model{}, err
+	}
+	return scanModel(db.QueryRow(ctx, `SELECT `+modelColumns+` FROM models WHERE id = $1 AND tenant_id = $2`, id, tenantID))
+}
+
+// GetModelForShare locks the row against deletion while a role is assigned to it.
+func (repository Repository) GetModelForShare(ctx context.Context, db postgres.DBTX, id uuid.UUID) (Model, error) {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return Model{}, err
+	}
+	if _, err = db.Exec(ctx, `SELECT id FROM models WHERE id=$1 AND tenant_id=$2 FOR SHARE`, id, tenantID); err != nil {
+		return Model{}, fmt.Errorf("lock model: %w", err)
+	}
+	return repository.GetModel(ctx, db, id)
+}
+
+func (Repository) ListModels(ctx context.Context, db postgres.DBTX, providerID *uuid.UUID, capability *Capability) ([]Model, error) {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var capabilityFilter *string
+	if capability != nil {
+		value := string(*capability)
+		capabilityFilter = &value
+	}
+	rows, err := db.Query(ctx, `SELECT `+modelColumns+` FROM models
+		WHERE tenant_id = $3 AND ($1::uuid IS NULL OR provider_id = $1) AND ($2::text IS NULL OR $2 = ANY(capabilities))
+		ORDER BY display_name`, providerID, capabilityFilter, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("list models: %w", err)
+	}
+	defer rows.Close()
+	models := []Model{}
+	for rows.Next() {
+		model, err := scanModel(rows)
+		if err != nil {
+			return nil, err
+		}
+		models = append(models, model)
+	}
+	return models, rows.Err()
+}
+
+func (Repository) DeleteModel(ctx context.Context, db postgres.DBTX, id uuid.UUID) error {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return err
+	}
+	tag, err := db.Exec(ctx, `DELETE FROM models WHERE id = $1 AND tenant_id = $2`, id, tenantID)
+	if postgres.IsForeignKeyViolation(err) {
+		return errors.ErrLLMModelInUse
+	}
+	if err != nil {
+		return fmt.Errorf("delete model: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return errors.ErrLLMModelNotFound
+	}
+	return nil
+}

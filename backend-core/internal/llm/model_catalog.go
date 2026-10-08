@@ -1,4 +1,4 @@
-package llmprovider
+package llm
 
 import (
 	"context"
@@ -7,23 +7,20 @@ import (
 	"io"
 	"log/slog"
 	"math"
-	"strings"
-	"sync"
-
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/metrics"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
-
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/model"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/retry"
 )
 
@@ -50,7 +47,9 @@ type OutboundRecorder interface {
 	ObserveOutbound(target, outcome string, elapsed time.Duration)
 }
 
-type HTTPCatalog struct {
+// HTTPModelCatalog fetches a provider's GET /models list with retry, a circuit breaker per
+// provider and a response size cap. Only OpenRouter responses carry capabilities and prices.
+type HTTPModelCatalog struct {
 	Client           *http.Client
 	Policy           retry.Policy
 	Breaker          *retry.Breaker
@@ -93,7 +92,7 @@ type statusError struct{ status int }
 
 func (e statusError) Error() string { return "provider returned status " + strconv.Itoa(e.status) }
 
-func (c *HTTPCatalog) ListModels(ctx context.Context, providerID uuid.UUID, kind model.ProviderKind, baseURL, apiKey string) ([]model.RemoteModel, error) {
+func (c *HTTPModelCatalog) ListModels(ctx context.Context, providerID uuid.UUID, kind ProviderKind, baseURL, apiKey string) ([]RemoteModel, error) {
 	if c.initErr != nil {
 		return nil, c.initErr
 	}
@@ -112,17 +111,17 @@ func (c *HTTPCatalog) ListModels(ctx context.Context, providerID uuid.UUID, kind
 	if err != nil {
 		return nil, err
 	}
-	if kind != model.KindOpenRouter {
+	if kind != KindOpenRouter {
 		return toPlainModels(body), nil
 	}
 	return toOpenRouterModels(body), nil
 }
 
-func (c *HTTPCatalog) isConfigured() bool {
+func (c *HTTPModelCatalog) isConfigured() bool {
 	return c.Client != nil && c.Breaker != nil && c.MaxResponseBytes > 0 && c.MaxResponseBytes < int64(maxRetryAfter) && c.Policy.MaxAttempts > 0 && c.MaxBreakers > 0
 }
 
-func (c *HTTPCatalog) acquireBreaker(providerID uuid.UUID) (*providerBreaker, error) {
+func (c *HTTPModelCatalog) acquireBreaker(providerID uuid.UUID) (*providerBreaker, error) {
 	c.breakerMu.Lock()
 	defer c.breakerMu.Unlock()
 	if c.breakers == nil {
@@ -142,13 +141,13 @@ func (c *HTTPCatalog) acquireBreaker(providerID uuid.UUID) (*providerBreaker, er
 	return entry, nil
 }
 
-func (c *HTTPCatalog) releaseBreaker(entry *providerBreaker) {
+func (c *HTTPModelCatalog) releaseBreaker(entry *providerBreaker) {
 	c.breakerMu.Lock()
 	defer c.breakerMu.Unlock()
 	entry.active--
 }
 
-func (c *HTTPCatalog) discardIdleBreaker() bool {
+func (c *HTTPModelCatalog) discardIdleBreaker() bool {
 	var oldest *providerBreaker
 	var oldestID uuid.UUID
 	for id, entry := range c.breakers {
@@ -164,7 +163,7 @@ func (c *HTTPCatalog) discardIdleBreaker() bool {
 	return true
 }
 
-func (c *HTTPCatalog) fetch(ctx context.Context, kind model.ProviderKind, baseURL, apiKey string, out *openRouterModels) (err error) {
+func (c *HTTPModelCatalog) fetch(ctx context.Context, kind ProviderKind, baseURL, apiKey string, out *openRouterModels) (err error) {
 	start := time.Now()
 	defer func() {
 		elapsed := time.Since(start)
@@ -204,7 +203,7 @@ func (c *HTTPCatalog) fetch(ctx context.Context, kind model.ProviderKind, baseUR
 	return c.decodeModels(res.Body, out)
 }
 
-func (c *HTTPCatalog) decodeModels(body io.Reader, out *openRouterModels) error {
+func (c *HTTPModelCatalog) decodeModels(body io.Reader, out *openRouterModels) error {
 	raw, err := io.ReadAll(io.LimitReader(body, c.MaxResponseBytes+1))
 	if err != nil {
 		return errors.ErrProviderUnavailable
@@ -267,37 +266,37 @@ func errorForStatus(status int) error {
 	return nil
 }
 
-func toPlainModels(body openRouterModels) []model.RemoteModel {
-	out := make([]model.RemoteModel, 0, len(body.Data))
+func toPlainModels(body openRouterModels) []RemoteModel {
+	out := make([]RemoteModel, 0, len(body.Data))
 	for _, m := range body.Data {
-		out = append(out, model.RemoteModel{ModelRef: m.ID, DisplayName: m.ID})
+		out = append(out, RemoteModel{ModelRef: m.ID, DisplayName: m.ID})
 	}
 	return out
 }
 
-func toOpenRouterModels(body openRouterModels) []model.RemoteModel {
-	out := make([]model.RemoteModel, 0, len(body.Data))
+func toOpenRouterModels(body openRouterModels) []RemoteModel {
+	out := make([]RemoteModel, 0, len(body.Data))
 	for _, m := range body.Data {
-		caps := []model.Capability{}
+		capabilities := []Capability{}
 		if slices.Contains(m.Architecture.OutputModalities, modalityText) {
-			caps = append(caps, model.CapChat)
+			capabilities = append(capabilities, CapabilityChat)
 		}
 		if slices.Contains(m.SupportedParameters, openRouterParamTool) {
-			caps = append(caps, model.CapTools)
+			capabilities = append(capabilities, CapabilityTools)
 		}
 		if slices.Contains(m.SupportedParameters, openRouterParamThink) {
-			caps = append(caps, model.CapReasoning)
+			capabilities = append(capabilities, CapabilityReasoning)
 		}
 		if slices.Contains(m.Architecture.InputModalities, modalityImage) {
-			caps = append(caps, model.CapVision)
+			capabilities = append(capabilities, CapabilityVision)
 		}
-		var ctxLen *int
+		var contextWindow *int
 		if m.ContextLength > 0 {
 			length := m.ContextLength
-			ctxLen = &length
+			contextWindow = &length
 		}
-		out = append(out, model.RemoteModel{
-			ModelRef: m.ID, DisplayName: m.Name, Capabilities: caps, ContextWindow: ctxLen,
+		out = append(out, RemoteModel{
+			ModelRef: m.ID, DisplayName: m.Name, Capabilities: capabilities, ContextWindow: contextWindow,
 			InputPricePerMTok: perMillion(m.Pricing.Prompt), OutputPricePerMTok: perMillion(m.Pricing.Completion),
 		})
 	}
@@ -305,30 +304,30 @@ func toOpenRouterModels(body openRouterModels) []model.RemoteModel {
 }
 
 func perMillion(perToken string) *float64 {
-	v, err := strconv.ParseFloat(perToken, 64)
-	if err != nil || v < 0 || math.IsNaN(v) || math.IsInf(v, 0) {
+	pricePerToken, err := strconv.ParseFloat(perToken, 64)
+	if err != nil || pricePerToken < 0 || math.IsNaN(pricePerToken) || math.IsInf(pricePerToken, 0) {
 		return nil
 	}
-	price := v * tokensPerMillion
+	price := pricePerToken * tokensPerMillion
 	if math.IsInf(price, 0) {
 		return nil
 	}
 	return &price
 }
 
-func NewHTTPCatalog(policy retry.Policy, timeout time.Duration, breaker *retry.Breaker) *HTTPCatalog {
+func NewHTTPModelCatalog(policy retry.Policy, timeout time.Duration, breaker *retry.Breaker) *HTTPModelCatalog {
 	client, err := outbound.NewClient(timeout, nil)
-	c := NewHTTPCatalogWithClient(policy, client, config.DefaultProviderMaxResponseBytes, breaker, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	c := NewHTTPModelCatalogWithClient(policy, client, config.DefaultProviderMaxResponseBytes, breaker, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		c.initErr = errors.ErrInternalError
 	}
 	return c
 }
 
-func NewHTTPCatalogWithClient(policy retry.Policy, client *http.Client, maxBytes int64, breaker *retry.Breaker, log *slog.Logger, maxBreakers ...int) *HTTPCatalog {
+func NewHTTPModelCatalogWithClient(policy retry.Policy, client *http.Client, maxBytes int64, breaker *retry.Breaker, log *slog.Logger, maxBreakers ...int) *HTTPModelCatalog {
 	limit := config.DefaultProviderMaxBreakers
 	if len(maxBreakers) > 0 {
 		limit = maxBreakers[0]
 	}
-	return &HTTPCatalog{Client: client, Policy: policy, Breaker: breaker, MaxResponseBytes: maxBytes, MaxBreakers: limit, log: log}
+	return &HTTPModelCatalog{Client: client, Policy: policy, Breaker: breaker, MaxResponseBytes: maxBytes, MaxBreakers: limit, log: log}
 }

@@ -1,12 +1,12 @@
 # Redis adapter
 
 ## Purpose
-Owns Redis URL parsing, startup ping, and the readiness ClientPinger adapter.
+Owns Redis URL parsing, startup ping, and the readiness ReadinessProbe adapter.
 Stream operations belong to the jobs module.
 
 ## Entry points
 - `Open(ctx, url)`: create and ping a go-redis client.
-- `ClientPinger.Ping(ctx)`: adapt Redis to the HTTP readiness interface.
+- `ReadinessProbe.Ping(ctx)`: adapt Redis to the HTTP readiness interface.
 
 ## Dependencies
 - Uses: go-redis v9, `internal/errors`, OpenTelemetry.

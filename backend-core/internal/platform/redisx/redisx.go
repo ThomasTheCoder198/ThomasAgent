@@ -22,9 +22,9 @@ func Open(ctx context.Context, url string) (*redis.Client, error) {
 	return client, nil
 }
 
-type ClientPinger struct{ Client *redis.Client }
+type ReadinessProbe struct{ Client *redis.Client }
 
-func (p ClientPinger) Ping(ctx context.Context) error {
+func (p ReadinessProbe) Ping(ctx context.Context) error {
 	if err := p.Client.Ping(ctx).Err(); err != nil {
 		return errors.ToAppError(err)
 	}

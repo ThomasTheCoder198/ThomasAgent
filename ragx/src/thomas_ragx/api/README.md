@@ -5,7 +5,12 @@ Owns FastAPI construction, request tracing, error responses, and health endpoint
 
 ## Entry points
 - `app.py:create_app`: application factory.
-- `health.py`: GET /healthz.
+- `health.py`: GET /healthz and GET /readyz.
+- `orgs.py`: org provisioning.
+- `knowledge_bases.py`: Knowledge Base CRUD.
+- `files.py`: file upload, listing, deletion, retry, and download.
+- `manifest.py`: app manifest.
+- `services.py`: dependency access to application services.
 
 ## Dependencies
 - Uses: platform config, errors, logging, and tracing.
@@ -21,9 +26,14 @@ uv run pytest -q tests/unit
 ## Conventions
 See the [RAG service conventions](../../../README.md#conventions) for Config, credentials, shared naming, and boundary logging.
 
-The application passes `Config.environment` to logging configuration, preserving the `env` log field. Middleware binds only the request ID; handler logs inherit it and the active request span, including synchronous handlers. Logging fields follow the [shared contract](../../../../backend-core/internal/platform/logging/README.md#log-field-contract).
+Every `/v1` route takes a scoped `Caller` from `auth.dependencies`; services read `app.state.*_service` through `api/services.py`.
+`ragx/tests/unit/test_openapi_contract.py` keeps served routes and `contracts/openapi/ragx.v1.yaml` identical.
 
-The root span `rag.http.request` carries `request_id` and `openinference.span.kind=CHAIN`. Every response, including errors, carries `X-Ragx-Trace-Id` (32 lowercase hex characters) so core can log it on `tool.call` and Grafana can open the trace in Phoenix (`/redirects/traces/<id>`). `org_id` is added with authentication in the ragx custom-app spec, never from parameters. The app uses its own tracer provider; only the serve CLI installs it globally. Phoenix export failures do not block requests.
+The application passes `Config.environment` to logging configuration, preserving the `env` log field. Middleware binds only the request ID; handler logs inherit it and the active request span, including synchronous handlers. Logging fields follow the [shared contract](../../../../backend-core/internal/platform/logging/README.md#log-field-contract). `/readyz` checks Postgres, Redis and MinIO with `RAG_READINESS_TIMEOUT_SECONDS` each; failures are logged by name and the 503 body shows only `INTERNAL_ERROR`. `create_app` takes `Resources`; tests pass `tests/support.FakeResources`.
+
+The access log is one `request completed` line per request: method, route (FastAPI pattern or `unmatched`), status, integer `duration_ms`, `request_id`, and `org_id`/`jti` when an App token was accepted (read from `request.state` after the handler). Level: info 2xx/3xx, warning 4xx, error 5xx. The root span gets `org_id`.
+
+The root span `rag.http.request` carries `request_id` and `openinference.span.kind=CHAIN`. Every response, including errors, carries `X-Ragx-Trace-Id` (32 lowercase hex characters) so core can log it on `tool.call` and Grafana can open the trace in Phoenix (`/redirects/traces/<id>`). `org_id` comes from the authenticated caller state, never from parameters. The app uses its own tracer provider; only the serve CLI installs it globally. Phoenix export failures do not block requests.
 
 ## Common failures
 - Missing credentials: supply the required RAG_ environment variables.

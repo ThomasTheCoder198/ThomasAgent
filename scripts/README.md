@@ -5,7 +5,8 @@ Owns root service smoke checks, including core log/metrics correlation, optional
 See the [glossary](../docs/glossary.md) for response and health terminology.
 
 ## Entry points
-- `smoke.sh`: called by `task smoke`.
+- `smoke.sh`: called by `task smoke`; checks ragx readiness, idempotent org provisioning, upload, worker handling and cleanup when a dev signing key exists.
+- `app_token_dev.py`: dev-only keygen/mint of App tokens until core signs them in M1.2. Ragx rejects a token whose `rid` differs from the request's `X-Request-Id` (spec §3), so pass `mint --rid <id>` and send the same id in that header.
 - `smoke_identity.py`: checks login, identity, CSRF, provider creation and cleanup, then logout.
 
 ## Dependencies

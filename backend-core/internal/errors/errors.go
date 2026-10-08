@@ -5,6 +5,7 @@ package errors
 type Code string
 
 const (
+	CodeAppTokenInvalid            Code = "APP_TOKEN_INVALID"
 	CodeAuthCsrfInvalid            Code = "AUTH_CSRF_INVALID"
 	CodeAuthInvalidCredentials     Code = "AUTH_INVALID_CREDENTIALS"
 	CodeAuthSessionExpired         Code = "AUTH_SESSION_EXPIRED"
@@ -14,10 +15,14 @@ const (
 	CodeForbidden                  Code = "FORBIDDEN"
 	CodeInternalError              Code = "INTERNAL_ERROR"
 	CodeInternalTokenInvalid       Code = "INTERNAL_TOKEN_INVALID"
+	CodeKbFileNotFound             Code = "KB_FILE_NOT_FOUND"
+	CodeKbNotFound                 Code = "KB_NOT_FOUND"
 	CodeMethodNotAllowed           Code = "METHOD_NOT_ALLOWED"
 	CodeNotFound                   Code = "NOT_FOUND"
+	CodeOrgNotProvisioned          Code = "ORG_NOT_PROVISIONED"
 	CodePayloadTooLarge            Code = "PAYLOAD_TOO_LARGE"
 	CodeProviderUnavailable        Code = "PROVIDER_UNAVAILABLE"
+	CodeRagxUnavailable            Code = "RAGX_UNAVAILABLE"
 	CodeRateLimited                Code = "RATE_LIMITED"
 	CodeRegistryCapabilityMismatch Code = "REGISTRY_CAPABILITY_MISMATCH"
 	CodeRegistryModelInUse         Code = "REGISTRY_MODEL_IN_USE"
@@ -33,6 +38,7 @@ const (
 )
 
 const (
+	ErrAppTokenInvalid            NamedError = NamedError(CodeAppTokenInvalid)
 	ErrAuthCsrfInvalid            NamedError = NamedError(CodeAuthCsrfInvalid)
 	ErrAuthInvalidCredentials     NamedError = NamedError(CodeAuthInvalidCredentials)
 	ErrAuthSessionExpired         NamedError = NamedError(CodeAuthSessionExpired)
@@ -42,10 +48,14 @@ const (
 	ErrForbidden                  NamedError = NamedError(CodeForbidden)
 	ErrInternalError              NamedError = NamedError(CodeInternalError)
 	ErrInternalTokenInvalid       NamedError = NamedError(CodeInternalTokenInvalid)
+	ErrKbFileNotFound             NamedError = NamedError(CodeKbFileNotFound)
+	ErrKbNotFound                 NamedError = NamedError(CodeKbNotFound)
 	ErrMethodNotAllowed           NamedError = NamedError(CodeMethodNotAllowed)
 	ErrNotFound                   NamedError = NamedError(CodeNotFound)
+	ErrOrgNotProvisioned          NamedError = NamedError(CodeOrgNotProvisioned)
 	ErrPayloadTooLarge            NamedError = NamedError(CodePayloadTooLarge)
 	ErrProviderUnavailable        NamedError = NamedError(CodeProviderUnavailable)
+	ErrRagxUnavailable            NamedError = NamedError(CodeRagxUnavailable)
 	ErrRateLimited                NamedError = NamedError(CodeRateLimited)
 	ErrRegistryCapabilityMismatch NamedError = NamedError(CodeRegistryCapabilityMismatch)
 	ErrRegistryModelInUse         NamedError = NamedError(CodeRegistryModelInUse)
@@ -62,6 +72,8 @@ const (
 
 func LookupDefinition(code Code) ErrorDefinition {
 	switch code {
+	case CodeAppTokenInvalid:
+		return ErrorDefinition{HTTPStatus: 401, Retryable: false, MessageVI: "Token gọi app không hợp lệ.", MessageEN: "The app token is invalid."}
 	case CodeAuthCsrfInvalid:
 		return ErrorDefinition{HTTPStatus: 403, Retryable: false, MessageVI: "Yêu cầu không hợp lệ, vui lòng tải lại trang.", MessageEN: "Invalid request, please reload the page."}
 	case CodeAuthInvalidCredentials:
@@ -80,14 +92,22 @@ func LookupDefinition(code Code) ErrorDefinition {
 		return ErrorDefinition{HTTPStatus: 500, Retryable: false, MessageVI: "Đã có lỗi xảy ra. Vui lòng thử lại.", MessageEN: "Something went wrong. Please try again."}
 	case CodeInternalTokenInvalid:
 		return ErrorDefinition{HTTPStatus: 401, Retryable: false, MessageVI: "Token dịch vụ không hợp lệ.", MessageEN: "Invalid service token."}
+	case CodeKbFileNotFound:
+		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Không tìm thấy tài liệu.", MessageEN: "File not found."}
+	case CodeKbNotFound:
+		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Không tìm thấy Knowledge Base.", MessageEN: "Knowledge Base not found."}
 	case CodeMethodNotAllowed:
 		return ErrorDefinition{HTTPStatus: 405, Retryable: false, MessageVI: "Phương thức không được hỗ trợ.", MessageEN: "This method is not allowed."}
 	case CodeNotFound:
 		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Không tìm thấy tài nguyên.", MessageEN: "The resource was not found."}
+	case CodeOrgNotProvisioned:
+		return ErrorDefinition{HTTPStatus: 409, Retryable: false, MessageVI: "Tổ chức chưa được khởi tạo trong ragx.", MessageEN: "The organization is not provisioned in ragx yet."}
 	case CodePayloadTooLarge:
 		return ErrorDefinition{HTTPStatus: 413, Retryable: false, MessageVI: "Dữ liệu gửi lên quá lớn.", MessageEN: "The request payload is too large."}
 	case CodeProviderUnavailable:
 		return ErrorDefinition{HTTPStatus: 503, Retryable: true, MessageVI: "Dịch vụ bên ngoài đang không khả dụng.", MessageEN: "An upstream provider is unavailable."}
+	case CodeRagxUnavailable:
+		return ErrorDefinition{HTTPStatus: 503, Retryable: true, MessageVI: "Dịch vụ tài liệu đang không khả dụng. Vui lòng thử lại.", MessageEN: "The document service is unavailable. Please try again."}
 	case CodeRateLimited:
 		return ErrorDefinition{HTTPStatus: 429, Retryable: true, MessageVI: "Quá nhiều yêu cầu, vui lòng thử lại sau.", MessageEN: "Too many requests, please retry later."}
 	case CodeRegistryCapabilityMismatch:

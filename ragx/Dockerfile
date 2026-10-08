@@ -13,6 +13,7 @@ FROM python:3.13.16-slim
 RUN useradd --uid 10001 --create-home rag
 COPY --from=build --chown=rag:rag /app /app
 ENV PATH="/app/.venv/bin:$PATH"
+ENV LITELLM_LOCAL_MODEL_COST_MAP=True
 USER rag
 EXPOSE 8090
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8090/healthz').status==200 else 1)"

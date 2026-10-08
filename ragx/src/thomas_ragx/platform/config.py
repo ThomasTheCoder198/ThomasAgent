@@ -28,15 +28,38 @@ class Config(BaseSettings):
     phoenix_api_key: SecretStr | None = None
     phoenix_project: str
     trace_content: bool
-    core_internal_url: str
-    core_service_token: SecretStr
+    database_url: SecretStr
+    database_pool_min_size: int
+    database_pool_max_size: int
+    database_connect_timeout_seconds: float
+    readiness_timeout_seconds: float
+    redis_url: str
+    vault_master_key: SecretStr
+    core_public_keys: dict[str, str]
+    app_token_issuer: str
+    app_token_audience: str
+    app_token_leeway_seconds: int
+    app_token_max_lifetime_seconds: int
     qdrant_url: str
     minio_endpoint: str
     minio_access_key: str
     minio_secret_key: SecretStr
     minio_secure: bool
     buckets: tuple[str, ...]
+    upload_max_bytes: int
+    upload_multipart_overhead_bytes: int
+    idempotency_ttl_seconds: int
+    page_default_limit: int
+    page_max_limit: int
     retry_max_attempts: int
+    outbox_batch_size: int
+    outbox_poll_interval_seconds: float
+    stream_batch_size: int
+    stream_block_milliseconds: int
+    stream_visibility_timeout_milliseconds: int
+    stream_max_deliveries: int
+    worker_heartbeat_file: str
+    worker_metrics_export_interval_milliseconds: int
     retry_base_delay_seconds: float = Field(validation_alias="RAG_RETRY_BASE_DELAY_S")
     retry_max_delay_seconds: float = Field(validation_alias="RAG_RETRY_MAX_DELAY_S")
 

@@ -24,6 +24,14 @@ wait_for() {
   echo "ok   $name"
 }
 
+if command -v uv >/dev/null 2>&1; then
+  uv_bin=uv
+elif command -v uv.exe >/dev/null 2>&1; then
+  uv_bin=uv.exe
+else
+  echo "FAIL identity smoke: uv is unavailable"; exit 1
+fi
+
 check core-health      http://localhost:8080/healthz
 check core-ready       http://localhost:8080/readyz
 check grafana          http://localhost:3001/api/health
@@ -54,6 +62,49 @@ if curl -fsS http://localhost:8090/healthz >/dev/null 2>&1; then
   else
     echo "FAIL ragx-trace-id"; exit 1
   fi
+  check ragx-ready http://localhost:8090/readyz
+  dev_key="deploy/ragx/dev-app-signing-key.pem"
+  if [[ -f "$dev_key" ]]; then
+    ragx_compose="docker compose --env-file deploy/ragx/.env -f deploy/ragx/compose.yaml"
+    $ragx_compose exec -T ragx-api ragx seed-dev >/dev/null
+    # mint SCOPE REQUEST_ID: ragx rejects a token whose rid differs from the X-Request-Id sent with it.
+    mint() {
+      "$uv_bin" run --directory ragx python ../scripts/app_token_dev.py mint --key "../$dev_key" \
+        --kid "${RAGX_DEV_KID:-dev-1}" --org smoke-org --scope "$1" --rid "$2" | tr -d '\r\n'
+    }
+    provision_body='{"name":"Smoke","externalParsing":true}'
+    provision() {
+      local rid="req_smoke-provision-$(date +%s)-$RANDOM"
+      curl -fsS -X PUT -H "Authorization: Bearer $(mint org:provision "$rid")" -H "X-Request-Id: ${rid}" \
+        -H 'Content-Type: application/json' -d "$provision_body" http://localhost:8090/v1/orgs/smoke-org | sed -n 's/.*"defaultKbId":"\([^"]*\)".*/\1/p'
+    }
+    kb_first="$(provision)"
+    kb_second="$(provision)"
+    if [[ -n "$kb_first" && "$kb_first" == "$kb_second" ]]; then
+      echo "ok   ragx-provision-idempotent"
+    else
+      echo "FAIL ragx-provision-idempotent"; exit 1
+    fi
+    upload_id="req_smoke-upload-$(date +%s)-$RANDOM"
+    # The file goes through stdin: Git Bash does not convert a /tmp path inside curl's -F value for Windows curl.
+    upload_token="$(mint kb:write "$upload_id")"
+    upload_response="$(printf 'smoke %s\n' "$upload_id" | curl -sS -w '\n%{http_code}' \
+      -H "Authorization: Bearer ${upload_token}" -H "X-Request-Id: ${upload_id}" -F "file=@-;filename=smoke.txt" \
+      "http://localhost:8090/v1/knowledge-bases/${kb_first}/files")"
+    upload_status="${upload_response##*$'\n'}"
+    upload_file_id="$(echo "$upload_response" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -n 1)"
+    [[ "$upload_status" == 201 ]] && echo "ok   ragx-upload" || { echo "FAIL ragx-upload ($upload_status)"; exit 1; }
+    wait_for "ragx worker handled upload" bash -c \
+      "$ragx_compose logs --since 5m ragx-worker | grep '${upload_id}' | grep -q 'job handled'"
+    # Remove the smoke file so repeated runs do not pile up data in smoke-org (the purge job deletes the object).
+    cleanup_id="req_smoke-cleanup-$(date +%s)-$RANDOM"
+    curl -fsS -o /dev/null -X DELETE -H "Authorization: Bearer $(mint kb:write "$cleanup_id")" \
+      -H "X-Request-Id: ${cleanup_id}" \
+      "http://localhost:8090/v1/knowledge-bases/${kb_first}/files/${upload_file_id}" && echo "ok   ragx-upload-cleanup" \
+      || { echo "FAIL ragx-upload-cleanup"; exit 1; }
+  else
+    echo "skip ragx-provision (run task ragx:dev-key and put the printed RAG_CORE_PUBLIC_KEYS in deploy/ragx/.env)"
+  fi
 else
   if [[ -f deploy/ragx/.env ]] && docker compose --env-file deploy/ragx/.env -f deploy/ragx/compose.yaml ps --all --services ragx-api | grep -qx ragx-api; then
     echo "FAIL ragx-health (ragx API container exists but health endpoint failed)"; exit 1
@@ -61,11 +112,4 @@ else
   echo "skip ragx-health (ragx stack not running; start it with task up:ragx)"
 fi
 
-if command -v uv >/dev/null 2>&1; then
-  uv_bin=uv
-elif command -v uv.exe >/dev/null 2>&1; then
-  uv_bin=uv.exe
-else
-  echo "FAIL identity smoke: uv is unavailable"; exit 1
-fi
 "$uv_bin" run --directory ragx python ../scripts/smoke_identity.py

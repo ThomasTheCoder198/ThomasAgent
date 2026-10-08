@@ -10,6 +10,9 @@ Single source for error codes and shared schemas used by the Go core, Python RAG
 - `request-id.json` — the `X-Request-Id` header, its pattern and prefixes, with valid/invalid examples. There is no
   generator: Go (`backend-core/internal/platform/requestid`), Python (`ragx/.../platform/request_id.py`) and
   TypeScript (`frontend/lib/api/request-id.ts`) copy the values and each has a test that reads this file.
+- `app-token.json` — generated App-token test vector (trusted key, valid tokens, invalid tokens with the rejection
+  reason). Built by `cmd/apptokengen` from `internal/apptoken`; ragx's verifier and core's signer test against it.
+- `openapi/ragx.v1.yaml` — the ragx `/v1` API that only core calls (App token per request). Tool routes are added in M1.3.
 - `cmd/errorcodegen` — command invoked by `task gen`.
 - `internal/errorcodegen` — catalog parser and Go, Python, and TypeScript renderers.
 - `openapi/core.v1.yaml` — source of truth for the core HTTP API.
@@ -39,6 +42,7 @@ go vet ./...
 ## Conventions
 
 OpenAPI is the source of truth for the core API. `task gen` validates it and regenerates the Postman collection; never edit the collection by hand. `task api-test` runs it with Newman.
+Both OpenAPI files are linted by `task gen`. Ragx's FastAPI routes are checked against `ragx.v1.yaml` by `ragx/tests/unit/test_openapi_contract.py`.
 The login contract documents all three attempt budgets, the intentional email-global lockout and 429 `Retry-After`. Session authentication uses database expiry time. These hardening changes preserve request/response schemas and error codes.
 JSON request bodies require `Content-Type: application/json` (charset parameters are allowed).
 Missing, malformed or other content types return catalog `UNSUPPORTED_MEDIA_TYPE` (415).

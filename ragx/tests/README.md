@@ -5,6 +5,7 @@ Owns regression coverage for the Python service foundations.
 
 ## Entry points
 - `unit/`: platform, API, and bootstrap regression tests.
+- `integration/`: Postgres, Redis, and MinIO testcontainers coverage.
 
 ## Dependencies
 - Uses: pytest, service code, and test fakes.

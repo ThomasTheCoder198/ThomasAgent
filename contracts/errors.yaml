@@ -100,3 +100,24 @@ errors:
     status: 409
     retryable: false
     message: { vi: "Tên này đã được dùng.", en: "This name is already in use." }
+
+  - code: APP_TOKEN_INVALID
+    status: 401
+    retryable: false
+    message: { vi: "Token gọi app không hợp lệ.", en: "The app token is invalid." }
+  - code: KB_NOT_FOUND
+    status: 404
+    retryable: false
+    message: { vi: "Không tìm thấy Knowledge Base.", en: "Knowledge Base not found." }
+  - code: KB_FILE_NOT_FOUND
+    status: 404
+    retryable: false
+    message: { vi: "Không tìm thấy tài liệu.", en: "File not found." }
+  - code: ORG_NOT_PROVISIONED
+    status: 409
+    retryable: false
+    message: { vi: "Tổ chức chưa được khởi tạo trong ragx.", en: "The organization is not provisioned in ragx yet." }
+  - code: RAGX_UNAVAILABLE
+    status: 503
+    retryable: true
+    message: { vi: "Dịch vụ tài liệu đang không khả dụng. Vui lòng thử lại.", en: "The document service is unavailable. Please try again." }

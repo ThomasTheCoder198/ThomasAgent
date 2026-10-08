@@ -1,0 +1,430 @@
+openapi: 3.1.0
+info:
+  title: ThomasAgent ragx API
+  version: 1.0.0
+  description: >
+    Called only by core. Every /v1 operation needs an App token: a 60-second EdDSA JWT signed by core
+    (typ thomas-app+jwt; claims iss, aud, oid, optional kb, scp, rid, jti, iat, exp). Ragx takes the organization
+    from oid and never from the body. Tool routes are added in M1.3.
+servers:
+  - url: http://localhost:8090
+    description: Local ragx stack
+security:
+  - appToken: []
+tags:
+  - name: health
+  - name: orgs
+  - name: knowledge-bases
+  - name: files
+  - name: manifest
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      operationId: getLiveness
+      summary: Liveness
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/Health" }
+  /readyz:
+    get:
+      tags: [health]
+      operationId: getReadiness
+      summary: Readiness (Postgres, Redis, MinIO)
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/Health" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/orgs/{orgId}:
+    put:
+      tags: [orgs]
+      operationId: provisionOrg
+      summary: Create or update an org space (scope org:provision); creates the default KB once
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrgProvision" }
+      responses:
+        "200":
+          description: Org space
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: "#/components/schemas/Org" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/knowledge-bases:
+    get:
+      tags: [knowledge-bases]
+      operationId: listKnowledgeBases
+      summary: List the org's Knowledge Bases (scope kb:read)
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: Knowledge Bases, default first, then by name
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/KnowledgeBase" } }
+                  meta: { $ref: "#/components/schemas/Meta" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [knowledge-bases]
+      operationId: createKnowledgeBase
+      summary: Create a Knowledge Base (scope kb:write)
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KnowledgeBaseWrite" }
+      responses:
+        "201": { $ref: "#/components/responses/KnowledgeBase" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/knowledge-bases/{kbId}:
+    parameters:
+      - $ref: "#/components/parameters/KbId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [knowledge-bases]
+      operationId: getKnowledgeBase
+      summary: Get a Knowledge Base (scope kb:read)
+      responses:
+        "200": { $ref: "#/components/responses/KnowledgeBase" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [knowledge-bases]
+      operationId: renameKnowledgeBase
+      summary: Rename a Knowledge Base (scope kb:write)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KnowledgeBaseWrite" }
+      responses:
+        "200": { $ref: "#/components/responses/KnowledgeBase" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [knowledge-bases]
+      operationId: deleteKnowledgeBase
+      summary: Delete a Knowledge Base (scope kb:write); the default KB cannot be deleted
+      responses:
+        "204": { description: "Deleted; files, vectors and objects are purged by a job" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/knowledge-bases/{kbId}/files:
+    parameters:
+      - $ref: "#/components/parameters/KbId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [files]
+      operationId: listFiles
+      summary: List files, newest first (scope kb:read)
+      parameters:
+        - { name: cursor, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: One page of files
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/KbFile" } }
+                  meta: { $ref: "#/components/schemas/PageMeta" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [files]
+      operationId: uploadFile
+      summary: Upload one file (scope kb:write); Content-Length is required
+      parameters:
+        - { name: Idempotency-Key, in: header, required: false, schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200": { $ref: "#/components/responses/KbFile" }
+        "201": { $ref: "#/components/responses/KbFile" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/Error" }
+  /v1/knowledge-bases/{kbId}/files/{fileId}:
+    parameters:
+      - $ref: "#/components/parameters/KbId"
+      - $ref: "#/components/parameters/FileId"
+      - $ref: "#/components/parameters/RequestId"
+    delete:
+      tags: [files]
+      operationId: deleteFile
+      summary: Delete a file (scope kb:write); objects and vectors are purged by a job
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/knowledge-bases/{kbId}/files/{fileId}/retry:
+    parameters:
+      - $ref: "#/components/parameters/KbId"
+      - $ref: "#/components/parameters/FileId"
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [files]
+      operationId: retryFile
+      summary: Queue a failed file for ingest again (scope kb:write)
+      responses:
+        "200": { $ref: "#/components/responses/KbFile" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/knowledge-bases/{kbId}/files/{fileId}/raw:
+    parameters:
+      - $ref: "#/components/parameters/KbId"
+      - $ref: "#/components/parameters/FileId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [files]
+      operationId: downloadFile
+      summary: Stream the original file (scope kb:read)
+      responses:
+        "200":
+          description: Original bytes; Content-Disposition uses RFC 5987 filename*
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/knowledge-bases/{kbId}/files/{fileId}/preview:
+    parameters:
+      - $ref: "#/components/parameters/KbId"
+      - $ref: "#/components/parameters/FileId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [files]
+      operationId: getFilePreview
+      summary: Stream the preview JSON produced by ingest (scope kb:read); 404 until ingest writes it (M1.3)
+      responses:
+        "200":
+          description: Preview blocks
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/manifest:
+    get:
+      tags: [manifest]
+      operationId: getManifest
+      summary: App manifest (scope kb:read); tools are added in M1.3
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: Manifest
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: "#/components/schemas/Manifest" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    appToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    OrgId:
+      name: orgId
+      in: path
+      required: true
+      schema: { type: string, pattern: "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$" }
+    KbId:
+      name: kbId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    FileId:
+      name: fileId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      schema: { type: string, pattern: "^(req|job)_[A-Za-z0-9-]{8,64}$" }
+  responses:
+    Health:
+      description: Status
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data, meta]
+            properties:
+              data:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string }
+              meta: { $ref: "#/components/schemas/Meta" }
+    KnowledgeBase:
+      description: Knowledge Base
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data, meta]
+            properties:
+              data: { $ref: "#/components/schemas/KnowledgeBase" }
+              meta: { $ref: "#/components/schemas/Meta" }
+    KbFile:
+      description: File
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data, meta]
+            properties:
+              data: { $ref: "#/components/schemas/KbFile" }
+              meta: { $ref: "#/components/schemas/Meta" }
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+  schemas:
+    Meta:
+      type: object
+      required: [requestId]
+      properties:
+        requestId: { type: string }
+    PageMeta:
+      type: object
+      required: [requestId, page]
+      properties:
+        requestId: { type: string }
+        page:
+          type: object
+          required: [cursor, limit]
+          properties:
+            cursor: { type: [string, "null"], description: Cursor of the next page; null on the last page }
+            limit: { type: integer }
+    ErrorBody:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: object }
+            requestId: { type: string }
+    OrgProvision:
+      type: object
+      additionalProperties: false
+      required: [name, externalParsing]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        externalParsing: { type: boolean }
+    Org:
+      type: object
+      required: [orgId, name, externalParsing, defaultKbId, createdAt]
+      properties:
+        orgId: { type: string }
+        name: { type: string }
+        externalParsing: { type: boolean }
+        defaultKbId: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+    KnowledgeBaseWrite:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+    KnowledgeBase:
+      type: object
+      required: [id, name, isDefault, embeddingModel, embeddingDims, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        isDefault: { type: boolean }
+        embeddingModel: { type: string }
+        embeddingDims: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    KbFile:
+      type: object
+      required: [id, kbId, name, version, contentType, sizeBytes, sha256, status, errorCode, degraded, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        kbId: { type: string, format: uuid }
+        name: { type: string }
+        version: { type: integer }
+        contentType: { type: string }
+        sizeBytes: { type: integer }
+        sha256: { type: string }
+        status: { type: string, enum: [pending, parsing, enriching, chunking, embedding, indexing, ready, failed, degraded] }
+        errorCode: { type: string }
+        degraded: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Manifest:
+      type: object
+      required: [name, version, tools]
+      properties:
+        name: { type: string }
+        version: { type: string }
+        tools: { type: array, items: { type: object } }

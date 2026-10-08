@@ -9,6 +9,7 @@ tasks:
     desc: Regenerate code and the Postman collection from contracts/
     cmds:
       - go run ./cmd/errorcodegen -in errors.yaml -go ../backend-core/internal/errors/errors.go -py ../ragx/src/thomas_ragx/platform/error_codes_gen.py -ts ../frontend/lib/errors/codes.gen.ts
+      - go run ./cmd/apptokengen -out app-token.json
       - npm run lint:openapi
       - npm run gen:postman
     dir: contracts
@@ -76,6 +77,12 @@ tasks:
   down:ragx:
     desc: Stop the ragx stack
     cmds: ["{{.RAGX_COMPOSE}} down"]
+  ragx:dev-key:
+    desc: Create the dev App-token signing key and print RAG_CORE_PUBLIC_KEYS for deploy/ragx/.env
+    cmds: ["uv run --directory ragx python ../scripts/app_token_dev.py keygen --out ../deploy/ragx/dev-app-signing-key.pem"]
+  ragx:seed-dev:
+    desc: Seed an offline embedding model and role into a running dev ragx stack
+    cmds: ["{{.RAGX_COMPOSE}} exec -T ragx-api ragx seed-dev"]
   migrate:
     desc: Run database migrations
     cmds: ["{{.COMPOSE}} run --rm migrate"]

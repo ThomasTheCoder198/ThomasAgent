@@ -63,7 +63,6 @@ def test_cli_bootstrap_logs_environment_and_active_trace(
 ) -> None:
     config = Config(
         environment="logging-test",
-        core_service_token="t",
         minio_access_key="a",
         minio_secret_key="s",
         otlp_endpoint="",
@@ -73,6 +72,7 @@ def test_cli_bootstrap_logs_environment_and_active_trace(
     monkeypatch.setattr(cli, "load_config", lambda: config)
     monkeypatch.setattr(bootstrap_module, "log", structlog.get_logger(bootstrap_module.__name__))
     monkeypatch.setattr(bootstrap_module, "Minio", Mock(return_value=storage))
+    monkeypatch.setattr(bootstrap_module, "migrate_up", Mock(return_value=[]))
     monkeypatch.setattr(
         bootstrap_module.httpx,
         "get",

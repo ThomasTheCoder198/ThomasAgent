@@ -1,6 +1,29 @@
 name: thomas-ragx
 
 services:
+  ragx-postgres:
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_USER: ragx
+      POSTGRES_PASSWORD: ${RAGX_POSTGRES_PASSWORD}
+      POSTGRES_DB: ragx
+    volumes: [ragx-postgres-data:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ragx -d ragx"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  ragx-redis:
+    image: redis:8.10.2
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [ragx-redis-data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   qdrant:
     image: qdrant/qdrant:v1.19.1-unprivileged
     volumes: [qdrant-data:/qdrant/storage]
@@ -47,12 +70,13 @@ services:
     command: ["bootstrap"]
     env_file: [{path: .env, required: false}]
     environment:
-      RAG_CORE_INTERNAL_URL: ${RAG_CORE_INTERNAL_URL:-http://host.docker.internal:8080}
+      RAG_DATABASE_URL: postgresql://ragx:${RAGX_POSTGRES_PASSWORD}@ragx-postgres:5432/ragx
       RAG_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       RAG_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       # Bootstrap can finish before Phoenix is ready; its startup spans stay local.
       RAG_OTLP_ENDPOINT: ""
     depends_on:
+      ragx-postgres: { condition: service_healthy }
       minio: { condition: service_healthy }
       qdrant: { condition: service_healthy }
 
@@ -61,18 +85,40 @@ services:
     command: ["serve"]
     env_file: [{path: .env, required: false}]
     environment:
-      RAG_CORE_INTERNAL_URL: ${RAG_CORE_INTERNAL_URL:-http://host.docker.internal:8080}
+      RAG_DATABASE_URL: postgresql://ragx:${RAGX_POSTGRES_PASSWORD}@ragx-postgres:5432/ragx
       RAG_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       RAG_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       RAG_OTLP_ENDPOINT: ${RAG_OTLP_ENDPOINT-http://phoenix:6006}
       RAG_PHOENIX_API_KEY: ${RAG_PHOENIX_API_KEY:-${PHOENIX_ADMIN_SECRET}}
     ports: ["8090:8090"]
-    # Linux servers do not define host.docker.internal by default (RAG_CORE_INTERNAL_URL).
-    extra_hosts: ["host.docker.internal:host-gateway"]
     depends_on:
       ragx-bootstrap: { condition: service_completed_successfully }
+      ragx-redis: { condition: service_healthy }
+
+  ragx-worker:
+    build: ../../ragx
+    command: ["worker"]
+    env_file: [{path: .env, required: false}]
+    environment:
+      RAG_DATABASE_URL: postgresql://ragx:${RAGX_POSTGRES_PASSWORD}@ragx-postgres:5432/ragx
+      RAG_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      RAG_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      RAG_OTLP_ENDPOINT: ${RAG_OTLP_ENDPOINT-http://phoenix:6006}
+      RAG_PHOENIX_API_KEY: ${RAG_PHOENIX_API_KEY:-${PHOENIX_ADMIN_SECRET}}
+    healthcheck:
+      # The worker has no HTTP port; it touches its heartbeat file on every poll (RAG_WORKER_HEARTBEAT_FILE).
+      test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(0 if time.time() - os.path.getmtime('/tmp/ragx-worker.heartbeat') < 60 else 1)"]
+      interval: 15s
+      timeout: 3s
+      retries: 4
+      start_period: 20s
+    depends_on:
+      ragx-bootstrap: { condition: service_completed_successfully }
+      ragx-redis: { condition: service_healthy }
 
 volumes:
+  ragx-postgres-data:
+  ragx-redis-data:
   qdrant-data:
   minio-data:
   phoenix-data:

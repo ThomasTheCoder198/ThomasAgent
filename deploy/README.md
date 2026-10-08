@@ -5,7 +5,7 @@ Runs independent core and ragx stacks for their separate production servers.
 
 ## Entry points
 - `core/compose.yaml`: core, migrate, outbox-relay, Postgres, Redis, Prometheus, Grafana and VictoriaLogs.
-- `ragx/compose.yaml`: ragx bootstrap/API, Qdrant, MinIO and authenticated Phoenix.
+- `ragx/compose.yaml`: ragx bootstrap/API/worker, Postgres, Redis, Qdrant, MinIO and authenticated Phoenix.
 - `../scripts/smoke.sh`: health, identity, log correlation and metrics probes.
 
 ## Dependencies

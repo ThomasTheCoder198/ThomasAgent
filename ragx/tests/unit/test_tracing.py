@@ -13,6 +13,7 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+from tests.support import FakeResources
 from thomas_ragx import cli
 from thomas_ragx.api.app import create_app
 from thomas_ragx.platform.config import Config
@@ -56,7 +57,7 @@ def otlp_server() -> Iterator[str]:
 
 
 def _config(**overrides: object) -> Config:
-    return Config(core_service_token="t", minio_access_key="a", minio_secret_key="s", **overrides)  # type: ignore[arg-type]
+    return Config(minio_access_key="a", minio_secret_key="s", **overrides)  # type: ignore[arg-type]
 
 
 def test_exporter_sends_bearer_header_and_never_logs_it(
@@ -125,7 +126,10 @@ def test_trace_content_policy_hides_by_default() -> None:
 
 def test_create_app_does_not_install_global_provider() -> None:
     before = trace.get_tracer_provider()
-    first, second = create_app(_config()), create_app(_config())
+    first, second = (
+        create_app(_config(), resources=FakeResources()),
+        create_app(_config(), resources=FakeResources()),
+    )
     try:
         assert trace.get_tracer_provider() is before
         assert first.state.tracer_provider is not second.state.tracer_provider
@@ -139,7 +143,7 @@ def test_root_span_carries_validated_request_id_and_returns_trace_id(
 ) -> None:
     previous = structlog.contextvars.get_contextvars()
     structlog.contextvars.clear_contextvars()
-    app = create_app(_config())
+    app = create_app(_config(), resources=FakeResources())
     exporter = InMemorySpanExporter()
     app.state.tracer_provider.add_span_processor(SimpleSpanProcessor(exporter))
     try:
@@ -175,7 +179,9 @@ def test_root_span_carries_validated_request_id_and_returns_trace_id(
 
 
 def test_requests_succeed_when_phoenix_is_unreachable() -> None:
-    app = create_app(_config(otlp_endpoint="http://127.0.0.1:9", phoenix_api_key=PHOENIX_KEY))
+    app = create_app(
+        _config(otlp_endpoint="http://127.0.0.1:9", phoenix_api_key=PHOENIX_KEY), resources=FakeResources()
+    )
     try:
         with TestClient(app) as client:
             assert client.get("/healthz").status_code == 200
@@ -222,7 +228,7 @@ def test_serve_installs_provider_and_enforces_content_policy_before_server(
 
 @pytest.mark.parametrize("path, status", [("/missing", 404), ("/app-error", 400), ("/unhandled", 500)])
 def test_error_responses_keep_trace_header_and_safe_error_body(path: str, status: int) -> None:
-    app = create_app(_config())
+    app = create_app(_config(), resources=FakeResources())
     exporter = InMemorySpanExporter()
     app.state.tracer_provider.add_span_processor(SimpleSpanProcessor(exporter))
 

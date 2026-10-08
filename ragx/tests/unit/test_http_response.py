@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from tests.support import FakeResources
 from thomas_ragx.api.app import create_app
 from thomas_ragx.platform.config import Config
 from thomas_ragx.platform.error_codes_gen import ErrorCode
@@ -61,7 +62,7 @@ def test_error_response_wraps_unknown_routes() -> None:
 
 
 def test_error_body_carries_request_id_not_trace_id() -> None:
-    app = create_app(Config(core_service_token="t", minio_access_key="a", minio_secret_key="s"))
+    app = create_app(Config(minio_access_key="a", minio_secret_key="s"), resources=FakeResources())
 
     @app.get("/conflict")
     def conflict() -> None:
@@ -78,7 +79,7 @@ def test_error_body_carries_request_id_not_trace_id() -> None:
 
 
 def test_app_replaces_forged_request_id() -> None:
-    app = create_app(Config(core_service_token="t", minio_access_key="a", minio_secret_key="s"))
+    app = create_app(Config(minio_access_key="a", minio_secret_key="s"), resources=FakeResources())
     try:
         with TestClient(app) as client:
             response = client.get("/healthz", headers={"X-Request-Id": 'req_x"} injected'})

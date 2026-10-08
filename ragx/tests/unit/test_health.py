@@ -5,13 +5,14 @@ import structlog
 from fastapi import Request
 from fastapi.testclient import TestClient
 
+from tests.support import FakeResources
 from thomas_ragx.api.app import create_app
 from thomas_ragx.platform.config import Config
 from thomas_ragx.platform.http_response import request_id_of, success_body
 
 
 def test_healthz_returns_response_with_request_id() -> None:
-    app = create_app(Config(core_service_token="t", minio_access_key="a", minio_secret_key="s"))
+    app = create_app(Config(minio_access_key="a", minio_secret_key="s"), resources=FakeResources())
     res = TestClient(app).get("/healthz")
     assert res.status_code == 200
     assert len(res.headers["X-Ragx-Trace-Id"]) == 32
@@ -29,12 +30,11 @@ def test_app_logs_environment_and_correlates_handler_with_response(
     structlog.contextvars.clear_contextvars()
     config = Config(
         environment="logging-test",
-        core_service_token="t",
         minio_access_key="a",
         minio_secret_key="s",
         otlp_endpoint="",
     )
-    app = create_app(config)
+    app = create_app(config, resources=FakeResources())
 
     @app.get("/logged")
     def logged(request: Request) -> dict[str, object]:

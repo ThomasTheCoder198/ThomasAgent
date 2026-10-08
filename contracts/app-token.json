@@ -1,0 +1,152 @@
+{
+  "algorithm": "EdDSA",
+  "type": "thomas-app+jwt",
+  "issuer": "thomas-core",
+  "audience": "ragx",
+  "leewaySeconds": 10,
+  "maxLifetimeSeconds": 60,
+  "now": 1791000000,
+  "keys": [
+    {
+      "kid": "test-1",
+      "publicKey": "T4TuujHhkRerUA3YnFui/pUUtA2yyb7u0TTAiXVh5Xw=",
+      "privateKeySeed": "SrmHdaB6ZNvzMrt1fl/PSsounXyy0th9iL23SL40CJc="
+    }
+  ],
+  "valid": [
+    {
+      "name": "provision",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRob21hcy1hcHArand0Iiwia2lkIjoidGVzdC0xIn0.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6InJhZ3giLCJvaWQiOiJvcmctYWxwaGEiLCJzY3AiOiJvcmc6cHJvdmlzaW9uIiwicmlkIjoicmVxXzNmMmI4YzFlLTlkNGEtNGI3ZS04ZjIxLTBjNmQ1ZTRhM2IyMSIsImp0aSI6Imp0aS0wMDAxIiwiaWF0IjoxNzkwOTk5OTk1LCJleHAiOjE3OTEwMDAwNTV9._xhGx82CB1KrCV8b9s8nGjXVLaUfJVimBSV2v3wHaZwusZUY5IzQ7guGPogdh1rr0RrPu0yKTbe9JI-Hixj1DQ",
+      "claims": {
+        "iss": "thomas-core",
+        "aud": "ragx",
+        "oid": "org-alpha",
+        "scp": "org:provision",
+        "rid": "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21",
+        "jti": "jti-0001",
+        "iat": 1790999995,
+        "exp": 1791000055
+      }
+    },
+    {
+      "name": "kb read",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRob21hcy1hcHArand0Iiwia2lkIjoidGVzdC0xIn0.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6InJhZ3giLCJvaWQiOiJvcmctYWxwaGEiLCJzY3AiOiJrYjpyZWFkIiwicmlkIjoicmVxXzNmMmI4YzFlLTlkNGEtNGI3ZS04ZjIxLTBjNmQ1ZTRhM2IyMSIsImp0aSI6Imp0aS0wMDAxIiwiaWF0IjoxNzkwOTk5OTk1LCJleHAiOjE3OTEwMDAwNTV9.iSriGug_-ep7huqkjjviNrVwBZPE3zHYh5dUQLMcBH7TrjdeVqQ0Y7cxnYbmcnPtNc_9Bw5-CsnHCheAKXOhDA",
+      "claims": {
+        "iss": "thomas-core",
+        "aud": "ragx",
+        "oid": "org-alpha",
+        "scp": "kb:read",
+        "rid": "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21",
+        "jti": "jti-0001",
+        "iat": 1790999995,
+        "exp": 1791000055
+      }
+    },
+    {
+      "name": "tool call carries kb",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRob21hcy1hcHArand0Iiwia2lkIjoidGVzdC0xIn0.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6InJhZ3giLCJvaWQiOiJvcmctYWxwaGEiLCJrYiI6IjhmMTRlNDVmLWNlZWEtNDY3YS05YWYyLTdhMWIyYzNkNGU1ZiIsInNjcCI6InRvb2w6a2Jfc2VhcmNoIiwicmlkIjoicmVxXzNmMmI4YzFlLTlkNGEtNGI3ZS04ZjIxLTBjNmQ1ZTRhM2IyMSIsImp0aSI6Imp0aS0wMDAxIiwiaWF0IjoxNzkwOTk5OTk1LCJleHAiOjE3OTEwMDAwNTV9.Nkoxie4NtnpNGOzR94lc6GJvFNdHs3QAoHG3c4NDSft7OlyKV2DYqJfDbqtuiDoPAKpLqveAcHu7ZFsVyTO1CA",
+      "claims": {
+        "iss": "thomas-core",
+        "aud": "ragx",
+        "oid": "org-alpha",
+        "kb": "8f14e45f-ceea-467a-9af2-7a1b2c3d4e5f",
+        "scp": "tool:kb_search",
+        "rid": "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21",
+        "jti": "jti-0001",
+        "iat": 1790999995,
+        "exp": 1791000055
+      }
+    },
+    {
+      "name": "expired inside leeway",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRob21hcy1hcHArand0Iiwia2lkIjoidGVzdC0xIn0.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6InJhZ3giLCJvaWQiOiJvcmctYWxwaGEiLCJzY3AiOiJrYjpyZWFkIiwicmlkIjoicmVxXzNmMmI4YzFlLTlkNGEtNGI3ZS04ZjIxLTBjNmQ1ZTRhM2IyMSIsImp0aSI6Imp0aS0wMDAxIiwiaWF0IjoxNzkwOTk5OTMxLCJleHAiOjE3OTA5OTk5OTF9.AmucME2syIikkUflzYDp5c0gGUIgH_s11jyfdX2nQEeKel8V-t3kSv_2ajNibAzyfN_mDQUBDvNlMbo8IeXzDg",
+      "claims": {
+        "iss": "thomas-core",
+        "aud": "ragx",
+        "oid": "org-alpha",
+        "scp": "kb:read",
+        "rid": "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21",
+        "jti": "jti-0001",
+        "iat": 1790999931,
+        "exp": 1790999991
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "expired",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRob21hcy1hcHArand0Iiwia2lkIjoidGVzdC0xIn0.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6InJhZ3giLCJvaWQiOiJvcmctYWxwaGEiLCJzY3AiOiJrYjpyZWFkIiwicmlkIjoicmVxXzNmMmI4YzFlLTlkNGEtNGI3ZS04ZjIxLTBjNmQ1ZTRhM2IyMSIsImp0aSI6Imp0aS0wMDAxIiwiaWF0IjoxNzkwOTk5OTI5LCJleHAiOjE3OTA5OTk5ODl9.X9ev6qZ55jwIwddFoyFUZ1oe2Pjf0yY9GT2Fcvpkzg1jct8M4Cq_kY_2w1zpWWEYqWY_6gAwIa5cGnkX9599Cw",
+      "reason": "expired"
+    },
+    {
+      "name": "issued in the future",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRob21hcy1hcHArand0Iiwia2lkIjoidGVzdC0xIn0.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6InJhZ3giLCJvaWQiOiJvcmctYWxwaGEiLCJzY3AiOiJrYjpyZWFkIiwicmlkIjoicmVxXzNmMmI4YzFlLTlkNGEtNGI3ZS04ZjIxLTBjNmQ1ZTRhM2IyMSIsImp0aSI6Imp0aS0wMDAxIiwiaWF0IjoxNzkxMDAwMDE1LCJleHAiOjE3OTEwMDAwNzV9.zFf2jrfyE5ZItJQhEm6N3diA-jzEURobXU2letbBuAlGi8G7j89h4LA2SuiV_6IZFHfyZLdSZTFwQOfLOapFAw",
+      "reason": "not_yet_valid"
+    },
+    {
+      "name": "lifetime too long",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRob21hcy1hcHArand0Iiwia2lkIjoidGVzdC0xIn0.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6InJhZ3giLCJvaWQiOiJvcmctYWxwaGEiLCJzY3AiOiJrYjpyZWFkIiwicmlkIjoicmVxXzNmMmI4YzFlLTlkNGEtNGI3ZS04ZjIxLTBjNmQ1ZTRhM2IyMSIsImp0aSI6Imp0aS0wMDAxIiwiaWF0IjoxNzkwOTk5OTk1LCJleHAiOjE3OTEwMDAxMjB9.TANTeXz1M_XBq5LqO1P3w1jb9RKQ-e9tYcYK8VDMgJoWTbSmJWnh51CjzSIcCtFWOhPOAFg0LZIwH2J2da_cAQ",
+      "reason": "lifetime_too_long"
+    },
+    {
+      "name": "unknown kid",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRob21hcy1hcHArand0Iiwia2lkIjoidGVzdC0yIn0.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6InJhZ3giLCJvaWQiOiJvcmctYWxwaGEiLCJzY3AiOiJrYjpyZWFkIiwicmlkIjoicmVxXzNmMmI4YzFlLTlkNGEtNGI3ZS04ZjIxLTBjNmQ1ZTRhM2IyMSIsImp0aSI6Imp0aS0wMDAxIiwiaWF0IjoxNzkwOTk5OTk1LCJleHAiOjE3OTEwMDAwNTV9.H4eIDpjVgfexdIId1oyTeyVUeniTjXfLMjGpuEUr5zcAD5LHmwVMMhMu5z3_wmNL9qrcdAyin85Ca9yU_LvkAw",
+      "reason": "unknown_kid"
+    },
+    {
+      "name": "other key under trusted kid",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRob21hcy1hcHArand0Iiwia2lkIjoidGVzdC0xIn0.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6InJhZ3giLCJvaWQiOiJvcmctYWxwaGEiLCJzY3AiOiJrYjpyZWFkIiwicmlkIjoicmVxXzNmMmI4YzFlLTlkNGEtNGI3ZS04ZjIxLTBjNmQ1ZTRhM2IyMSIsImp0aSI6Imp0aS0wMDAxIiwiaWF0IjoxNzkwOTk5OTk1LCJleHAiOjE3OTEwMDAwNTV9.fK1aisqnw4sAEhfs3Nyzi9HhCY1dYTSv35ghGypsjds7MR7evJACHcCJwOmbS2e0lL8Hknp3OaKCjkEVshIkAg",
+      "reason": "bad_signature"
+    },
+    {
+      "name": "wrong audience",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRob21hcy1hcHArand0Iiwia2lkIjoidGVzdC0xIn0.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6Im90aGVyLWFwcCIsIm9pZCI6Im9yZy1hbHBoYSIsInNjcCI6ImtiOnJlYWQiLCJyaWQiOiJyZXFfM2YyYjhjMWUtOWQ0YS00YjdlLThmMjEtMGM2ZDVlNGEzYjIxIiwianRpIjoianRpLTAwMDEiLCJpYXQiOjE3OTA5OTk5OTUsImV4cCI6MTc5MTAwMDA1NX0.HyyD75bod54Tb3t0gWUKja-3qHIL3HB9OKdZEiG1WyLH6IJLyaSfPbmRsu6QxWku47hctS2NXxf6RIbTE6bUCQ",
+      "reason": "wrong_audience"
+    },
+    {
+      "name": "wrong issuer",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRob21hcy1hcHArand0Iiwia2lkIjoidGVzdC0xIn0.eyJpc3MiOiJzb21lb25lLWVsc2UiLCJhdWQiOiJyYWd4Iiwib2lkIjoib3JnLWFscGhhIiwic2NwIjoia2I6cmVhZCIsInJpZCI6InJlcV8zZjJiOGMxZS05ZDRhLTRiN2UtOGYyMS0wYzZkNWU0YTNiMjEiLCJqdGkiOiJqdGktMDAwMSIsImlhdCI6MTc5MDk5OTk5NSwiZXhwIjoxNzkxMDAwMDU1fQ.J2xn6PN8KlSFGdgDWmmpLpMeBhfo8KZFKN1kZ_EqZ81QGYv-aZlUdOejDXgothteDRa92CntbTOx2LazDehLDA",
+      "reason": "wrong_issuer"
+    },
+    {
+      "name": "wrong type",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6InRlc3QtMSJ9.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6InJhZ3giLCJvaWQiOiJvcmctYWxwaGEiLCJzY3AiOiJrYjpyZWFkIiwicmlkIjoicmVxXzNmMmI4YzFlLTlkNGEtNGI3ZS04ZjIxLTBjNmQ1ZTRhM2IyMSIsImp0aSI6Imp0aS0wMDAxIiwiaWF0IjoxNzkwOTk5OTk1LCJleHAiOjE3OTEwMDAwNTV9.Fv2oEPkStlY1nBQ4apKjACPNPWDIT8A-qngAcGaf78ypa7HkgJXTemWuSNYC5YKK5VeoeGXFV8dddTimZyzzAg",
+      "reason": "wrong_type"
+    },
+    {
+      "name": "missing org",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRob21hcy1hcHArand0Iiwia2lkIjoidGVzdC0xIn0.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6InJhZ3giLCJzY3AiOiJrYjpyZWFkIiwicmlkIjoicmVxXzNmMmI4YzFlLTlkNGEtNGI3ZS04ZjIxLTBjNmQ1ZTRhM2IyMSIsImp0aSI6Imp0aS0wMDAxIiwiaWF0IjoxNzkwOTk5OTk1LCJleHAiOjE3OTEwMDAwNTV9.XyPsXnI3gcYAp63SdWinamxlVfxeyNvbRSfuTD_YdH72kBB0-s_e3GZRnMuMOUpbi6Z-tsNk0IzqAqD6S1vSBw",
+      "reason": "missing_claim"
+    },
+    {
+      "name": "missing scope",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRob21hcy1hcHArand0Iiwia2lkIjoidGVzdC0xIn0.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6InJhZ3giLCJvaWQiOiJvcmctYWxwaGEiLCJyaWQiOiJyZXFfM2YyYjhjMWUtOWQ0YS00YjdlLThmMjEtMGM2ZDVlNGEzYjIxIiwianRpIjoianRpLTAwMDEiLCJpYXQiOjE3OTA5OTk5OTUsImV4cCI6MTc5MTAwMDA1NX0.vNxKNa4U1cQ-B_i9EPdmTh4Hs0x4f84dkPSqr8XbmqNQAQ2MPW7FroDphG_gutEAWfM_vzFy5zPoSEOZ5oMoAg",
+      "reason": "missing_claim"
+    },
+    {
+      "name": "missing jti",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRob21hcy1hcHArand0Iiwia2lkIjoidGVzdC0xIn0.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6InJhZ3giLCJvaWQiOiJvcmctYWxwaGEiLCJzY3AiOiJrYjpyZWFkIiwicmlkIjoicmVxXzNmMmI4YzFlLTlkNGEtNGI3ZS04ZjIxLTBjNmQ1ZTRhM2IyMSIsImlhdCI6MTc5MDk5OTk5NSwiZXhwIjoxNzkxMDAwMDU1fQ.G4nRoDdUoB9F4tsgVsQOhD-gVOk3SI8vDpahhmRcZFpoiXHpJBEGvX1uaDdMeKjCY6y5FJq_JUuEDR18vYr4Bg",
+      "reason": "missing_claim"
+    },
+    {
+      "name": "org id with path characters",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRob21hcy1hcHArand0Iiwia2lkIjoidGVzdC0xIn0.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6InJhZ3giLCJvaWQiOiIuLi9vcmciLCJzY3AiOiJrYjpyZWFkIiwicmlkIjoicmVxXzNmMmI4YzFlLTlkNGEtNGI3ZS04ZjIxLTBjNmQ1ZTRhM2IyMSIsImp0aSI6Imp0aS0wMDAxIiwiaWF0IjoxNzkwOTk5OTk1LCJleHAiOjE3OTEwMDAwNTV9.VYAHY4GyTOzAkaiOKD22F227BZWGhpPwMwYkURmoMNgsdOBMIhy7q7RrumkQVVnsQrYIYGEzbmnoFk-91guLAQ",
+      "reason": "invalid_claim"
+    },
+    {
+      "name": "forged request id",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRob21hcy1hcHArand0Iiwia2lkIjoidGVzdC0xIn0.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6InJhZ3giLCJvaWQiOiJvcmctYWxwaGEiLCJzY3AiOiJrYjpyZWFkIiwicmlkIjoiZm9yZ2VkIGlkIiwianRpIjoianRpLTAwMDEiLCJpYXQiOjE3OTA5OTk5OTUsImV4cCI6MTc5MTAwMDA1NX0.sqjwucQnHL_4GgMVMIffJeN0dvfkEeY_LZD3sxzOm6LdhVRLJp08QoaCsYEsO00wsVvFkLILu_GIM0v3G2qVAg",
+      "reason": "invalid_claim"
+    },
+    {
+      "name": "alg none",
+      "token": "eyJhbGciOiJub25lIiwidHlwIjoidGhvbWFzLWFwcCtqd3QiLCJraWQiOiJ0ZXN0LTEifQ.eyJpc3MiOiJ0aG9tYXMtY29yZSIsImF1ZCI6InJhZ3giLCJvaWQiOiJvcmctYWxwaGEiLCJzY3AiOiJrYjpyZWFkIiwicmlkIjoicmVxXzNmMmI4YzFlLTlkNGEtNGI3ZS04ZjIxLTBjNmQ1ZTRhM2IyMSIsImp0aSI6Imp0aS0wMDAxIiwiaWF0IjoxNzkwOTk5OTk1LCJleHAiOjE3OTEwMDAwNTV9.",
+      "reason": "wrong_algorithm"
+    },
+    {
+      "name": "not a jwt",
+      "token": "not-a-token",
+      "reason": "malformed"
+    }
+  ]
+}

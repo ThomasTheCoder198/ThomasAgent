@@ -5,6 +5,7 @@ from typing import Final
 
 
 class ErrorCode(StrEnum):
+    APP_TOKEN_INVALID = "APP_TOKEN_INVALID"
     AUTH_CSRF_INVALID = "AUTH_CSRF_INVALID"
     AUTH_INVALID_CREDENTIALS = "AUTH_INVALID_CREDENTIALS"
     AUTH_SESSION_EXPIRED = "AUTH_SESSION_EXPIRED"
@@ -14,10 +15,14 @@ class ErrorCode(StrEnum):
     FORBIDDEN = "FORBIDDEN"
     INTERNAL_ERROR = "INTERNAL_ERROR"
     INTERNAL_TOKEN_INVALID = "INTERNAL_TOKEN_INVALID"
+    KB_FILE_NOT_FOUND = "KB_FILE_NOT_FOUND"
+    KB_NOT_FOUND = "KB_NOT_FOUND"
     METHOD_NOT_ALLOWED = "METHOD_NOT_ALLOWED"
     NOT_FOUND = "NOT_FOUND"
+    ORG_NOT_PROVISIONED = "ORG_NOT_PROVISIONED"
     PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE"
     PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
+    RAGX_UNAVAILABLE = "RAGX_UNAVAILABLE"
     RATE_LIMITED = "RATE_LIMITED"
     REGISTRY_CAPABILITY_MISMATCH = "REGISTRY_CAPABILITY_MISMATCH"
     REGISTRY_MODEL_IN_USE = "REGISTRY_MODEL_IN_USE"
@@ -41,6 +46,7 @@ class ErrorDefinition:
 
 
 ERROR_DEFINITIONS: Final[dict[ErrorCode, ErrorDefinition]] = {
+    ErrorCode.APP_TOKEN_INVALID: ErrorDefinition(http_status=401, retryable=False, message_vi="Token gọi app không hợp lệ.", message_en="The app token is invalid."),
     ErrorCode.AUTH_CSRF_INVALID: ErrorDefinition(http_status=403, retryable=False, message_vi="Yêu cầu không hợp lệ, vui lòng tải lại trang.", message_en="Invalid request, please reload the page."),
     ErrorCode.AUTH_INVALID_CREDENTIALS: ErrorDefinition(http_status=401, retryable=False, message_vi="Email hoặc mật khẩu không đúng.", message_en="Incorrect email or password."),
     ErrorCode.AUTH_SESSION_EXPIRED: ErrorDefinition(http_status=401, retryable=False, message_vi="Phiên đăng nhập đã hết hạn.", message_en="Your session has expired."),
@@ -50,10 +56,14 @@ ERROR_DEFINITIONS: Final[dict[ErrorCode, ErrorDefinition]] = {
     ErrorCode.FORBIDDEN: ErrorDefinition(http_status=403, retryable=False, message_vi="Bạn không có quyền thực hiện thao tác này.", message_en="You are not allowed to do this."),
     ErrorCode.INTERNAL_ERROR: ErrorDefinition(http_status=500, retryable=False, message_vi="Đã có lỗi xảy ra. Vui lòng thử lại.", message_en="Something went wrong. Please try again."),
     ErrorCode.INTERNAL_TOKEN_INVALID: ErrorDefinition(http_status=401, retryable=False, message_vi="Token dịch vụ không hợp lệ.", message_en="Invalid service token."),
+    ErrorCode.KB_FILE_NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy tài liệu.", message_en="File not found."),
+    ErrorCode.KB_NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy Knowledge Base.", message_en="Knowledge Base not found."),
     ErrorCode.METHOD_NOT_ALLOWED: ErrorDefinition(http_status=405, retryable=False, message_vi="Phương thức không được hỗ trợ.", message_en="This method is not allowed."),
     ErrorCode.NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy tài nguyên.", message_en="The resource was not found."),
+    ErrorCode.ORG_NOT_PROVISIONED: ErrorDefinition(http_status=409, retryable=False, message_vi="Tổ chức chưa được khởi tạo trong ragx.", message_en="The organization is not provisioned in ragx yet."),
     ErrorCode.PAYLOAD_TOO_LARGE: ErrorDefinition(http_status=413, retryable=False, message_vi="Dữ liệu gửi lên quá lớn.", message_en="The request payload is too large."),
     ErrorCode.PROVIDER_UNAVAILABLE: ErrorDefinition(http_status=503, retryable=True, message_vi="Dịch vụ bên ngoài đang không khả dụng.", message_en="An upstream provider is unavailable."),
+    ErrorCode.RAGX_UNAVAILABLE: ErrorDefinition(http_status=503, retryable=True, message_vi="Dịch vụ tài liệu đang không khả dụng. Vui lòng thử lại.", message_en="The document service is unavailable. Please try again."),
     ErrorCode.RATE_LIMITED: ErrorDefinition(http_status=429, retryable=True, message_vi="Quá nhiều yêu cầu, vui lòng thử lại sau.", message_en="Too many requests, please retry later."),
     ErrorCode.REGISTRY_CAPABILITY_MISMATCH: ErrorDefinition(http_status=422, retryable=False, message_vi="Model không có khả năng cần cho vai trò này.", message_en="The model lacks a capability this role requires."),
     ErrorCode.REGISTRY_MODEL_IN_USE: ErrorDefinition(http_status=409, retryable=False, message_vi="Model đang được gán cho một vai trò.", message_en="The model is assigned to a role."),

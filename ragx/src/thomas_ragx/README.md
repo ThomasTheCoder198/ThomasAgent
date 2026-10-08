@@ -6,9 +6,10 @@ Coordinates API startup and idempotent storage bootstrap.
 ## Entry points
 - `cli.py`: serve and bootstrap commands.
 - `bootstrap.py`: storage setup.
+- `resources.py`: Postgres pool, Redis client and MinIO storage lifecycle and readiness.
 
 ## Dependencies
-- Uses: api, platform, MinIO, and Qdrant.
+- Uses: api, platform, db, kb storage, Postgres, Redis, MinIO, and Qdrant.
 - Used by: installed ragx CLI and tests.
 
 ## Run & test

@@ -10,6 +10,7 @@ Owns typed config, catalog errors, safe structured logging, tracing, and retry h
 - `error_codes_gen.py`: shared definitions covering authentication, internal service-token validation, and provider/model registry errors.
 - `http_response.py`: success_body, error_response, request_id_of, and exception handlers; error bodies carry `requestId`.
 - `request_id.py`: shared request id header, pattern and prefixes (mirrored from `contracts/request-id.json`, checked by `test_request_id.py`), `is_valid_request_id`, and `accept_request_id`.
+- `request_state.py`: request.state names shared by auth and the access log.
 - `logging.py`, `retry.py`: shared logging and retry infrastructure.
 - `tracing.py`: tracer provider exporting to Phoenix (`RAG_OTLP_ENDPOINT` + `/v1/traces`, bearer `RAG_PHOENIX_API_KEY`, project `RAG_PHOENIX_PROJECT`), `install_global_tracer_provider` (CLI only), and `apply_trace_content_policy` (`RAG_TRACE_CONTENT`, default off).
 
@@ -32,7 +33,7 @@ Config uses `environment`, `retry_base_delay_seconds`, and `retry_max_delay_seco
 
 Configuration precedence is constructor > process environment > `.env` > `config.yaml`. `load_config` can read a different dotenv path through `RAG_ENV_FILE`. Compose passes `deploy/ragx/.env` through `env_file` and derives only network endpoints and the MinIO/Phoenix credentials shared with other containers. The environment and dotenv sources disable field-name validation so renamed Python attributes cannot create unplanned environment spellings.
 
-`HTTP_STATUS_RATE_LIMITED` and `HTTP_STATUS_SERVER_ERROR` in `constants.py` provide the shared retry and HTTP response thresholds.
+`HTTP_STATUS_CLIENT_ERROR`, `HTTP_STATUS_RATE_LIMITED` and `HTTP_STATUS_SERVER_ERROR` in `constants.py` provide the shared logging, retry and HTTP response thresholds.
 
 Logging recursively copies and redacts dictionaries, lists, and tuples, including secret ancestor keys and bearer/sk values. Usage fields such as input_tokens remain visible, and input containers are not mutated.
 

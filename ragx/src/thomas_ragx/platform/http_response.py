@@ -11,6 +11,7 @@ from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError, lang_from_header
 
 _STATUS_TO_CODE = {
+    400: ErrorCode.VALIDATION_FAILED,
     404: ErrorCode.NOT_FOUND,
     405: ErrorCode.METHOD_NOT_ALLOWED,
     413: ErrorCode.PAYLOAD_TOO_LARGE,
@@ -25,6 +26,10 @@ def request_id_of(request: Request) -> str:
 
 def success_body(data: Any, request_id: str) -> dict[str, Any]:
     return {"data": data, "meta": {"requestId": request_id}}
+
+
+def page_body(data: Any, request_id: str, cursor: str | None, limit: int) -> dict[str, Any]:
+    return {"data": data, "meta": {"requestId": request_id, "page": {"cursor": cursor, "limit": limit}}}
 
 
 def error_response(request: Request, err: AppError) -> JSONResponse:

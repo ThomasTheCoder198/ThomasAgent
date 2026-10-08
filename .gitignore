@@ -15,6 +15,7 @@ Reference/
 .claude/settings.local.json
 
 # Secrets and env
+deploy/ragx/dev-app-signing-key.pem
 .env
 .env.*
 !.env.example

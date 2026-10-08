@@ -9,7 +9,6 @@ from thomas_ragx.platform.retry import is_retryable, retrying
 
 def fast_config() -> Config:
     return Config(
-        core_service_token="t",
         minio_access_key="a",
         minio_secret_key="s",
         retry_max_attempts=3,

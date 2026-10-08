@@ -6,7 +6,7 @@
     "node": "24.21.0"
   },
   "scripts": {
-    "lint:openapi": "redocly lint openapi/core.v1.yaml",
+    "lint:openapi": "redocly lint openapi/core.v1.yaml openapi/ragx.v1.yaml",
     "gen:postman": "openapi2postmanv2 -s openapi/core.v1.yaml -o postman/.raw.json -p -O folderStrategy=Tags,parametersResolution=Example,schemaFaker=false && node postman/postprocess.mjs postman/.raw.json postman/thomasagent.postman_collection.json",
     "test": "node --test \"postman/*.test.mjs\""
   },

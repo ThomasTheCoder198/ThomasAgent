@@ -3,6 +3,7 @@ import structlog
 from minio import Minio
 from opentelemetry.propagate import inject
 
+from thomas_ragx.db.migrate import migrate_up
 from thomas_ragx.platform.config import Config
 from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
@@ -39,6 +40,11 @@ def run(config: Config) -> None:
             "rag.bootstrap.run", record_exception=False, set_status_on_exception=False
         ):
             try:
+                with tracer.start_as_current_span(
+                    "rag.db.migrate", record_exception=False, set_status_on_exception=False
+                ):
+                    applied = migrate_up(config.database_url.get_secret_value())
+                    log.info("migrations ready", applied=applied)
                 with tracer.start_as_current_span(
                     "rag.minio.ensure_buckets", record_exception=False, set_status_on_exception=False
                 ):

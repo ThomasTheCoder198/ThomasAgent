@@ -14,6 +14,8 @@ from thomas_ragx.platform.errors import AppError
 TRACES_PATH: Final = "/v1/traces"
 RAGX_TRACE_ID_HEADER: Final = "X-Ragx-Trace-Id"
 ATTR_REQUEST_ID: Final = "request_id"
+ATTR_ORG_ID: Final = "org_id"
+ATTR_TOOL: Final = "tool"
 ATTR_SPAN_KIND: Final = "openinference.span.kind"
 SPAN_KIND_CHAIN: Final = "CHAIN"
 ATTR_PROJECT_NAME: Final = "openinference.project.name"

@@ -1,0 +1,12 @@
+{% if notice %}
+<p class="notice" role="status">
+  <svg class="icon icon-ok" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+  {{ t('notice.' ~ notice) }}
+</p>
+{% endif %}
+{% if error %}
+<p class="notice notice-error" role="alert">
+  <svg class="icon icon-error" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M12 7v6M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg>
+  <span>{{ error }}{% if request_id %} <span class="request-id">{{ t('error.request_id') }} <span class="tabular">{{ request_id }}</span></span>{% endif %}</span>
+</p>
+{% endif %}

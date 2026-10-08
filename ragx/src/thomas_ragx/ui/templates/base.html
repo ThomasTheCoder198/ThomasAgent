@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="{{ lang }}" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {# htmx would inject an inline <style>; the CSP allows only 'self', and ragx.css styles the request classes. #}
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
+  <title>{{ t('title.' ~ page) }} · ragx</title>
+  <link rel="stylesheet" href="/ui/static/ragx.css">
+  <script src="/ui/static/app.js"></script>
+  <script src="/ui/static/vendor/htmx.min.js" defer></script>
+</head>
+<body{% if csrf_token %} hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'{% endif %}>
+  <a class="skip" href="#main">{{ t('nav.skip') }}</a>
+  {% block body %}
+  <div class="shell">
+    <header class="sign">
+      <div class="sign-bar">
+        <a class="brand" href="/ui/providers"><span class="roundel" aria-hidden="true"></span><span>ragx</span></a>
+        <button class="icon-button menu-button" type="button" aria-controls="sign-panel" aria-expanded="false" data-menu-toggle>
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          <span class="sr-only">{{ t('nav.menu') }}</span>
+        </button>
+      </div>
+      <div class="sign-panel" id="sign-panel">
+        <nav aria-label="{{ t('nav.label') }}">
+          <ul class="sign-nav">
+            <li><a href="/ui/providers"{% if page == 'providers' %} aria-current="page"{% endif %}>{{ t('nav.providers') }}</a></li>
+            <li><a href="/ui/models"{% if page == 'models' %} aria-current="page"{% endif %}>{{ t('nav.models') }}</a></li>
+            <li><a href="/ui/roles"{% if page == 'roles' %} aria-current="page"{% endif %}>{{ t('nav.roles') }}</a></li>
+          </ul>
+        </nav>
+        <div class="sign-foot">
+          {% include "_switches.html" %}
+          {% if admin %}
+          <form method="post" action="/ui/logout" class="owner">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <span class="owner-email" title="{{ admin.email }}">{{ admin.email }}</span>
+            <button class="button sign-button" type="submit">{{ t('nav.logout') }}</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+    </header>
+    <div class="scrim" data-menu-close hidden></div>
+    <main class="page" id="main">
+      {% include "_notices.html" %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% endblock %}
+</body>
+</html>

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block body %}
+<main class="error-page" id="main">
+  <div class="first-station">
+    <span class="station-roundel station-roundel-error" aria-hidden="true"></span>
+    <span class="station-stem station-stem-error" aria-hidden="true"></span>
+    <div>
+      <h1>{{ t('error.heading') }}</h1>
+      {% include "_notices.html" %}
+      <p class="lead">{{ t('error.recover') }}</p>
+      <p><a class="button outline" href="/ui/providers">{{ t('error.back') }}</a></p>
+    </div>
+  </div>
+</main>
+{% endblock %}

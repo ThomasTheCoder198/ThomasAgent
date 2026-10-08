@@ -1,8 +1,11 @@
+import asyncio
+
 import httpx
 import structlog
 from minio import Minio
 from opentelemetry.propagate import inject
 
+from thomas_ragx.admin.service import ensure_admin_account
 from thomas_ragx.db.migrate import migrate_up
 from thomas_ragx.platform.config import Config
 from thomas_ragx.platform.error_codes_gen import ErrorCode
@@ -45,6 +48,10 @@ def run(config: Config) -> None:
                 ):
                     applied = migrate_up(config.database_url.get_secret_value())
                     log.info("migrations ready", applied=applied)
+                with tracer.start_as_current_span(
+                    "rag.admin.ensure_account", record_exception=False, set_status_on_exception=False
+                ):
+                    asyncio.run(ensure_admin_account(config))
                 with tracer.start_as_current_span(
                     "rag.minio.ensure_buckets", record_exception=False, set_status_on_exception=False
                 ):

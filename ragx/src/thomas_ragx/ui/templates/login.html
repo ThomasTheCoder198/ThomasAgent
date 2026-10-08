@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="login">
+  <section class="login-sign">
+    <a class="brand" href="/ui/login"><span class="roundel" aria-hidden="true"></span><span>ragx</span></a>
+    <p class="sign-line">{{ t('login.sign_line') }}</p>
+    <div class="login-switches">{% include "_switches.html" %}</div>
+  </section>
+  <main class="login-main" id="main">
+    {# The form is the first station of the owner's line, as on core's login. #}
+    <div class="first-station">
+      <span class="station-roundel" aria-hidden="true"></span>
+      <span class="station-stem" aria-hidden="true"></span>
+      <div>
+        <h1>{{ t('login.heading') }}</h1>
+        <p class="lead">{{ t('login.lead') }}</p>
+        {% include "_notices.html" %}
+        <form method="post" action="/ui/login" class="form">
+          <div class="field">
+            <label for="email">{{ t('login.email') }}</label>
+            <input id="email" name="email" type="email" autocomplete="username" required value="{{ email or '' }}">
+          </div>
+          <div class="field">
+            <label for="password">{{ t('login.password') }}</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required minlength="12">
+          </div>
+          <button class="button primary" type="submit">{{ t('login.submit') }}</button>
+        </form>
+      </div>
+    </div>
+  </main>
+</div>
+{% endblock %}

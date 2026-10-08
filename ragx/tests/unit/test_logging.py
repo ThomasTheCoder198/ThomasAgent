@@ -1,6 +1,6 @@
 import json
 from collections.abc import Iterator
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
@@ -73,6 +73,7 @@ def test_cli_bootstrap_logs_environment_and_active_trace(
     monkeypatch.setattr(bootstrap_module, "log", structlog.get_logger(bootstrap_module.__name__))
     monkeypatch.setattr(bootstrap_module, "Minio", Mock(return_value=storage))
     monkeypatch.setattr(bootstrap_module, "migrate_up", Mock(return_value=[]))
+    monkeypatch.setattr(bootstrap_module, "ensure_admin_account", AsyncMock(return_value=None))
     monkeypatch.setattr(
         bootstrap_module.httpx,
         "get",

@@ -35,3 +35,8 @@ stream_visibility_timeout_milliseconds: 60000
 stream_max_deliveries: 3
 worker_heartbeat_file: /tmp/ragx-worker.heartbeat
 worker_metrics_export_interval_milliseconds: 60000
+admin_email: ""
+ui_session_ttl_seconds: 43200
+ui_cookie_secure: false
+ui_login_max_attempts: 5
+ui_login_window_seconds: 900

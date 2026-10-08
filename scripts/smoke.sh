@@ -63,6 +63,8 @@ if curl -fsS http://localhost:8090/healthz >/dev/null 2>&1; then
     echo "FAIL ragx-trace-id"; exit 1
   fi
   check ragx-ready http://localhost:8090/readyz
+  check ragx-ui-login http://localhost:8090/ui/login
+  check ragx-ui-css   http://localhost:8090/ui/static/ragx.css
   dev_key="deploy/ragx/dev-app-signing-key.pem"
   if [[ -f "$dev_key" ]]; then
     ragx_compose="docker compose --env-file deploy/ragx/.env -f deploy/ragx/compose.yaml"

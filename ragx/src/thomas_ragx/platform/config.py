@@ -60,6 +60,12 @@ class Config(BaseSettings):
     stream_max_deliveries: int
     worker_heartbeat_file: str
     worker_metrics_export_interval_milliseconds: int
+    admin_email: str
+    admin_initial_password: SecretStr | None = None
+    ui_session_ttl_seconds: int
+    ui_cookie_secure: bool
+    ui_login_max_attempts: int
+    ui_login_window_seconds: int
     retry_base_delay_seconds: float = Field(validation_alias="RAG_RETRY_BASE_DELAY_S")
     retry_max_delay_seconds: float = Field(validation_alias="RAG_RETRY_MAX_DELAY_S")
 

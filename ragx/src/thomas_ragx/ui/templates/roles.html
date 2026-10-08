@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('roles.heading') }}</h1>
+<p class="lead">{{ t('roles.lead') }}</p>
+<ul class="rows">
+  {% for role in roles %}
+  {% set current = assigned[role] %}
+  <li class="row">
+    <form method="post" action="/ui/roles" class="role-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="role" value="{{ role.value }}">
+      <div class="row-main">
+        <h2><label for="role-{{ loop.index }}">{{ t('roles.role_' ~ role.value.replace('.', '_')) }}</label></h2>
+        <p class="meta">{{ t('roles.needs') }}</p>
+        <ul class="chips">{% for capability in role_capabilities[role]|sort %}<li class="chip">{{ t('capability.' ~ capability.value) }}</li>{% endfor %}</ul>
+        {% if not options[role] %}<p class="hint">{{ t('roles.no_capable') }}</p>{% endif %}
+      </div>
+      <div class="row-actions">
+        <select id="role-{{ loop.index }}" name="model_id" {% if not current %}class="unassigned" {% endif %}>
+          <option value="">{{ t('roles.unassigned') }}</option>
+          {% for model in options[role] %}<option value="{{ model.id }}"{% if current and current.id == model.id %} selected{% endif %}>{{ model.name }}</option>{% endfor %}
+        </select>
+        <button class="button outline" type="submit">{{ t('roles.save') }}</button>
+      </div>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}

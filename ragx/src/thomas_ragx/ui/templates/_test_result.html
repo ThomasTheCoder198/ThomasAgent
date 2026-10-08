@@ -1,0 +1,11 @@
+{% if ok %}
+<p class="result result-ok">
+  <svg class="icon" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+  <span>{{ message }}</span>
+</p>
+{% else %}
+<p class="result result-error">
+  <svg class="icon" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M7 7l10 10M17 7L7 17"/></svg>
+  <span>{{ message }} <span class="request-id">{{ t('error.request_id') }} <span class="tabular">{{ test_request_id }}</span></span></span>
+</p>
+{% endif %}

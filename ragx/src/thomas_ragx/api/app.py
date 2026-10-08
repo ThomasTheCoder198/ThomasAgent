@@ -7,6 +7,8 @@ import structlog
 from fastapi import FastAPI, Request, Response
 from opentelemetry.propagate import extract
 
+from thomas_ragx.admin.limiter import LoginLimiter
+from thomas_ragx.admin.service import AdminService
 from thomas_ragx.api.files import router as files_router
 from thomas_ragx.api.health import router as health_router
 from thomas_ragx.api.knowledge_bases import router as knowledge_bases_router
@@ -38,6 +40,7 @@ from thomas_ragx.platform.tracing import (
 )
 from thomas_ragx.registry.factory import create_registry_service
 from thomas_ragx.resources import Resources
+from thomas_ragx.ui.routes import install_ui
 
 MILLISECONDS_PER_SECOND: Final = 1000
 ROUTE_UNMATCHED: Final = "unmatched"
@@ -95,6 +98,11 @@ def create_app(config: Config | None = None, resources: Resources | None = None)
         idempotency_ttl_seconds=config.idempotency_ttl_seconds,
         page_default_limit=config.page_default_limit,
         page_max_limit=config.page_max_limit,
+    )
+    admin_service = AdminService(
+        resources.pool,
+        LoginLimiter(resources.redis, config.ui_login_max_attempts, config.ui_login_window_seconds),
+        config.ui_session_ttl_seconds,
     )
     configure_logging(config.log_level, config.service_name, config.environment)
     provider = configure_tracing(config)
@@ -164,4 +172,5 @@ def create_app(config: Config | None = None, resources: Resources | None = None)
     app.include_router(knowledge_bases_router)
     app.include_router(files_router)
     app.include_router(manifest_router)
+    install_ui(app, config, admin_service)
     return app

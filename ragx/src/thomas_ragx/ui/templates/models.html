@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('models.heading') }}</h1>
+<p class="lead">{{ t('models.lead') }}</p>
+{% if providers %}
+<form method="get" action="/ui/models" class="filter">
+  <label for="provider">{{ t('models.provider') }}</label>
+  <select id="provider" name="provider">
+    <option value="">{{ t('models.all_providers') }}</option>
+    {% for provider in providers %}<option value="{{ provider.id }}"{% if selected_provider == provider.id %} selected{% endif %}>{{ provider.name }}</option>{% endfor %}
+  </select>
+  <button class="button outline" type="submit">{{ t('models.filter') }}</button>
+</form>
+{% endif %}
+{% if not models %}
+{% if providers %}
+{% with title=t('models.empty'), body=t('models.empty_body') %}{% include "_empty.html" %}{% endwith %}
+{% else %}
+{% with title=t('models.empty'), body=t('models.no_providers') %}{% include "_empty.html" %}{% endwith %}
+<p><a class="button outline" href="/ui/providers">{{ t('models.go_providers') }}</a></p>
+{% endif %}
+{% endif %}
+<ul class="rows">
+  {% for model in models %}
+  <li class="row">
+    <div class="row-main">
+      <h2 class="tabular model-name">{{ model.name }}</h2>
+      <p class="meta">{{ provider_names.get(model.provider_id, '') }} · {{ t('models.source_' ~ model.source.value) }}{% if model.embedding_dims %} · <span class="tabular">{{ model.embedding_dims }}</span> {{ t('models.dims') }}{% endif %}{% if model.context_window %} · <span class="tabular">{{ model.context_window }}</span> {{ t('models.context_tokens') }}{% endif %}</p>
+      {% if model.capabilities %}
+      <ul class="chips" aria-label="{{ t('models.capabilities') }}">{% for capability in model.capabilities|sort %}<li class="chip">{{ t('capability.' ~ capability.value) }}</li>{% endfor %}</ul>
+      {% else %}
+      <p class="meta">{{ t('models.no_capabilities') }}</p>
+      {% endif %}
+      <div class="test-result" id="test-{{ model.id }}" aria-live="polite"></div>
+    </div>
+    <div class="row-actions">
+      <button class="button outline" type="button" hx-post="/ui/models/{{ model.id }}/test" hx-target="#test-{{ model.id }}"{% if not model.capabilities %} disabled{% endif %}>{{ t('models.test') }}</button>
+      <details class="disclosure">
+        <summary class="button ghost">{{ t('models.edit') }}</summary>
+        <form method="post" action="/ui/models/{{ model.id }}" class="form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <fieldset><legend>{{ t('models.capabilities') }}</legend>
+            {% for capability in capabilities %}<label class="check"><input type="checkbox" name="capabilities" value="{{ capability.value }}"{% if capability in model.capabilities %} checked{% endif %}> {{ t('capability.' ~ capability.value) }}</label>{% endfor %}
+          </fieldset>
+          <div class="field">
+            <label for="dims-{{ model.id }}">{{ t('models.dims_label') }}</label>
+            <input id="dims-{{ model.id }}" name="embedding_dims" type="number" min="1" step="1" inputmode="numeric" class="tabular" value="{{ model.embedding_dims or '' }}">
+            <p class="hint">{{ t('models.dims_hint') }}</p>
+          </div>
+          <button class="button primary" type="submit">{{ t('models.save') }}</button>
+        </form>
+      </details>
+      <button class="button ghost" type="button" data-dialog-open="delete-{{ model.id }}">{{ t('models.delete') }}</button>
+      <dialog id="delete-{{ model.id }}" aria-labelledby="delete-title-{{ model.id }}">
+        <form method="post" action="/ui/models/{{ model.id }}/delete">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <h2 id="delete-title-{{ model.id }}">{{ t('models.delete_title') }} <span class="tabular">{{ model.name }}</span>?</h2>
+          <p>{{ t('models.delete_in_use') }}</p>
+          <div class="dialog-actions">
+            <button class="button ghost" type="submit" formmethod="dialog" formnovalidate>{{ t('dialog.cancel') }}</button>
+            <button class="button danger" type="submit">{{ t('models.delete') }}</button>
+          </div>
+        </form>
+      </dialog>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% if providers %}
+<section class="add" aria-labelledby="add-model">
+  <h2 id="add-model">{{ t('models.add') }}</h2>
+  <form method="post" action="/ui/models" class="form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="field">
+      <label for="new-provider">{{ t('models.provider') }}</label>
+      <select id="new-provider" name="provider_id" required>
+        {% for provider in providers %}<option value="{{ provider.id }}"{% if selected_provider == provider.id %} selected{% endif %}>{{ provider.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="new-name">{{ t('models.name') }}</label>
+      <input id="new-name" name="name" required maxlength="200" class="tabular" autocomplete="off" spellcheck="false">
+    </div>
+    <fieldset><legend>{{ t('models.capabilities') }}</legend>
+      {% for capability in capabilities %}<label class="check"><input type="checkbox" name="capabilities" value="{{ capability.value }}"> {{ t('capability.' ~ capability.value) }}</label>{% endfor %}
+    </fieldset>
+    <div class="field">
+      <label for="new-dims">{{ t('models.dims_label') }}</label>
+      <input id="new-dims" name="embedding_dims" type="number" min="1" step="1" inputmode="numeric" class="tabular">
+      <p class="hint">{{ t('models.dims_hint') }}</p>
+    </div>
+    <div class="field">
+      <label for="new-context">{{ t('models.context') }}</label>
+      <input id="new-context" name="context_window" type="number" min="1" step="1" inputmode="numeric" class="tabular">
+    </div>
+    <button class="button primary" type="submit">{{ t('models.add') }}</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

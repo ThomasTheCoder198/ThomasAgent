@@ -1,0 +1,13 @@
+<form class="segmented" method="post" action="/ui/lang">
+  <input type="hidden" name="next" value="{{ path }}">
+  <fieldset>
+    <legend class="sr-only">{{ t('lang.label') }}</legend>
+    <button type="submit" name="lang" value="vi" aria-pressed="{{ 'true' if lang == 'vi' else 'false' }}" lang="vi">VI</button>
+    <button type="submit" name="lang" value="en" aria-pressed="{{ 'true' if lang == 'en' else 'false' }}" lang="en">EN</button>
+  </fieldset>
+</form>
+<div class="segmented" role="group" aria-label="{{ t('theme.label') }}">
+  <button type="button" data-theme-choice="light" aria-pressed="false">{{ t('theme.light') }}</button>
+  <button type="button" data-theme-choice="dark" aria-pressed="false">{{ t('theme.dark') }}</button>
+  <button type="button" data-theme-choice="system" aria-pressed="true">{{ t('theme.system') }}</button>
+</div>

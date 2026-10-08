@@ -1,0 +1,1041 @@
+/* ragx admin UI. The two token blocks below are copied byte for byte from frontend/app/globals.css;
+   tests/unit/test_ui_tokens.py fails on drift, so change tokens in the frontend first. */
+
+:root {
+  --ground: #f4f4f1;
+  --paper: #ffffff;
+  --paper-2: #fafaf7;
+  --ink: #151515;
+  --ink-2: #4a4a46;
+  --ink-3: #6e6e68;
+  --rule: #dcdcd6;
+  --rule-2: #e9e9e4;
+  --rule-strong: #cfcfc8;
+  --hover: #e7e7e1;
+  --todo: #c9c9c2;
+  --sign: #141414;
+  --sign-ink: #f4f4f1;
+  --sign-ink-2: #a9a9a2;
+  --sign-rule: #2a2a28;
+  --sign-hover: #1f1f1d;
+  --sign-active: #262624;
+  /* Full-width sign bands (Agent header). Same enamel black by day; lifted at night so the band still reads. */
+  --sign-band: var(--sign);
+  --kb: #00843d;
+  --kb-tint: #e3f2e9;
+  --on-kb: #ffffff;
+  --mcp: #0072ce;
+  --mcp-tint: #e2eefa;
+  --mcp-rule: #b9d4ee;
+  --mcp-ink: #163c62;
+  --mcp-ink-2: #3d5f80;
+  --on-mcp: #ffffff;
+  --cmp: #ee7f00;
+  --cmp-tint: #fdeedd;
+  --on-cmp: #1f1300;
+  --app: #da291c;
+  --app-tint: #fbe5e3;
+  --on-app: #ffffff;
+  --model: var(--ink);
+  --on-model: var(--ground);
+  --focus: var(--mcp);
+  --pageview: #ebebe6;
+  --page: #ffffff;
+  --page-ink: #2b2b28;
+  --page-hit: var(--kb-tint);
+  --scrim: rgb(10 10 10 / 0.45);
+  --lift: 0 12px 32px -12px rgb(0 0 0 / 0.45);
+  --sheet-lift: 0 -20px 40px -10px rgb(0 0 0 / 0.35);
+  --page-lift: 0 1px 2px rgb(0 0 0 / 0.08), 0 10px 24px -14px rgb(0 0 0 / 0.3);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Delay step between items that enter together (list rows, stations). */
+  --stagger: 45ms;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --ground: #0e1013;
+  --paper: #16191d;
+  --paper-2: #1b1f24;
+  --ink: #eceee9;
+  --ink-2: #b9bcb5;
+  --ink-3: #8f938c;
+  --rule: #262a2f;
+  --rule-2: #1f2328;
+  --rule-strong: #2c3137;
+  --hover: #1f2328;
+  --todo: #3a3f45;
+  --sign: #08090b;
+  --sign-ink: #eceee9;
+  --sign-ink-2: #9a9e97;
+  --sign-rule: #1e2125;
+  --sign-hover: #16191d;
+  --sign-active: #1b1f24;
+  --sign-band: #1d2127;
+  --kb: #2bb673;
+  --kb-tint: #12301f;
+  --on-kb: #06210f;
+  --mcp: #3d95e0;
+  --mcp-tint: #0f2235;
+  --mcp-rule: #1d3f61;
+  --mcp-ink: #cfe0f1;
+  --mcp-ink-2: #8fb6dc;
+  --on-mcp: #04192c;
+  --cmp: #ff9a2e;
+  --cmp-tint: #33210c;
+  --on-cmp: #221200;
+  --app: #ff5a4d;
+  --app-tint: #3a1512;
+  --on-app: #2a0603;
+  --pageview: #0b0d10;
+  --page: #e9e9e4;
+  --page-ink: #22221f;
+  --page-hit: #dff1e6;
+  --scrim: rgb(0 0 0 / 0.6);
+  --lift: 0 12px 32px -12px rgb(0 0 0 / 0.75);
+  --sheet-lift: 0 -20px 40px -10px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
+/* Self-hosted @fontsource-variable 5.3.0 (OFL), Vietnamese subset included. */
+/* lexend-vietnamese-wght-normal */
+@font-face {
+  font-family: 'Lexend';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(fonts/lexend-vietnamese-wght-normal.woff2) format('woff2-variations');
+  unicode-range: U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB;
+}
+
+/* lexend-latin-ext-wght-normal */
+@font-face {
+  font-family: 'Lexend';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(fonts/lexend-latin-ext-wght-normal.woff2) format('woff2-variations');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+/* lexend-latin-wght-normal */
+@font-face {
+  font-family: 'Lexend';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(fonts/lexend-latin-wght-normal.woff2) format('woff2-variations');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+/* geist-mono-latin-ext-wght-normal */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(fonts/geist-mono-latin-ext-wght-normal.woff2) format('woff2-variations');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+/* geist-mono-latin-wght-normal */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(fonts/geist-mono-latin-wght-normal.woff2) format('woff2-variations');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+/* ---- Base and browser surfaces ---- */
+html {
+  /* Touch targets in px: the 15px root would make 2.75rem only 41px. */
+  --target-size: 44px;
+  font-size: 15px;
+  line-height: 1.55;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: "Lexend", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.tabular {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+::selection {
+  background: var(--kb-tint);
+  color: var(--ink);
+}
+input,
+select,
+button,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+input,
+textarea {
+  caret-color: var(--kb);
+}
+a {
+  color: var(--mcp-ink);
+  text-underline-offset: 0.2em;
+}
+svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.skip {
+  position: absolute;
+  left: -999px;
+  top: 1rem;
+  z-index: 40;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 0.5rem 0.875rem;
+  border-radius: 0.5rem;
+}
+.skip:focus {
+  left: 1rem;
+}
+
+/* ---- Shell: the enamel-black sign on the left, the platform on the right ---- */
+.shell {
+  display: grid;
+  grid-template-columns: 15.5rem minmax(0, 1fr);
+  min-height: 100dvh;
+}
+.sign {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background: var(--sign);
+  color: var(--sign-ink);
+  padding: 1.25rem 0.75rem;
+}
+.sign-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sign-panel {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-top: 1.75rem;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  color: var(--sign-ink);
+  text-decoration: none;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  min-height: var(--target-size);
+  padding: 0 0.5rem 0 0;
+  border-radius: 0.5rem;
+}
+/* The brand roundel: an Apps-red ring crossed by an MCP-blue bar, as on core. */
+.roundel {
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: 1.625rem;
+  height: 1.625rem;
+  margin-left: 9px;
+  border: 5px solid var(--app);
+  border-radius: 50%;
+}
+.roundel::after {
+  content: "";
+  position: absolute;
+  left: -9px;
+  right: -9px;
+  top: 50%;
+  height: 0.375rem;
+  transform: translateY(-50%);
+  background: var(--mcp);
+}
+.sign-nav {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.125rem;
+}
+.sign-nav a {
+  display: flex;
+  align-items: center;
+  min-height: var(--target-size);
+  padding: 0 0.75rem;
+  border-radius: 0.5rem;
+  color: var(--sign-ink);
+  text-decoration: none;
+  font-size: 14px;
+  transition: background-color 200ms;
+}
+.sign-nav a:hover {
+  background: var(--sign-hover);
+}
+.sign-nav a[aria-current="page"] {
+  background: var(--sign-active);
+  font-weight: 600;
+}
+.sign-foot {
+  margin-top: auto;
+  display: grid;
+  gap: 0.75rem;
+  border-top: 1px solid var(--sign-rule);
+  padding-top: 1rem;
+}
+.owner {
+  display: grid;
+  gap: 0.5rem;
+}
+.owner-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 0.25rem;
+  font-size: 12.5px;
+  color: var(--sign-ink-2);
+}
+
+/* Signage switch: a track with options; the checked option inverts to sign-ink. */
+.segmented,
+.segmented fieldset {
+  display: flex;
+  gap: 0.125rem;
+}
+.segmented {
+  background: var(--sign-hover);
+  border-radius: 0.5rem;
+  padding: 0.1875rem;
+}
+.segmented fieldset {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.segmented button {
+  flex: 1;
+  min-height: 2.25rem;
+  padding: 0 0.25rem;
+  border: 0;
+  border-radius: 0.375rem;
+  white-space: nowrap;
+  background: transparent;
+  color: var(--sign-ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 200ms,
+    color 200ms,
+    transform 200ms var(--ease-out);
+}
+.segmented button:hover {
+  color: var(--sign-ink);
+}
+.segmented button:active {
+  transform: scale(0.96);
+  transition-duration: 75ms;
+}
+.segmented button[aria-pressed="true"] {
+  background: var(--sign-ink);
+  color: var(--sign);
+  font-weight: 600;
+}
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--target-size);
+  height: var(--target-size);
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--sign-ink-2);
+  cursor: pointer;
+  transition: background-color 200ms;
+}
+.icon-button:hover {
+  background: var(--sign-hover);
+  color: var(--sign-ink);
+}
+.menu-button,
+.scrim {
+  display: none;
+}
+
+/* ---- Page ---- */
+.page {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 68rem;
+  min-width: 0;
+  padding: 2.5rem 2rem 4rem;
+}
+h1 {
+  margin: 0 0 0.375rem;
+  font-size: clamp(1.6rem, 2.4vw, 2.1rem);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.lead {
+  max-width: 70ch;
+  margin: 0 0 2rem;
+  color: var(--ink-2);
+}
+.meta {
+  margin: 0.25rem 0 0;
+  font-size: 13.5px;
+  color: var(--ink-3);
+}
+.meta .tabular {
+  font-size: 12.5px;
+}
+.hint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--ink-3);
+}
+.truncate {
+  overflow-wrap: anywhere;
+}
+
+/* ---- Ruled rows, never cards ---- */
+.rows {
+  list-style: none;
+  margin: 0 0 2.5rem;
+  padding: 0;
+}
+.rows:not(:empty) {
+  border-top: 1px solid var(--rule-2);
+}
+.row {
+  display: flex;
+  gap: 0.75rem 1.5rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1rem 0.75rem;
+  border-bottom: 1px solid var(--rule-2);
+  transition: background-color 200ms;
+}
+.row:hover {
+  background: var(--paper);
+}
+.row-main {
+  flex: 1;
+  min-width: 0;
+}
+.model-name {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.row-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+  max-width: 60%;
+}
+.row-actions .manual {
+  margin: 0 0.25rem;
+}
+/* Closed: Sync/Test, Edit, Delete. Editing stacks the row and opens the form across its full width. */
+.row-actions > .disclosure {
+  order: 1;
+}
+.row-actions > [data-dialog-open] {
+  order: 2;
+}
+.row:has(.disclosure[open]) {
+  flex-direction: column;
+  align-items: stretch;
+}
+.row:has(.disclosure[open]) .row-actions {
+  justify-content: flex-start;
+  max-width: none;
+}
+.disclosure[open] {
+  order: 3;
+  flex-basis: 100%;
+}
+.disclosure > summary {
+  list-style: none;
+}
+.disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.disclosure[open] > summary {
+  background: var(--mcp-tint);
+}
+.disclosure > .form {
+  margin-top: 0.75rem;
+  padding: 1.25rem 0 0.5rem;
+  border-top: 1px solid var(--rule-2);
+}
+.role-form {
+  display: contents;
+}
+.row-actions select {
+  width: auto;
+  min-width: 16rem;
+  max-width: 100%;
+}
+.unassigned {
+  color: var(--ink-3);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+.chip {
+  padding: 0.3125rem 0.625rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper-2);
+  color: var(--ink-2);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* ---- Fields ---- */
+.form {
+  display: grid;
+  gap: 1rem;
+  max-width: 32rem;
+}
+.field {
+  display: grid;
+  gap: 0.375rem;
+}
+label,
+legend {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+input[type="email"],
+input[type="password"],
+input[type="url"],
+input[type="number"],
+input:not([type]),
+select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--target-size);
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: 0.5rem;
+  background: var(--paper);
+  font-size: 15px;
+  transition: border-color 200ms;
+}
+input:hover,
+select:hover {
+  border-color: var(--ink-3);
+}
+input:focus-visible,
+select:focus-visible {
+  border-color: var(--ink);
+}
+input:user-invalid {
+  border-color: var(--app);
+}
+input::placeholder {
+  color: var(--ink-3);
+}
+fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.25rem;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+legend {
+  margin-bottom: 0.125rem;
+  padding: 0;
+}
+.check {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  min-height: var(--target-size);
+  font-size: 13.5px;
+  font-weight: 400;
+  cursor: pointer;
+}
+input[type="checkbox"] {
+  width: 1.0625rem;
+  height: 1.0625rem;
+  margin: 0;
+  accent-color: var(--ink);
+}
+.filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  margin: 0 0 1.25rem;
+}
+.filter select {
+  width: auto;
+  min-width: 14rem;
+}
+.add {
+  margin-top: 1rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--rule);
+}
+.add > h2 {
+  margin-bottom: 1.25rem;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* ---- Buttons: compact, decisive, a little sink on press ---- */
+.button {
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: var(--target-size);
+  padding: 0.5rem 0.875rem;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    transform 200ms var(--ease-out),
+    background-color 200ms,
+    border-color 200ms;
+}
+.button:active {
+  transform: scale(0.97);
+  transition-duration: 75ms;
+}
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+.primary {
+  background: var(--ink);
+  color: var(--ground);
+}
+.primary:hover {
+  background: var(--ink-2);
+}
+.outline {
+  background: var(--paper);
+  border-color: var(--mcp-rule);
+  color: var(--mcp-ink);
+}
+.ghost {
+  background: transparent;
+  color: var(--mcp-ink-2);
+}
+.outline:not(:disabled):hover,
+.ghost:not(:disabled):hover {
+  background: var(--mcp-tint);
+}
+.danger {
+  background: var(--app);
+  color: var(--on-app);
+}
+.danger:hover {
+  filter: brightness(1.1);
+}
+.sign-button {
+  width: 100%;
+  background: var(--sign-ink);
+  color: var(--sign);
+}
+.sign-button:hover {
+  background: var(--sign-ink-2);
+}
+/* Pending is the departing-train bar along the bottom edge, never a spinner. */
+.button.is-pending::after,
+.button.htmx-request::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 40%;
+  height: 2px;
+  background: currentColor;
+  animation: depart 1.1s var(--ease-out) infinite;
+}
+.button.is-pending,
+.button.htmx-request {
+  cursor: progress;
+}
+
+/* ---- Notices, results, request ids ---- */
+.notice {
+  display: flex;
+  gap: 0.625rem;
+  align-items: flex-start;
+  max-width: 70ch;
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 0.875rem;
+  border-radius: 0.75rem;
+  background: var(--kb-tint);
+  color: var(--ink);
+  font-size: 14px;
+  animation: rise 0.45s var(--ease-out) both;
+}
+.notice .icon,
+.result .icon {
+  margin-top: 0.15em;
+}
+.notice .icon,
+.result-ok .icon {
+  color: var(--kb);
+}
+.notice-error {
+  background: var(--app-tint);
+}
+.notice-error .icon,
+.result-error .icon {
+  color: var(--app);
+}
+.request-id {
+  color: var(--ink-2);
+}
+.request-id .tabular {
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.test-result:empty {
+  display: none;
+}
+.result {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin: 0.625rem 0 0;
+  font-size: 13.5px;
+  animation: rise 0.45s var(--ease-out) both;
+}
+
+/* ---- Stations: empty states, login and the error page are one station, not a card ---- */
+.first-station,
+.empty-station {
+  position: relative;
+  padding-left: 2.25rem;
+}
+.station-roundel {
+  position: absolute;
+  left: 0;
+  top: 0.4rem;
+  box-sizing: border-box;
+  width: 1.375rem;
+  height: 1.375rem;
+  border: 5px solid var(--model);
+  border-radius: 50%;
+  background: var(--ground);
+  animation: pop 0.4s var(--ease-out) both;
+}
+.station-stem {
+  position: absolute;
+  left: calc(0.6875rem - 1.5px);
+  top: 1.775rem;
+  bottom: 0.25rem;
+  width: 3px;
+  border-radius: 0 0 2px 2px;
+  background: var(--model);
+  transform-origin: top;
+  animation: stem 0.5s var(--ease-out) 0.15s both;
+}
+.station-roundel-error {
+  border-color: var(--app);
+}
+.station-stem-error {
+  background: var(--app);
+}
+.empty-station {
+  max-width: 68ch;
+  margin: 0.5rem 0 2.5rem;
+}
+.empty-station h2 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.empty-station .lead {
+  margin: 0.5rem 0 0;
+}
+
+/* ---- Login: the sign on the left, the owner's first station on the right, as on core ---- */
+.login {
+  display: grid;
+  grid-template-columns: minmax(340px, 2fr) 3fr;
+  min-height: 100dvh;
+}
+.login-sign {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 2.5rem;
+  padding: 2.5rem;
+  background: var(--sign);
+  color: var(--sign-ink);
+}
+.sign-line {
+  max-width: 18ch;
+  margin: 0;
+  font-size: clamp(1.35rem, 2.6vw, 2.5rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  animation: rise 0.45s var(--ease-out) both;
+}
+.login-switches {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 16rem;
+}
+.login-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+.login-main .first-station {
+  width: 100%;
+  max-width: 24rem;
+}
+.login h1 {
+  font-size: 28px;
+}
+.login .lead {
+  margin-bottom: 2.25rem;
+}
+.login .form {
+  max-width: none;
+}
+.login .primary {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+.error-page {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 2rem 1rem;
+}
+.error-page .first-station {
+  max-width: 36rem;
+}
+
+/* ---- Dialog: a lifted layer, so it alone carries the lift shadow ---- */
+dialog {
+  box-sizing: border-box;
+  width: min(28rem, calc(100vw - 2rem));
+  padding: 1.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.75rem;
+  background: var(--ground);
+  color: var(--ink);
+  box-shadow: var(--lift);
+}
+dialog[open] {
+  animation: rise 0.45s var(--ease-out) both;
+}
+dialog::backdrop {
+  background: var(--scrim);
+}
+dialog h2 {
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+dialog p {
+  margin: 0.625rem 0 1.5rem;
+  color: var(--ink-2);
+}
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* ---- Motion: one curve, copied from core ---- */
+@keyframes rise {
+  from {
+    opacity: 0.6;
+    transform: translateY(6px);
+  }
+}
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+@keyframes stem {
+  from {
+    transform: scaleY(0);
+  }
+}
+@keyframes depart {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+/* ---- Phones: the sign becomes a top bar, its panel a drawer over the scrim; rows stack ---- */
+@media (pointer: coarse) {
+  .segmented button {
+    min-height: var(--target-size);
+  }
+}
+@media (max-width: 48rem) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sign {
+    z-index: 20;
+    height: auto;
+    min-height: 3rem;
+    padding: 0 0.25rem 0 1rem;
+  }
+  .sign-bar {
+    min-height: 3rem;
+  }
+  .menu-button {
+    display: inline-flex;
+  }
+  .sign-panel {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 30;
+    box-sizing: border-box;
+    width: min(17.5rem, 85vw);
+    margin: 0;
+    padding: 1.25rem 0.75rem;
+    overflow-y: auto;
+    background: var(--sign);
+    box-shadow: var(--lift);
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition:
+      transform 300ms var(--ease-out),
+      visibility 0s 300ms;
+  }
+  [data-menu-open] .sign-panel {
+    transform: none;
+    visibility: visible;
+    transition: transform 300ms var(--ease-out);
+  }
+  .scrim:not([hidden]) {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 15;
+    background: var(--scrim);
+  }
+  .page {
+    padding: 1.5rem 1rem 3rem;
+  }
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 1rem 0.25rem;
+  }
+  .row-actions {
+    justify-content: flex-start;
+    max-width: none;
+  }
+  .row-actions select,
+  .filter select {
+    flex: 1;
+    min-width: 0;
+  }
+  .login {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+  .login-sign {
+    gap: 1.5rem;
+    padding: 1.75rem 1.25rem;
+  }
+  .login-main {
+    align-items: flex-start;
+    padding: 2.5rem 1.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+  }
+}

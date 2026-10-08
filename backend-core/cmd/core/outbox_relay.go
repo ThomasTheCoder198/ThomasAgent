@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/jobs"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/jobs"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 

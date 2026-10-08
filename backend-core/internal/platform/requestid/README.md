@@ -12,7 +12,7 @@ accepted pattern and the `req_`/`job_` generators. It does not store ids; the co
 
 ## Dependencies
 - Uses: `github.com/google/uuid`.
-- Used by: `internal/platform/httpx`, `internal/jobs`, `cmd/core`.
+- Used by: `internal/platform/httpx`, `internal/platform/jobs`, `cmd/core`.
 
 ## Run & test
 ```bash

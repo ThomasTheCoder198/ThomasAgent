@@ -3,7 +3,7 @@
 ## Purpose
 
 Persists metadata-only audit events and copies the request id from context into `audit_events.request_id`. Audit writes require the trusted tenant from context. Missing scope returns the catalog `INTERNAL_ERROR`; an event tenant never overrides context. Nil metadata is stored as `{}`.
-Explicit platform boundaries set the [Platform tenant](../../../docs/glossary.md) (`default`); business data always uses trusted context, never client or model parameters.
+Explicit platform boundaries set the [Platform tenant](../../../../docs/glossary.md) (`default`); business data always uses trusted context, never client or model parameters.
 
 ## Entry points
 
@@ -18,7 +18,7 @@ Explicit platform boundaries set the [Platform tenant](../../../docs/glossary.md
 
 ```bash
 cd backend-core
-TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/audit/... -count=1 -p 2
+TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/platform/audit/... -count=1 -p 2
 ```
 
 Tests use `pgtest.Start` and migrated Docker Postgres with Ryuk disabled on this host.

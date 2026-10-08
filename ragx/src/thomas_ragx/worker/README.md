@@ -12,7 +12,7 @@ Publishes ragx's outbox to ragx Redis and consumes `thomas.ingest.requested` and
 
 ## Dependencies
 - Uses: ragx Postgres, ragx Redis, MinIO.
-- Used by: ragx worker process; mirrors `backend-core/internal/jobs`.
+- Used by: ragx worker process; mirrors `backend-core/internal/platform/jobs`.
 
 ## Run & test
 ```bash

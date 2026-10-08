@@ -16,7 +16,7 @@ or model parameters and does not choose a tenant when context is absent.
 ## Run & test
 ```bash
 cd backend-core
-TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/auth ./internal/vault ./internal/audit -count=1 -p 2
+TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/auth ./internal/platform/vault ./internal/platform/audit -count=1 -p 2
 ```
 
 ## Conventions

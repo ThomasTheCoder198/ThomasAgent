@@ -20,7 +20,7 @@ recovery, acknowledgement, and dead-letter delivery.
 ## Run & test
 ```bash
 cd backend-core
-TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/jobs/... -count=1 -p 2
+TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/platform/jobs/... -count=1 -p 2
 go run ./cmd/core outbox-relay
 ```
 Docker Desktop must run for the pinned Postgres/Redis integration containers.
@@ -32,7 +32,7 @@ Call `Consumer.EnsureGroup` before processing jobs. When the recorder also imple
 `JobStreamRegistrar`, group initialization registers the stream's zero DLQ counter, including when
 the group already exists after a worker restart. This gives Prometheus a baseline for the first failure
 without resetting counters or requiring observation-only recorders to implement registration.
-See the [shared naming glossary](../../../docs/glossary.md) for terms used across services.
+See the [shared naming glossary](../../../../docs/glossary.md) for terms used across services.
 Delivery is at-least-once. A crash after XADD and before transaction COMMIT can
 publish the same outbox row again. Handlers must deduplicate by `outbox_id` and
 make their business side effects idempotent. Handlers receive the original `outbox_id` directly in `Message.OutboxID`
@@ -48,10 +48,10 @@ closed. Client/model payload fields never choose the tenant.
 Only successful handlers are acknowledged; failures remain pending until reclaim.
 XAUTOCLAIM and XPENDING determine delivery count; final failure goes to DLQ.
 EnqueueOutbox stores the context request id (or a new `job_` id) in `outbox.request_id`; the relay copies it to the `request_id` stream field; the consumer restores it (a missing or malformed value becomes a new `job_` id). Job outcome logs (`job handled`, `job failed, will retry`, `job moved to DLQ`) carry `duration_ms` and never the payload.
-The shared [log field contract](../platform/logging/README.md#log-field-contract) applies to worker and handler logs.
+The shared [log field contract](../logging/README.md#log-field-contract) applies to worker and handler logs.
 Logs contain catalog error codes and job metadata, never payloads or raw errors.
 Handler errors should be safe to persist because the DLQ retains the last error.
-The default is four total deliveries: the initial attempt plus up to three retries; see [consumer config](../platform/config/README.md).
+The default is four total deliveries: the initial attempt plus up to three retries; see [consumer config](../config/README.md).
 The foundation consumer retries handler failures up to its configured limit;
 domain handlers must apply retryable-error/backoff policy for outbound operations.
 

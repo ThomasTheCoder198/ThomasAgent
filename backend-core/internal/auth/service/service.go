@@ -11,7 +11,7 @@ import (
 	"github.com/alexedwards/argon2id"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/audit"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/audit"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/model"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
 	authtoken "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/token"

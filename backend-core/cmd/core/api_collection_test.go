@@ -19,7 +19,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/metrics"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/vault"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/vault"
 )
 
 func TestAPI_GeneratedPostmanCollection(t *testing.T) {

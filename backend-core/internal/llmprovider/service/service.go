@@ -10,12 +10,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/audit"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/audit"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/model"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/repository"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/vault"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/vault"
 )
 
 const (

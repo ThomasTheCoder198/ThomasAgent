@@ -32,7 +32,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/repository"
 	llmproviderservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/service"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/vault"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/vault"
 )
 
 const secretKey = "sk-or-v1-supersecret"

@@ -25,7 +25,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/redisx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/retry"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/vault"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/vault"
 )
 
 const (

@@ -15,7 +15,7 @@ Encrypts secrets with AES-256-GCM and persists encrypted rows. Rotation and re-e
 ## Run & test
 ```bash
 cd backend-core
-TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/vault/... -count=1 -p 2
+TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/platform/vault/... -count=1 -p 2
 ```
 Docker Desktop is required for PostgreSQL integration tests.
 

@@ -11,6 +11,7 @@ Structured logger setup is injected by the application. Core has no tracing midd
 - `EventStream` commits SSE headers and serializes flushed data and heartbeat frames. `NewEventStream` requires typed heartbeat and positive per-write timeout settings. Deadlines also bound the initial header flush; write failures close `Done` so producers stop. Request cancellation closes `Done` independently of an in-progress heartbeat write through `context.AfterFunc`. `Close` unregisters this callback.
 - `ResponseCommitted` checks Gin's `Written()` state and unwraps nested writers. `Success`, `Fail`, and `Respond` adapt the net/http response primitives for controllers.
 - `LimitRequestDuration` sets the context deadline for ordinary routes.
+- `PathUUID(c, name)` parses a UUID path parameter into a field error named after the parameter.
 - `NewRouter` registers assignRequestID → caller middleware → injectErrorLogger → recoverPanics.
 - `WriteSuccess` serializes success data and request ID metadata.
 - `WriteError` localizes catalog errors and sanitizes server errors.

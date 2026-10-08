@@ -6,42 +6,22 @@ import (
 	"fmt"
 	"net/http"
 	"net/netip"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llm"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/redisx"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/retry"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/vault"
 )
 
 const (
-	providerCatalogBreaker = "provider-catalog"
-	postgresDependency     = "postgres"
-	redisDependency        = "redis"
-	coreListeningMessage   = "core listening"
+	postgresDependency   = "postgres"
+	redisDependency      = "redis"
+	coreListeningMessage = "core listening"
 )
-
-type services struct {
-	auth *auth.Service
-	llm  *llm.Service
-}
-
-type controllers struct {
-	auth      *auth.Controller
-	providers *llm.ProviderController
-	models    *llm.ModelController
-	roles     *llm.RoleController
-	resolve   *llm.ResolveController
-}
 
 func (rt *coreRuntime) serveHTTP(ctx context.Context) error {
 	cipher, err := vault.NewCipher(rt.cfg.Vault.KeyID, rt.cfg.Vault.MasterKey)
@@ -58,64 +38,31 @@ func (rt *coreRuntime) serveHTTP(ctx context.Context) error {
 		return err
 	}
 	defer func() { _ = redisClient.Close() }()
-	domainServices, err := rt.newServices(ctx, pool, cipher)
+	clients, err := rt.initClientContainer()
 	if err != nil {
 		return err
 	}
-	domainControllers, err := rt.newControllers(domainServices, redisClient)
+	repositories := rt.initRepositoryContainer(pool)
+	services, err := rt.initServiceContainer(ctx, pool, cipher, clients, repositories)
+	if err != nil {
+		return err
+	}
+	controllers, err := rt.initControllerContainer(services, redisClient)
 	if err != nil {
 		return err
 	}
 	gin.SetMode(gin.ReleaseMode)
 	engine := httpx.NewRouter(httpx.NewSlogErrorLogger(rt.log), httpx.LogAccess(rt.log), httpx.RecordMetrics(rt.metrics))
-	registerRoutes(engine, domainControllers, middlewares{
-		sessions:       domainServices.auth,
+	registerRoutes(engine, controllers, middlewares{
+		authService:    services.AuthService,
 		cookieSecure:   rt.cfg.Auth.CookieSecure,
 		serviceToken:   rt.cfg.ServiceToken,
 		health:         rt.readinessChecks(pool, redisClient),
 		requestTimeout: rt.cfg.HTTP.RequestTimeout,
 	})
-	go rt.purgeExpiredSessions(ctx, domainServices.auth)
+	go rt.purgeExpiredSessions(ctx, services.AuthService)
 	go rt.serveMetrics(ctx)
 	return rt.listenAndServe(ctx, engine)
-}
-
-func (rt *coreRuntime) newServices(ctx context.Context, pool *pgxpool.Pool, cipher *vault.Cipher) (services, error) {
-	authService := auth.NewService(auth.NewRepositoryWithSessionTouchInterval(pool, rt.cfg.Auth.SessionTouchInterval), pool, rt.cfg.Auth, time.Now)
-	if err := authService.EnsureOwner(tenant.WithID(ctx, tenant.PlatformID)); err != nil {
-		return services{}, err
-	}
-	client, err := outbound.NewClient(rt.cfg.ProviderHTTPTimeout, rt.cfg.ProviderPrivateAllowlist)
-	if err != nil {
-		return services{}, fmt.Errorf("provider HTTP configuration: %w", err)
-	}
-	breaker := retry.NewBreaker(providerCatalogBreaker, rt.cfg.ProviderBreaker)
-	catalog := llm.NewHTTPModelCatalogWithClient(retry.NewPolicy(rt.cfg.Retry), client, rt.cfg.ProviderMaxResponseBytes, breaker, rt.log, rt.cfg.ProviderMaxBreakers)
-	catalog.Metrics = rt.metrics
-	llmService := llm.NewService(pool, vault.NewStore(cipher), catalog, rt.cfg.ProviderMaxRemoteModels)
-	return services{auth: authService, llm: llmService}, nil
-}
-
-func (rt *coreRuntime) newControllers(domainServices services, redisClient *redis.Client) (controllers, error) {
-	proxyNetworks, err := parseTrustedProxyCIDRs(rt.cfg.Auth.TrustedProxyCIDRs)
-	if err != nil {
-		return controllers{}, err
-	}
-	maxBodyBytes := rt.cfg.HTTP.MaxBodyBytes
-	return controllers{
-		auth: auth.NewController(auth.ControllerParams{
-			Service:            domainServices.auth,
-			Limiter:            auth.NewLoginLimiter(redisClient, rt.cfg.Auth, []byte(rt.cfg.Auth.LoginLimiterKey)),
-			CookieSecure:       rt.cfg.Auth.CookieSecure,
-			TrustedProxyHeader: rt.cfg.Auth.TrustedProxyHeader,
-			TrustedProxyCIDRs:  proxyNetworks,
-			Logger:             rt.log,
-		}),
-		providers: llm.NewProviderController(domainServices.llm, maxBodyBytes),
-		models:    llm.NewModelController(domainServices.llm, maxBodyBytes),
-		roles:     llm.NewRoleController(domainServices.llm, maxBodyBytes),
-		resolve:   llm.NewResolveController(domainServices.llm),
-	}, nil
 }
 
 func parseTrustedProxyCIDRs(cidrs []string) ([]netip.Prefix, error) {

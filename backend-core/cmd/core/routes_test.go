@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llm"
+	authcontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/controller"
+	llmcontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/controller"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 )
 
@@ -43,12 +43,12 @@ func documentedRoutes(t *testing.T) map[string]bool {
 
 func TestRoutesDocumentedInOpenAPI(t *testing.T) {
 	r := httpx.NewRouter(nil)
-	registerRoutes(r, controllers{
-		auth:      auth.NewController(auth.ControllerParams{}),
-		providers: llm.NewProviderController(nil, 1),
-		models:    llm.NewModelController(nil, 1),
-		roles:     llm.NewRoleController(nil, 1),
-		resolve:   llm.NewResolveController(nil),
+	registerRoutes(r, ControllerContainer{
+		AuthController:     authcontroller.NewAuthController(authcontroller.AuthControllerParams{}),
+		ProviderController: llmcontroller.NewProviderController(nil, nil, 1),
+		LLMModelController: llmcontroller.NewLLMModelController(nil, 1),
+		RoleController:     llmcontroller.NewRoleController(nil, 1),
+		ResolveController:  llmcontroller.NewResolveController(nil),
 	}, middlewares{requestTimeout: time.Second})
 	documented := documentedRoutes(t)
 	implemented := map[string]bool{}
@@ -74,12 +74,12 @@ func TestRoutesDocumentedInOpenAPI(t *testing.T) {
 
 func TestRoutes_NoProviderRedirectAndEnvelopedErrors(t *testing.T) {
 	r := httpx.NewRouter(nil)
-	registerRoutes(r, controllers{
-		auth:      auth.NewController(auth.ControllerParams{}),
-		providers: llm.NewProviderController(nil, 1),
-		models:    llm.NewModelController(nil, 1),
-		roles:     llm.NewRoleController(nil, 1),
-		resolve:   llm.NewResolveController(nil),
+	registerRoutes(r, ControllerContainer{
+		AuthController:     authcontroller.NewAuthController(authcontroller.AuthControllerParams{}),
+		ProviderController: llmcontroller.NewProviderController(nil, nil, 1),
+		LLMModelController: llmcontroller.NewLLMModelController(nil, 1),
+		RoleController:     llmcontroller.NewRoleController(nil, 1),
+		ResolveController:  llmcontroller.NewResolveController(nil),
 	}, middlewares{requestTimeout: time.Second})
 	for _, tc := range []struct{ method, path, code, body string }{
 		{http.MethodPost, "/api/v1/providers", "UNAUTHENTICATED", `"code":"UNAUTHENTICATED"`},

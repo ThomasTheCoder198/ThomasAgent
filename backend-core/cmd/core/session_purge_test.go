@@ -10,23 +10,25 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
-
 	"github.com/stretchr/testify/require"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth"
+
+	authrepository "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
+	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
 func TestSessionPurgeJobDeletesExpiredRowsAndStopsOnCancellation(t *testing.T) {
 	pool := pgtest.Start(t)
-	repo := auth.NewRepository(pool)
-	user, err := repo.CreateUser(tenant.WithID(t.Context(), tenant.PlatformID), "purge@example.com", "unused-hash")
+	users := authrepository.NewUserRepo(pool)
+	sessions := authrepository.NewSessionRepo(pool, 0)
+	user, err := users.CreateUser(tenant.WithID(t.Context(), tenant.PlatformID), "purge@example.com", "unused-hash")
 	require.NoError(t, err)
-	require.NoError(t, repo.CreateSession(tenant.WithID(t.Context(), tenant.PlatformID), user.ID, []byte("expired-job-session"), "csrf", time.Now().Add(-time.Hour)))
-	service := auth.NewService(repo, pool, config.AuthConfig{}, time.Now)
+	require.NoError(t, sessions.CreateSession(tenant.WithID(t.Context(), tenant.PlatformID), user.ID, []byte("expired-job-session"), "csrf", time.Now().Add(-time.Hour)))
+	service := authservice.NewAuthService(users, sessions, pool, config.AuthConfig{}, time.Now)
 	app := coreRuntime{cfg: config.Config{Auth: config.AuthConfig{SessionPurgeInterval: 10 * time.Millisecond}}, log: slog.New(slog.NewJSONHandler(io.Discard, nil))}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -47,15 +49,16 @@ func TestSessionPurgeJobDeletesExpiredRowsAndStopsOnCancellation(t *testing.T) {
 
 func TestSessionPurgeJobDeletesExpiredSessionsAcrossTenants(t *testing.T) {
 	pool := pgtest.Start(t)
-	repo := auth.NewRepository(pool)
+	users := authrepository.NewUserRepo(pool)
+	sessions := authrepository.NewSessionRepo(pool, 0)
 	for _, tenantID := range []string{tenant.PlatformID, "other"} {
 		ctx := tenant.WithID(t.Context(), tenantID)
-		user, err := repo.CreateUser(ctx, "purge@example.com", "unused-hash")
+		user, err := users.CreateUser(ctx, "purge@example.com", "unused-hash")
 		require.NoError(t, err)
-		require.NoError(t, repo.CreateSession(ctx, user.ID, []byte(tenantID+"-expired"), "csrf", time.Now().Add(-time.Hour)))
-		require.NoError(t, repo.CreateSession(ctx, user.ID, []byte(tenantID+"-active"), "csrf", time.Now().Add(time.Hour)))
+		require.NoError(t, sessions.CreateSession(ctx, user.ID, []byte(tenantID+"-expired"), "csrf", time.Now().Add(-time.Hour)))
+		require.NoError(t, sessions.CreateSession(ctx, user.ID, []byte(tenantID+"-active"), "csrf", time.Now().Add(time.Hour)))
 	}
-	service := auth.NewService(repo, pool, config.AuthConfig{}, time.Now)
+	service := authservice.NewAuthService(users, sessions, pool, config.AuthConfig{}, time.Now)
 	app := coreRuntime{log: slog.New(slog.NewJSONHandler(io.Discard, nil))}
 	app.runSessionPurge(t.Context(), service)
 	var expired, active int
@@ -66,7 +69,7 @@ func TestSessionPurgeJobDeletesExpiredSessionsAcrossTenants(t *testing.T) {
 
 func TestSessionPurgeLogsCarryJobRequestID(t *testing.T) {
 	pool := pgtest.Start(t)
-	service := auth.NewService(auth.NewRepository(pool), pool, config.AuthConfig{}, time.Now)
+	service := authservice.NewAuthService(authrepository.NewUserRepo(pool), authrepository.NewSessionRepo(pool, 0), pool, config.AuthConfig{}, time.Now)
 	var output bytes.Buffer
 	log, err := logging.NewLogger(&output, "info", "core-test", "test", nil)
 	require.NoError(t, err)

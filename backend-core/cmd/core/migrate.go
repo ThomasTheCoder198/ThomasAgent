@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
-
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/migrations"
 )

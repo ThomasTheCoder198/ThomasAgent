@@ -10,6 +10,7 @@ SQL migrations. Business queries remain in their consuming modules.
 - `Up`, `Down` define supported migration directions.
 - `MigrationStatuses(ctx, url, fsys)` returns goose migration versions, source paths, and states for callers to inspect or display.
 - `DBTX` supplies the query methods shared by pgx pools and transactions.
+- `WithTransaction(ctx, db, fn)` runs a service step in one transaction: commit on success, rollback otherwise, errors normalized to the catalog.
 - `IsUniqueViolation` and `IsForeignKeyViolation` recognize wrapped Postgres constraint errors, including delete restrictions.
 - `pgtest.Start(t)` supplies a disposable, fully migrated pool to consuming modules' tests.
 

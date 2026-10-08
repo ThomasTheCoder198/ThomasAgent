@@ -18,7 +18,8 @@ mixing it with HTTP, migration or worker logic.
 | `command.go`      | `runProcess` handles signals and exit errors; `executeCommand` validates and dispatches the CLI command.                                                            |
 | `runtime.go`  | `newCoreRuntime` assembles config, logger and telemetry; `shutdownTelemetry` bounds cleanup by the configured timeout.                                              |
 | `connections.go`  | `openPostgres` and `openRedis` open clients; `recordDependencyFailure` sanitizes diagnostics and logs failures once.                                                |
-| `server.go`       | `serveHTTP` wires services and controllers, starts the API and shuts HTTP down; `readinessChecks` supplies dependency pings.                                                  |
+| `container.go`    | Composition root, one container per layer like gim-core: `ClientContainer` → `RepositoryContainer` → `ServiceContainer` → `ControllerContainer`. |
+| `server.go`       | `serveHTTP` opens Postgres and Redis, builds dependencies, starts the HTTP server and its background jobs. |
 | `routes.go`       | Registers every path, method and per-route middleware on the Gin engine; ordinary routes carry request deadlines and future stream routes mount separately. |
 | `session_purge.go` | Runs the scheduled cross-tenant expired-session purge with its own job request id. |
 | `migrate.go`      | `applyMigrations` applies or rolls back migrations; `reportMigrationStatus` logs each returned status row.                                                          |

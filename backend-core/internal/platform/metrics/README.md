@@ -10,12 +10,12 @@ metrics are served (`cmd/core`) or when they are recorded (the instrumented pack
 - `Handler()` — the internal `/metrics` listener (OpenMetrics, so exemplars survive).
 - `RegisterJobStream(stream)` — consumer startup emits the DLQ counter at zero before failures occur.
 - `ObserveHTTP`, `ObserveOutbound`, `ObserveJob`, `SetOutboxBacklog`, `ObserveLLMCall` — called through small
-  interfaces declared by `httpx`, `llm`, `outbound`, `jobs` and `calllog`.
+  interfaces declared by `httpx`, `llmprovider`, `outbound`, `jobs` and `calllog`.
 
 ## Dependencies
 - Uses: `github.com/prometheus/client_golang` v1.24.1. Must not import `config` (config imports outbound, which uses
   this package's outcome constants).
-- Used by: `cmd/core`, `httpx`, `llm`, `outbound`, `jobs`, `calllog`.
+- Used by: `cmd/core`, `httpx`, `llmprovider`, `outbound`, `jobs`, `calllog`.
 
 ## Run & test
 ```bash

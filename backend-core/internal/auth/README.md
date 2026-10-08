@@ -7,35 +7,34 @@ M0.2 data belongs to the [Platform tenant](../../../docs/glossary.md) (`default`
 
 ## Entry points
 
-| File | What it holds |
-|---|---|
-| `user.go` | `User`, `NormalizeEmail` |
-| `session.go` | `Session`, `IssuedSession`, cookie and header names (`SessionCookie`, `CSRFCookie`, `CSRFHeader`), token hashing |
-| `session_cookies.go` | Setting and clearing the two session cookies |
-| `service.go` | `Service`: `NewService`, `EnsureOwner`, `Login`, `Authenticate`, `Logout`, session purge |
-| `password.go` | Argon2id hashing under a concurrency budget, plus the timing decoy |
-| `repository.go` | `Repository`: SQL for users and sessions |
-| `controller.go` | `Controller`: `HandleLogin`, `HandleLogout`, `HandleMe`, their JSON types, and cookies |
-| `client_ip.go` | Trusted-proxy client IP used by the login limiter |
-| `login_limiter.go` | `LoginLimiter`: Redis attempt budgets per email+IP, email and IP |
-| `session_middleware.go` | `RequireSession`, `UserFromContext` |
-| `service_token_middleware.go` | `RequireServiceToken` for `/internal/*` routes |
+The domain follows the same layers as every core domain; a request flows `controller → middleware/service → repository`, and `model` and `dto` are plain types.
 
-`cmd/core/routes.go` registers the paths. `PurgeExpiredSessionsAcrossTenants` is the explicit system-job entry point; `PurgeExpiredSessions` stays tenant-scoped for request use.
+| Folder | Holds | Example |
+|---|---|---|
+| `controller/` | HTTP handlers only, plus the trusted-proxy client IP they pass to the limiter | `AuthController.HandleLogin`, `HandleLogout`, `HandleMe` |
+| `middleware/` | Gin middleware that guards other routes | `RequireSession`, `UserFromContext`, `RequireServiceToken` |
+| `dto/` | JSON request and response types | `LoginRequest`, `LoginResponse`, `MeResponse` |
+| `service/` | Business rules and transactions (`AuthService` interface + `AuthServiceImpl`), Argon2id hashing, token generation | `EnsureOwner`, `Login`, `Authenticate`, `Logout` |
+| `repository/` | SQL only (`UserRepo`, `SessionRepo`) | `FindSessionAcrossTenants`, `PurgeExpiredSessionsAcrossTenants` |
+| `limiter/` | Redis login budgets per email+IP, email and IP | `LoginLimiter.Check`, `ResetLogin` |
+| `model/` | Domain types and rules | `User`, `Session`, `IssuedSession`, `HashSessionToken` |
+| `util/` | Cookie names and set/clear helpers shared by controller and middleware | `SessionCookie`, `CSRFHeader`, `ClearSessionCookies` |
+
+`cmd/core/container.go` builds it; `cmd/core/routes.go` registers the paths. `PurgeExpiredSessionsAcrossTenants` is the explicit system-job entry point; `PurgeExpiredSessions` stays tenant-scoped for request use.
 
 ## Dependencies
 
 - Uses: Postgres, Redis, typed `config.AuthConfig`, Argon2id, UUIDs, named catalog errors, `platform/audit`, Gin and shared httpx boundaries.
-- Used by: core HTTP routing, the periodic expired-session purge job, and the `llm` HTTP tests (real login).
+- Used by: core HTTP routing, the periodic expired-session purge job, and the provider HTTP integration test (real login).
 
 ## Run & test
 
 ```bash
 cd backend-core
-TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/auth -count=1
+TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/auth/... ./tests/integration -count=1
 ```
 
-Tests use `pgtest.Start`, migrated Docker Postgres and Redis, with Ryuk disabled on this host. Test files mirror the source files (`service_test.go`, `repository_test.go`, `login_limiter_test.go`, ...); `login_rate_limit_test.go` covers limiter behaviour through the HTTP login, and `session_middleware_test.go` includes the real HTTP stream gates (access logging, session cookies and CSRF checks, incremental frames, disconnect cancellation, committed-panic recovery).
+Unit tests sit next to the code they cover and use `pgtest.Start` (migrated Docker Postgres) or a Redis container, with Ryuk disabled on this host. The HTTP flows (login, rate limiting through login, session and CSRF, event-stream gates, cookie clearing) live in `tests/integration/auth_*_test.go`.
 
 ## Conventions
 

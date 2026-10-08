@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-
 	"github.com/stretchr/testify/require"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
@@ -48,13 +47,15 @@ func TestAPI_GeneratedPostmanCollection(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, redisClient.Close()) })
 	cipher, err := vault.NewCipher(cfg.Vault.KeyID, cfg.Vault.MasterKey)
 	require.NoError(t, err)
-	svc, err := app.newServices(t.Context(), pool, cipher)
+	clients, err := app.initClientContainer()
 	require.NoError(t, err)
-	ctrl, err := app.newControllers(svc, redisClient)
+	services, err := app.initServiceContainer(t.Context(), pool, cipher, clients, app.initRepositoryContainer(pool))
+	require.NoError(t, err)
+	controllers, err := app.initControllerContainer(services, redisClient)
 	require.NoError(t, err)
 	gin.SetMode(gin.ReleaseMode)
 	router := httpx.NewRouter(httpx.NewSlogErrorLogger(app.log))
-	registerRoutes(router, ctrl, middlewares{sessions: svc.auth, cookieSecure: cfg.Auth.CookieSecure, serviceToken: cfg.ServiceToken, health: app.readinessChecks(pool, redisClient), requestTimeout: cfg.HTTP.RequestTimeout})
+	registerRoutes(router, controllers, middlewares{authService: services.AuthService, cookieSecure: cfg.Auth.CookieSecure, serviceToken: cfg.ServiceToken, health: app.readinessChecks(pool, redisClient), requestTimeout: cfg.HTTP.RequestTimeout})
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 	runCollection(t, server.URL)

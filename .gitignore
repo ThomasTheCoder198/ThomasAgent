@@ -64,3 +64,6 @@ DESIGN.md
 
 # Postman generator scratch output
 contracts/postman/.raw.json
+
+# Go build output (go build ./cmd/... writes core.exe on Windows)
+*.exe

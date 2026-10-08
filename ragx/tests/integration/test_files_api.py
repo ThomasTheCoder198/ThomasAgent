@@ -146,6 +146,25 @@ async def test_idempotency_key_replays_the_first_result(
     assert invalid.json()["error"]["code"] == "VALIDATION_FAILED"
 
 
+async def test_idempotency_key_of_a_deleted_file_uploads_again(
+    pool: Pool, minio_config: dict[str, Any], minio: Minio
+) -> None:
+    key = "upload-key-deleted"
+    async with api_client(pool, minio_config=minio_config) as (client, app):
+        kb_id = await _kb(client, app)
+        first = await _upload(client, kb_id, "gone.txt", b"gone", **{"Idempotency-Key": key})
+        file_id = first.json()["data"]["id"]
+        deleted = await client.delete(
+            f"/v1/knowledge-bases/{kb_id}/files/{file_id}", headers=bearer(ORG, "kb:write")
+        )
+        again = await _upload(client, kb_id, "gone.txt", b"gone", **{"Idempotency-Key": key})
+        replay = await _upload(client, kb_id, "gone.txt", b"gone", **{"Idempotency-Key": key})
+    assert (first.status_code, deleted.status_code, again.status_code) == (201, 204, 201)
+    assert again.json()["data"]["id"] != file_id
+    # The key now belongs to the new file, so a retry replays it instead of failing.
+    assert (replay.status_code, replay.json()["data"]["id"]) == (200, again.json()["data"]["id"])
+
+
 async def test_idempotency_key_binds_a_duplicate_content_result(
     pool: Pool, minio_config: dict[str, Any], minio: Minio
 ) -> None:

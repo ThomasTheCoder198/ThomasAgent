@@ -140,6 +140,13 @@ async def remembered_file_id(conn: Connection, org_id: str, key: str, ttl_second
     return row["file_id"] if row else None
 
 
+async def forget_file_id(conn: Connection, org_id: str, key: str) -> None:
+    await conn.execute(
+        b"DELETE FROM idempotency_keys WHERE org_id = %s AND operation = %s AND key = %s",
+        (org_id, OPERATION_UPLOAD, key),
+    )
+
+
 async def remember_file_id(conn: Connection, org_id: str, key: str, file_id: UUID) -> bool:
     row = await (
         await conn.execute(

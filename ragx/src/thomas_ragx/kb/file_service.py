@@ -91,7 +91,11 @@ class FileService:
         if file_id is None:
             return None
         file = await files.get_any_file(conn, caller.org_id, file_id)
-        if file is None or file.kb_id != kb_id:
+        if file is None:
+            # The file was deleted since: the key has nothing left to replay, so this upload starts fresh.
+            await files.forget_file_id(conn, caller.org_id, key)
+            return None
+        if file.kb_id != kb_id:
             raise AppError(ErrorCode.CONFLICT)
         return file
 

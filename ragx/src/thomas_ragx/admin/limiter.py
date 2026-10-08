@@ -35,11 +35,20 @@ class LoginLimiter:
             raise AppError(ErrorCode.RATE_LIMITED)
 
     async def record_failure(self, email: str, ip: str) -> None:
-        async with self._redis.pipeline(transaction=True) as pipe:
-            for key in _keys(email, ip):
-                pipe.incr(key)
-                pipe.expire(key, self._window, nx=True)
-            await pipe.execute()
+        try:
+            async with self._redis.pipeline(transaction=True) as pipe:
+                for key in _keys(email, ip):
+                    pipe.incr(key)
+                    pipe.expire(key, self._window, nx=True)
+                await pipe.execute()
+        except RedisError as exc:
+            # An uncounted failure is a free attempt, so this fails closed like check().
+            log.error("login limiter unavailable", error_type=type(exc).__name__)  # noqa: TRY400
+            raise AppError(ErrorCode.PROVIDER_UNAVAILABLE) from None
 
     async def reset(self, email: str, ip: str) -> None:
-        await self._redis.delete(*_keys(email, ip))
+        try:
+            await self._redis.delete(*_keys(email, ip))
+        except RedisError as exc:
+            # The password was correct and the counters expire on their own; refusing would only add a 500.
+            log.warning("login limiter reset failed", error_type=type(exc).__name__)

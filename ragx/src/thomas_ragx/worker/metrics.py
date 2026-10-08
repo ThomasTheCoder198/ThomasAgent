@@ -3,7 +3,11 @@ from typing import Final
 
 from opentelemetry.metrics import Meter
 from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import ConsoleMetricExporter, PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics.export import (
+    ConsoleMetricExporter,
+    MetricsData,
+    PeriodicExportingMetricReader,
+)
 from opentelemetry.sdk.metrics.view import ExplicitBucketHistogramAggregation, View
 from opentelemetry.sdk.resources import Resource
 
@@ -49,10 +53,15 @@ class WorkerMetrics:
             self._relay_rows.add(rows)
 
 
+def _one_line(data: MetricsData) -> str:
+    # The SDK default is indented JSON; stdout carries one log record per line, so keep exports on one line.
+    return data.to_json(indent=None) + "\n"
+
+
 def configure_worker_metrics(config: Config) -> tuple[MeterProvider, WorkerMetrics]:
     # The worker has no HTTP server; periodic stdout export makes metrics visible in container logs.
     reader = PeriodicExportingMetricReader(
-        ConsoleMetricExporter(out=sys.stdout),
+        ConsoleMetricExporter(out=sys.stdout, formatter=_one_line),
         export_interval_millis=config.worker_metrics_export_interval_milliseconds,
     )
     provider = MeterProvider(

@@ -225,4 +225,5 @@ func setIdentityEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("CORE_VAULT_MASTER_KEY", testVaultMasterKey)
 	t.Setenv("CORE_SERVICE_TOKEN", "test-service-token-with-at-least-32-characters")
+	t.Setenv("CORE_AUTH_LOGIN_LIMITER_KEY", "test-login-limiter-key-with-at-least-32-characters")
 }

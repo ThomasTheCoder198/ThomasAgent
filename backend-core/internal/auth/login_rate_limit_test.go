@@ -84,12 +84,13 @@ func TestLogin_IPBudgetBlocksEmailSpray(t *testing.T) {
 	t.Setenv("CORE_REDIS_URL", "redis://unused")
 	t.Setenv("CORE_VAULT_MASTER_KEY", "unused")
 	t.Setenv("CORE_SERVICE_TOKEN", "0123456789abcdef0123456789abcdef")
+	t.Setenv("CORE_AUTH_LOGIN_LIMITER_KEY", "fedcba9876543210fedcba9876543210")
 	t.Setenv("CORE_AUTH_LOGIN_IP_MAX_ATTEMPTS", "3")
 	cfg, err := config.Load()
 	require.NoError(t, err)
 	service, _ := newTestService(t)
 	router := httpx.NewRouter(nil)
-	mountAuthForTest(router, ControllerParams{Service: service, Limiter: NewLoginLimiter(startRedis(t), cfg.Auth, []byte(cfg.ServiceToken))})
+	mountAuthForTest(router, ControllerParams{Service: service, Limiter: NewLoginLimiter(startRedis(t), cfg.Auth, []byte(cfg.Auth.LoginLimiterKey))})
 	for index := range 3 {
 		require.Equal(t, http.StatusUnauthorized, attemptFrom(router, fmt.Sprintf("spray%d@example.com", index), "192.0.2.1:9000", "").Code)
 	}

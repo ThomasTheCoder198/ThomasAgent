@@ -10,6 +10,7 @@ import (
 func setRequired(t *testing.T) {
 	t.Helper()
 	t.Setenv("CORE_SERVICE_TOKEN", "test-service-token-with-at-least-32-characters")
+	t.Setenv("CORE_AUTH_LOGIN_LIMITER_KEY", "test-login-limiter-key-with-at-least-32-characters")
 	t.Setenv("CORE_VAULT_MASTER_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	t.Setenv("CORE_DATABASE_URL", "postgres://u:p@localhost:5432/thomas")
 	t.Setenv("CORE_REDIS_URL", "redis://localhost:6379/0")
@@ -169,6 +170,23 @@ func TestLoad_RejectsWeakServiceTokens(t *testing.T) {
 		require.ErrorContains(t, err, "CORE_SERVICE_TOKEN")
 	}
 }
+func TestLoad_RejectsWeakOrSharedLoginLimiterKeys(t *testing.T) {
+	for _, test := range []struct{ name, environment, key, wantError string }{
+		{"missing", "dev", "", "CORE_AUTH_LOGIN_LIMITER_KEY"},
+		{"short", "dev", "too-short", "at least 32 characters"},
+		{"placeholder outside dev", "prod", "change-me-with-a-sufficiently-long-secret-value", "change-me"},
+		{"same as service token", "dev", "test-service-token-with-at-least-32-characters", "must differ from CORE_SERVICE_TOKEN"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setRequired(t)
+			t.Setenv("CORE_ENV", test.environment)
+			t.Setenv("CORE_AUTH_LOGIN_LIMITER_KEY", test.key)
+			_, err := Load()
+			require.ErrorContains(t, err, test.wantError)
+		})
+	}
+}
+
 func TestLoad_AuthOverrides(t *testing.T) {
 	setRequired(t)
 	t.Setenv("CORE_AUTH_OWNER_EMAIL", "owner@example.com")
@@ -181,7 +199,7 @@ func TestLoad_AuthOverrides(t *testing.T) {
 	t.Setenv("CORE_AUTH_MIN_PASSWORD_LENGTH", "14")
 	cfg, err := Load()
 	require.NoError(t, err)
-	require.Equal(t, AuthConfig{OwnerEmail: "owner@example.com", OwnerPassword: "test-owner-password", SessionTTL: 2 * time.Hour, CookieSecure: true, LoginMaxAttempts: 4, LoginWindow: 5 * time.Minute, MinPasswordLength: 14, LoginEmailMaxAttempts: 20, LoginIPMaxAttempts: 7, SessionPurgeInterval: time.Hour, SessionTouchInterval: 5 * time.Minute, PasswordHash: PasswordHashConfig{Iterations: 2, MemoryKiB: 65536, MaxConcurrency: 4, Parallelism: 1, SaltLength: 16, KeyLength: 32}}, cfg.Auth)
+	require.Equal(t, AuthConfig{OwnerEmail: "owner@example.com", OwnerPassword: "test-owner-password", SessionTTL: 2 * time.Hour, CookieSecure: true, LoginMaxAttempts: 4, LoginWindow: 5 * time.Minute, LoginLimiterKey: "test-login-limiter-key-with-at-least-32-characters", MinPasswordLength: 14, LoginEmailMaxAttempts: 20, LoginIPMaxAttempts: 7, SessionPurgeInterval: time.Hour, SessionTouchInterval: 5 * time.Minute, PasswordHash: PasswordHashConfig{Iterations: 2, MemoryKiB: 65536, MaxConcurrency: 4, Parallelism: 1, SaltLength: 16, KeyLength: 32}}, cfg.Auth)
 }
 
 func TestLoad_RejectsWeakPasswordHashParameters(t *testing.T) {

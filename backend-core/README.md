@@ -55,7 +55,7 @@ derive `tenant_id` from trusted context. Owner bootstrap is idempotent.
 
 `CORE_VAULT_MASTER_KEY` is required and must decode to 32 bytes; `serve` validates
 it before opening dependencies or listening. Keep the key stable. All config-loading
-commands also require `CORE_SERVICE_TOKEN` of at least 32 characters; `change-me*` values are rejected outside dev. Set `CORE_AUTH_OWNER_EMAIL` and
+commands also require `CORE_SERVICE_TOKEN` and a different `CORE_AUTH_LOGIN_LIMITER_KEY`, each of at least 32 characters; `change-me*` values are rejected outside dev. Set `CORE_AUTH_OWNER_EMAIL` and
 `CORE_AUTH_OWNER_PASSWORD` (at least 12 characters) to bootstrap the owner.
 Session/cookie/login settings are documented in [config](internal/platform/config/README.md).
 

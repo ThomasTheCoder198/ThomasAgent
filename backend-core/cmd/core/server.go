@@ -104,7 +104,7 @@ func (rt *coreRuntime) newControllers(domainServices services, redisClient *redi
 	return controllers{
 		auth: auth.NewController(auth.ControllerParams{
 			Service:            domainServices.auth,
-			Limiter:            auth.NewLoginLimiter(redisClient, rt.cfg.Auth, []byte(rt.cfg.ServiceToken)),
+			Limiter:            auth.NewLoginLimiter(redisClient, rt.cfg.Auth, []byte(rt.cfg.Auth.LoginLimiterKey)),
 			CookieSecure:       rt.cfg.Auth.CookieSecure,
 			TrustedProxyHeader: rt.cfg.Auth.TrustedProxyHeader,
 			TrustedProxyCIDRs:  proxyNetworks,

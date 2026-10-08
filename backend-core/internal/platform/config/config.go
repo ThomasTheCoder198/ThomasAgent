@@ -142,6 +142,7 @@ type AuthConfig struct {
 	LoginEmailMaxAttempts int                `env:"LOGIN_EMAIL_MAX_ATTEMPTS"`
 	LoginIPMaxAttempts    int                `env:"LOGIN_IP_MAX_ATTEMPTS"`
 	LoginWindow           time.Duration      `env:"LOGIN_WINDOW"`
+	LoginLimiterKey       string             `env:"LOGIN_LIMITER_KEY,required,notEmpty"`
 	MinPasswordLength     int                `env:"MIN_PASSWORD_LENGTH"`
 	TrustedProxyHeader    string             `env:"TRUSTED_PROXY_HEADER"`
 	TrustedProxyCIDRs     []string           `env:"TRUSTED_PROXY_CIDRS" envSeparator:","`
@@ -351,6 +352,7 @@ func (c Config) validate() error {
 	errs = append(errs, c.Auth.validate()...)
 	errs = append(errs, c.App.validate()...)
 	errs = append(errs, c.validateServiceToken()...)
+	errs = append(errs, c.validateLoginLimiterKey()...)
 	errs = append(errs, c.validateProvider()...)
 	errs = append(errs, c.validateLogsEndpoint()...)
 	return errors.Join(errs...)
@@ -363,6 +365,23 @@ func (c Config) validateServiceToken() []error {
 	}
 	if !strings.EqualFold(c.Environment, "dev") && strings.HasPrefix(strings.ToLower(c.ServiceToken), "change-me") {
 		errs = append(errs, errors.New("CORE_SERVICE_TOKEN must not use a change-me value outside dev"))
+	}
+	return errs
+}
+
+// validateLoginLimiterKey keeps the limiter's HMAC key separate from the service token,
+// so leaking hashed limiter identities never helps forge internal calls and vice versa.
+func (c Config) validateLoginLimiterKey() []error {
+	var errs []error
+	key := c.Auth.LoginLimiterKey
+	if len(key) < MinimumServiceTokenLength {
+		errs = append(errs, errors.New("CORE_AUTH_LOGIN_LIMITER_KEY must be at least 32 characters"))
+	}
+	if !strings.EqualFold(c.Environment, "dev") && strings.HasPrefix(strings.ToLower(key), "change-me") {
+		errs = append(errs, errors.New("CORE_AUTH_LOGIN_LIMITER_KEY must not use a change-me value outside dev"))
+	}
+	if key != "" && key == c.ServiceToken {
+		errs = append(errs, errors.New("CORE_AUTH_LOGIN_LIMITER_KEY must differ from CORE_SERVICE_TOKEN"))
 	}
 	return errs
 }

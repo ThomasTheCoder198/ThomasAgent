@@ -18,7 +18,6 @@ import (
 const (
 	maxLoginBodyBytes = 4 << 10
 	headerRetryAfter  = "Retry-After"
-	cookiePath        = "/"
 )
 
 type LoginRequest struct {
@@ -117,7 +116,7 @@ func (h *Controller) HandleLogin(c *gin.Context) {
 		httpx.Fail(c, err)
 		return
 	}
-	h.setSessionCookies(res, issued)
+	setSessionCookies(res, issued, h.cookieSecure)
 	httpx.Success(c, http.StatusOK, newLoginResponse(user, issued))
 }
 
@@ -143,7 +142,7 @@ func (h *Controller) HandleLogout(c *gin.Context) {
 		httpx.Fail(c, err)
 		return
 	}
-	h.clearSessionCookies(c.Writer)
+	clearSessionCookies(c.Writer, h.cookieSecure)
 	httpx.Success(c, http.StatusOK, LogoutResponse{LoggedOut: true})
 }
 
@@ -151,38 +150,4 @@ func (h *Controller) HandleMe(c *gin.Context) {
 	c.Writer.Header().Set(httpx.HeaderCacheControl, httpx.CacheControlNoStore)
 	user, _ := UserFromContext(c.Request.Context())
 	httpx.Success(c, http.StatusOK, MeResponse{User: newUserResponse(user)})
-}
-
-func (h *Controller) setSessionCookies(res http.ResponseWriter, session IssuedSession) {
-	http.SetCookie(res, &http.Cookie{
-		Name:     SessionCookie,
-		Value:    session.Token,
-		Path:     cookiePath,
-		Expires:  session.ExpiresAt,
-		HttpOnly: true,
-		Secure:   h.cookieSecure,
-		SameSite: http.SameSiteLaxMode,
-	})
-	http.SetCookie(res, &http.Cookie{
-		Name:     CSRFCookie,
-		Value:    session.CSRFToken,
-		Path:     cookiePath,
-		Expires:  session.ExpiresAt,
-		Secure:   h.cookieSecure,
-		SameSite: http.SameSiteLaxMode,
-	})
-}
-
-func (h *Controller) clearSessionCookies(res http.ResponseWriter) {
-	for _, name := range []string{SessionCookie, CSRFCookie} {
-		http.SetCookie(res, &http.Cookie{
-			Name:     name,
-			Value:    "",
-			Path:     cookiePath,
-			MaxAge:   -1,
-			HttpOnly: name == SessionCookie,
-			Secure:   h.cookieSecure,
-			SameSite: http.SameSiteLaxMode,
-		})
-	}
 }

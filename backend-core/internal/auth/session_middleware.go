@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/subtle"
+	stderrors "errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -25,8 +26,9 @@ func UserFromContext(ctx context.Context) (User, bool) {
 }
 
 // RequireSession authenticates the session cookie, checks the CSRF header on unsafe methods,
-// and puts the session's tenant and user into the request context.
-func RequireSession(authenticator sessionAuthenticator) gin.HandlerFunc {
+// and puts the session's tenant and user into the request context. A cookie that no longer
+// matches a live session (expired, purged or logged out elsewhere) is cleared in the response.
+func RequireSession(authenticator sessionAuthenticator, cookieSecure bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		req := c.Request
 		c.Writer.Header().Set(httpx.HeaderCacheControl, httpx.CacheControlNoStore)
@@ -37,6 +39,9 @@ func RequireSession(authenticator sessionAuthenticator) gin.HandlerFunc {
 		}
 		user, session, err := authenticator.Authenticate(req.Context(), cookie.Value)
 		if err != nil {
+			if isStaleSession(err) {
+				clearSessionCookies(c.Writer, cookieSecure)
+			}
 			httpx.Fail(c, err)
 			return
 		}
@@ -48,6 +53,10 @@ func RequireSession(authenticator sessionAuthenticator) gin.HandlerFunc {
 		c.Request = req.WithContext(context.WithValue(ctx, userContextKey{}, user))
 		c.Next()
 	}
+}
+
+func isStaleSession(err error) bool {
+	return stderrors.Is(err, errors.ErrAuthSessionExpired) || stderrors.Is(err, errors.ErrUnauthenticated)
 }
 
 func isSafeMethod(method string) bool {

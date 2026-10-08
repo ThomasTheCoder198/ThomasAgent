@@ -70,6 +70,7 @@ func (rt *coreRuntime) serveHTTP(ctx context.Context) error {
 	engine := httpx.NewRouter(httpx.NewSlogErrorLogger(rt.log), httpx.LogAccess(rt.log), httpx.RecordMetrics(rt.metrics))
 	registerRoutes(engine, domainControllers, middlewares{
 		sessions:       domainServices.auth,
+		cookieSecure:   rt.cfg.Auth.CookieSecure,
 		serviceToken:   rt.cfg.ServiceToken,
 		health:         rt.readinessChecks(pool, redisClient),
 		requestTimeout: rt.cfg.HTTP.RequestTimeout,

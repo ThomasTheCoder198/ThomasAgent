@@ -11,18 +11,18 @@ import (
 
 type middlewares struct {
 	sessions       *auth.Service
+	cookieSecure   bool
 	serviceToken   string
 	health         map[string]httpx.ReadinessDependency
 	requestTimeout time.Duration
 }
 
-// registerRoutes is the single list of HTTP paths; contracts/openapi/core.v1.yaml must match it.
 func registerRoutes(engine *gin.Engine, c controllers, mw middlewares) {
 	httpx.MountHealth(engine, mw.health)
 	api := engine.Group("", httpx.LimitRequestDuration(mw.requestTimeout))
 	api.POST("/api/v1/auth/login", c.auth.HandleLogin)
 
-	session := api.Group("", auth.RequireSession(mw.sessions))
+	session := api.Group("", auth.RequireSession(mw.sessions, mw.cookieSecure))
 	session.POST("/api/v1/auth/logout", c.auth.HandleLogout)
 	session.GET("/api/v1/auth/me", c.auth.HandleMe)
 	session.GET("/api/v1/providers", c.providers.HandleListProviders)

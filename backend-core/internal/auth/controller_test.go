@@ -38,7 +38,7 @@ func startRedis(t *testing.T) *redis.Client {
 func mountAuthForTest(r *gin.Engine, p ControllerParams) {
 	ctrl := NewController(p)
 	r.POST("/api/v1/auth/login", ctrl.HandleLogin)
-	protected := r.Group("", RequireSession(p.Service.(sessionAuthenticator)))
+	protected := r.Group("", RequireSession(p.Service.(sessionAuthenticator), p.CookieSecure))
 	protected.POST("/api/v1/auth/logout", ctrl.HandleLogout)
 	protected.GET("/api/v1/auth/me", ctrl.HandleMe)
 }
@@ -51,7 +51,7 @@ func newServer(t *testing.T, maxAttempts int) (http.Handler, *clock) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	r := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
 	mountAuthForTest(r, ControllerParams{Service: svc, Limiter: newTestLimiter(startRedis(t), maxAttempts)})
-	pr := r.Group("", RequireSession(svc))
+	pr := r.Group("", RequireSession(svc, false))
 	pr.POST("/api/v1/things", wrapAuthHTTP(func(w http.ResponseWriter, req *http.Request) {
 		httpx.WriteSuccess(w, req, http.StatusCreated, map[string]bool{"ok": true})
 	}))

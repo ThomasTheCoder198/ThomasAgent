@@ -44,7 +44,7 @@ func newAuthenticatedStream(t *testing.T, handler http.HandlerFunc) (*http.Respo
 	logger := slog.New(slog.NewJSONHandler(logs, nil))
 	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
 	mountAuthForTest(router, ControllerParams{Service: svc, Limiter: newTestLimiter(startRedis(t), 10)})
-	router.Group("", RequireSession(svc)).POST("/stream", wrapAuthHTTP(handler))
+	router.Group("", RequireSession(svc, false)).POST("/stream", wrapAuthHTTP(handler))
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 	jar, err := cookiejar.New(nil)
@@ -108,7 +108,7 @@ func TestSessionAndCSRF_NonReadingClientBoundsShutdown(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
 	result := make(chan error, 1)
-	pr := router.Group("", RequireSession(svc))
+	pr := router.Group("", RequireSession(svc, false))
 	pr.POST("/stream", wrapAuthHTTP(func(w http.ResponseWriter, r *http.Request) {
 		stream, err := httpx.NewEventStream(w, r, config.HTTPConfig{EventStreamHeartbeat: time.Hour, EventStreamWriteTimeout: 50 * time.Millisecond})
 		if err != nil {
@@ -188,7 +188,7 @@ func TestRequireSessionDerivesTenantFromSessionRow(t *testing.T) {
 	token := "other-session-token"
 	require.NoError(t, svc.repository.CreateSession(otherCtx, other.ID, hashSessionToken(token), "csrf", time.Now().Add(time.Hour)))
 	handler := httpx.NewRouter(nil)
-	handler.GET("/tenant-data", RequireSession(svc), wrapAuthHTTP(func(w http.ResponseWriter, r *http.Request) {
+	handler.GET("/tenant-data", RequireSession(svc, false), wrapAuthHTTP(func(w http.ResponseWriter, r *http.Request) {
 		scope, err := tenant.ID(r.Context())
 		require.NoError(t, err)
 		require.Equal(t, "other", scope)

@@ -11,6 +11,7 @@ M0.2 data belongs to the [Platform tenant](../../../docs/glossary.md) (`default`
 |---|---|
 | `user.go` | `User`, `NormalizeEmail` |
 | `session.go` | `Session`, `IssuedSession`, cookie and header names (`SessionCookie`, `CSRFCookie`, `CSRFHeader`), token hashing |
+| `session_cookies.go` | Setting and clearing the two session cookies |
 | `service.go` | `Service`: `NewService`, `EnsureOwner`, `Login`, `Authenticate`, `Logout`, session purge |
 | `password.go` | Argon2id hashing under a concurrency budget, plus the timing decoy |
 | `repository.go` | `Repository`: SQL for users and sessions |
@@ -40,7 +41,7 @@ Tests use `pgtest.Start`, migrated Docker Postgres and Redis, with Ryuk disabled
 
 Passwords, raw session tokens and secrets must never enter logs, errors or audit metadata. Errors propagate to the boundary for one log and shared HTTP formatting.
 
-The browser never sends a user or tenant id. It sends the opaque `thomas_session` cookie (HttpOnly) and, on unsafe methods, `X-CSRF-Token` copied from the readable `thomas_csrf` cookie. Core stores only the SHA-256 of the session token; the session row decides user and tenant. Both cookies use Path `/`, SameSite Lax and the constructor's Secure flag. Their absolute expiry matches the session. Unsafe methods require `X-CSRF-Token` equal to the authenticated session's token with constant-time comparison; GET, HEAD and OPTIONS are safe. Logout requires CSRF, deletes the session and clears both cookies.
+The browser never sends a user or tenant id. It sends the opaque `thomas_session` cookie (HttpOnly) and, on unsafe methods, `X-CSRF-Token` copied from the readable `thomas_csrf` cookie. Core stores only the SHA-256 of the session token; the session row decides user and tenant. Both cookies use Path `/`, SameSite Lax and the constructor's Secure flag. Their absolute expiry matches the session. Unsafe methods require `X-CSRF-Token` equal to the authenticated session's token with constant-time comparison; GET, HEAD and OPTIONS are safe. Logout requires CSRF, deletes the session and clears both cookies. When a session cookie no longer matches a live session (expired, purged by the job, or logged out elsewhere), `RequireSession` also clears both cookies in its 401 response, so the frontend proxy, which only checks that `thomas_session` exists, sends the user to login instead of looping on 401s.
 
 The service token guards `/internal/*`: a `Bearer` token compared by SHA-256 digest in constant time. Success sets the platform tenant and `Cache-Control: no-store`; failure returns `INTERNAL_TOKEN_INVALID`.
 

@@ -23,11 +23,27 @@ function currentSession(req: IncomingMessage): Session | undefined {
   return undefined;
 }
 
-/** Mirrors core: every route except login needs a live session; unsafe methods also need the CSRF header. */
+function clearedSessionCookies(): string[] {
+  return [
+    cookie(SESSION_COOKIE, "", { maxAge: 0, httpOnly: true }),
+    cookie(CSRF_COOKIE, "", { maxAge: 0, httpOnly: false }),
+  ];
+}
+
+/**
+ * Mirrors core: every route except login needs a live session; unsafe methods also need the CSRF header.
+ * A session cookie that no longer matches a live session is cleared so the proxy redirects to login.
+ */
 export function guard(req: IncomingMessage, res: ServerResponse): boolean {
   const session = currentSession(req);
   if (!session) {
-    sendError(req, res, ErrorCode.UNAUTHENTICATED);
+    const sentStaleCookie = readCookies(req).has(SESSION_COOKIE);
+    sendError(
+      req,
+      res,
+      ErrorCode.UNAUTHENTICATED,
+      sentStaleCookie ? { "Set-Cookie": clearedSessionCookies() } : undefined,
+    );
     return false;
   }
   const unsafe = !["GET", "HEAD", "OPTIONS"].includes(req.method ?? "GET");
@@ -64,10 +80,5 @@ export function me(_req: IncomingMessage, res: ServerResponse) {
 export function logout(req: IncomingMessage, res: ServerResponse) {
   const token = readCookies(req).get(SESSION_COOKIE);
   if (token) sessions.delete(token);
-  sendData(res, { status: "ok" }, HTTP_OK, {
-    "Set-Cookie": [
-      cookie(SESSION_COOKIE, "", { maxAge: 0, httpOnly: true }),
-      cookie(CSRF_COOKIE, "", { maxAge: 0, httpOnly: false }),
-    ],
-  });
+  sendData(res, { status: "ok" }, HTTP_OK, { "Set-Cookie": clearedSessionCookies() });
 }

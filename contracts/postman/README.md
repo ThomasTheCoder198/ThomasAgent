@@ -37,13 +37,14 @@ task api-test
 ## Conventions
 
 Never hand-edit the collection; edit the OpenAPI or postprocessor and regenerate.
+The public model catalog folders are `LLM providers`, `LLM models`, and `LLM model roles`; their paths remain under `/api/v1`.
 The converter's random IDs/responses are removed, and optional generated filters are disabled.
 The cookie jar authenticates public requests. Login stores the CSRF token; mutations send it.
 Role assignment runs before the in-use deletion checks; logout runs last.
 Run the complete collection against an isolated backend: it assigns `chat.fast`.
 The example provider uses a denied loopback HTTP endpoint so connection/sync
 checks deterministically return 400 without calling a real external provider.
-Positive catalog/sync behavior is covered by Registry integration tests.
+Positive catalog/sync behavior is covered by LLM provider integration tests.
 Internal resolution retains its required role query and uses `serviceToken`; the runner includes it when `CORE_SERVICE_TOKEN` is supplied.
 Keep credentials out of committed environments and generated artifacts. See the parent README for environment overrides.
 

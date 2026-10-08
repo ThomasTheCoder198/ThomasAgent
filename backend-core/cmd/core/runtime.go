@@ -11,15 +11,14 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/telemetry"
 )
 
-type application struct {
-	cfg         config.Config
-	log         *slog.Logger
-	telemetry   telemetry.Telemetry
-	authService sessionPurger
-	metrics     *metrics.Metrics
+type coreRuntime struct {
+	cfg       config.Config
+	log       *slog.Logger
+	telemetry telemetry.Telemetry
+	metrics   *metrics.Metrics
 }
 
-func newApplication(ctx context.Context) (*application, error) {
+func newCoreRuntime(ctx context.Context) (*coreRuntime, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, err
@@ -32,11 +31,16 @@ func newApplication(ctx context.Context) (*application, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &application{cfg: cfg, telemetry: tel, log: log, metrics: metrics.New(cfg.Metrics.HTTPBuckets, cfg.Metrics.LLMBuckets)}, nil
+	return &coreRuntime{
+		cfg:       cfg,
+		telemetry: tel,
+		log:       log,
+		metrics:   metrics.New(cfg.Metrics.HTTPBuckets, cfg.Metrics.LLMBuckets),
+	}, nil
 }
 
-func (a *application) shutdownTelemetry() error {
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), a.cfg.ShutdownTimeout)
+func (rt *coreRuntime) shutdownTelemetry() error {
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), rt.cfg.ShutdownTimeout)
 	defer cancel()
-	return a.telemetry.Shutdown(shutdownCtx)
+	return rt.telemetry.Shutdown(shutdownCtx)
 }

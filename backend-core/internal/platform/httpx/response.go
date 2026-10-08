@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 )
@@ -39,6 +41,23 @@ type errorResponse struct {
 type ErrorLogger func(ctx context.Context, err *errors.AppError)
 
 type errorLoggerKey struct{}
+
+func Success(c *gin.Context, status int, data any) {
+	WriteSuccess(c.Writer, c.Request, status, data)
+}
+
+func Fail(c *gin.Context, err error) {
+	WriteError(c.Writer, c.Request, err)
+	c.Abort()
+}
+
+func Respond(c *gin.Context, status int, data any, err error) {
+	if err != nil {
+		Fail(c, err)
+		return
+	}
+	Success(c, status, data)
+}
 
 func withErrorLogger(ctx context.Context, l ErrorLogger) context.Context {
 	return context.WithValue(ctx, errorLoggerKey{}, l)

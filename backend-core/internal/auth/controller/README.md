@@ -1,19 +1,30 @@
-# Auth handler
+# Auth controller
 
 ## Purpose
-Owns login, logout and current-user HTTP routes and their cookie responses.
+
+Translate login, logout and current-user HTTP requests into auth service calls, cookies and response DTOs.
 
 ## Entry points
-`NewAuthHandler`, `NewAuthHandlerWithTrustedProxies`, and `Mount`.
+
+- `NewAuthController(AuthControllerParams)` builds the controller.
+- `HandleLogin`, `HandleLogout`, and `HandleMe` are registered in `cmd/core/routes.go`.
 
 ## Dependencies
-Consumes the auth service interface, login limiter, auth DTOs, middleware and shared HTTP response helpers.
+
+- Uses: auth service, limiter, DTOs, middleware constants and shared `httpx` responses.
+- Used by: `cmd/core/server.go` and `cmd/core/routes.go`.
 
 ## Run & test
-Covered by `go test ./internal/auth/...` and the generated API collection.
+
+```bash
+cd backend-core
+go test ./internal/auth/... -count=1
+```
 
 ## Conventions
-The handler reads request DTOs, returns response DTOs and logs credential failures without revealing credentials.
+
+Login derives platform tenant in request context and uses trusted-proxy settings only when injected. Credentials and limiter secrets never enter logs.
 
 ## Common failures
+
 An untrusted forwarding header cannot choose the client IP; CSRF failures use the shared error response.

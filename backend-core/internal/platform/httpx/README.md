@@ -1,24 +1,24 @@
 # httpx
 
 ## Purpose
-Owns JSON responses, request IDs and chi error boundaries.
+Owns JSON responses, request IDs and Gin error boundaries.
 Structured logger setup is injected by the application. Core has no tracing middleware.
 
 ## Entry points
 
-`RecordMetrics(HTTPMetrics)` observes method, route pattern, status and duration after routing, with the request id as exemplar; nil disables it. `NewRouter` callers install it after `LogAccess`.
+`RecordMetrics(HTTPMetrics)` observes method, route pattern, status and duration after routing, with the request id as exemplar; nil disables it. `NewRouter` callers install it after `LogAccess`. The engine uses `gin.New()` with exact paths and enveloped 404/405 responses; startup sets Gin release mode once. Gin exposes mode as package-global state; core sets it only at startup while request dependencies stay injected.
 - `DecodeJSON` requires `application/json`, rejects unknown fields, reads one size-limited JSON value and maps invalid bodies to catalog errors. Missing, malformed or other media types return `UNSUPPORTED_MEDIA_TYPE` (415); malformed JSON and unknown fields return `VALIDATION_FAILED` (400). Requiring JSON and rejecting unknown fields are breaking changes for permissive callers; JSON charset parameters remain supported.
 - `EventStream` commits SSE headers and serializes flushed data and heartbeat frames. `NewEventStream` requires typed heartbeat and positive per-write timeout settings. Deadlines also bound the initial header flush; write failures close `Done` so producers stop. Request cancellation closes `Done` independently of an in-progress heartbeat write through `context.AfterFunc`. `Close` unregisters this callback.
-- `ResponseCommitted` checks whether the status line has been sent.
+- `ResponseCommitted` checks Gin's `Written()` state and unwraps nested writers. `Success`, `Fail`, and `Respond` adapt the net/http response primitives for controllers.
 - `LimitRequestDuration` sets the context deadline for ordinary routes.
-- `NewRouter` registers assignRequestID → caller middleware → injectErrorLogger → trackCommit → recoverPanics.
+- `NewRouter` registers assignRequestID → caller middleware → injectErrorLogger → recoverPanics.
 - `WriteSuccess` serializes success data and request ID metadata.
 - `WriteError` localizes catalog errors and sanitizes server errors.
 - `logging.RequestIDFromContext` retrieves the shared request ID for callers that need it; logging receives it automatically.
 
 ## Dependencies
-- Uses: `internal/errors`, platform logging, chi v5, and `internal/platform/requestid`.
-- Used by: API handlers and the application router.
+- Uses: `internal/errors`, platform logging, Gin v1.10.0, and `internal/platform/requestid`.
+- Used by: domain controllers and the core router.
 
 ## Run & test
 ```bash
@@ -42,7 +42,7 @@ Callers must supply access logging middleware before registering routes.
 ## Common failures
 - Stream arrives all at once: a proxy or middleware is buffering — see spike S8.
 - `Send` returns `errors.ErrEventStreamClosed`: the client is gone, stop producing.
-- Middleware registration panic: supply middleware to NewRouter before adding routes.
+- A route changes to a redirect: register the exact Gin path and keep trailing-slash redirects disabled.
 - Panic after headers were sent: recovery cannot replace an already committed response.
 
 ## Health and observability
@@ -51,16 +51,16 @@ Callers must supply access logging middleware before registering routes.
 `assignRequestID` accepts `X-Request-Id` only when it matches the shared pattern (`contracts/request-id.json`);
 otherwise it generates a `req_` id and never logs the rejected value. The id is in context, in the response header,
 in `meta.requestId` and in `error.requestId`. `LogAccess` writes one line per request (`http request`) with
-`method`, `route` (chi pattern, `unmatched` when none matched), `status`, `duration_ms`, optional
+`method`, `route` (OpenAPI brace pattern, `unmatched` when none matched), `status`, `duration_ms`, optional
 `idempotency_key`, and `request_id_source`/`client_request_id_rejected` when the id was generated. Level follows
 the status: 2xx/3xx info, 4xx warn, 5xx error. `RoutePattern` exposes the same low-cardinality route to metrics.
 
 `assignRequestID` uses `logging.ContextWithRequestID`; handler, access, and error logs follow the shared [log field contract](../logging/README.md#log-field-contract).
 
-Access logging preserves the first final response status, including implicit commitment by Write or Flush; informational responses do not commit the final status.
+Gin's writer preserves the first committed response status, including implicit commitment by Write or Flush.
 
 ## Streaming and API conventions
-- A handler decodes with `DecodeJSON`, calls a service, then writes with `WriteSuccess` or `WriteError`. Services never accept `http.ResponseWriter` or `*http.Request`.
+- A controller decodes with `DecodeJSON`, calls a service, then writes with `Success`, `Fail`, or `Respond`. Services never accept `http.ResponseWriter` or `*http.Request`.
 - A streaming service returns a channel (or `iter.Seq`) of events; the handler encodes each event and calls `EventStream.Send`. The UI Message Stream encoder belongs to M2.
 - Once a stream starts, the status line is sent. Errors become an in-stream `error` part written by the handler (M2). `WriteError` and panic recovery only log; recovery aborts the connection. They never append JSON.
 - Ordinary routes use `LimitRequestDuration`; stream routes are mounted in a group without it. The stream lifetime is the agent runtime run deadline (spec §7.1, five minutes).
@@ -73,4 +73,4 @@ can stream without deadlines. Production middleware should expose `Unwrap` or fo
 writers retain deadlines for both the initial header flush and every data/heartbeat frame;
 other deadline errors still fail construction or stop the stream.
 
-`EventStream.Send` rejects CR and LF before writing so a payload cannot introduce extra SSE lines or frames. Recorder flushing forwards through `ResponseController`, preserving unsupported-flush and `FlushError` failures where the underlying writer exposes them.
+`EventStream.Send` rejects CR and LF before writing so a payload cannot introduce extra SSE lines or frames. Event stream flushing unwraps Gin's writer after committing its status, preserving unsupported-flush and `FlushError` failures where the underlying writer exposes them.

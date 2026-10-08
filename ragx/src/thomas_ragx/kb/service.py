@@ -14,7 +14,7 @@ from thomas_ragx.kb.repository import Connection
 from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
 from thomas_ragx.registry.model import Role
-from thomas_ragx.registry.service import RegistryService
+from thomas_ragx.registry.service import LLMProviderService
 
 
 async def require_org(conn: Connection, org_id: str) -> None:
@@ -23,7 +23,7 @@ async def require_org(conn: Connection, org_id: str) -> None:
 
 
 class KnowledgeBaseService:
-    def __init__(self, pool: Pool, registry: RegistryService) -> None:
+    def __init__(self, pool: Pool, registry: LLMProviderService) -> None:
         self._pool = pool
         self._registry = registry
 

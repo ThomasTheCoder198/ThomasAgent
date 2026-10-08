@@ -16,15 +16,16 @@ mixing it with HTTP, migration or worker logic.
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `main.go`         | Enter the executable and return its exit code after cleanup finishes.                                                                                               |
 | `command.go`      | `runProcess` handles signals and exit errors; `executeCommand` validates and dispatches the CLI command.                                                            |
-| `application.go`  | `newApplication` assembles config, logger and telemetry; `shutdownTelemetry` bounds cleanup by the configured timeout.                                              |
+| `runtime.go`  | `newCoreRuntime` assembles config, logger and telemetry; `shutdownTelemetry` bounds cleanup by the configured timeout.                                              |
 | `connections.go`  | `openPostgres` and `openRedis` open clients; `recordDependencyFailure` sanitizes diagnostics and logs failures once.                                                |
-| `server.go`       | `serveHTTP` starts the API, mounts health routes and shuts HTTP down; `readinessChecks` supplies dependency pings.                                                  |
-| `router.go`       | Mounts authentication, protected Registry APIs, internal resolve and health routes. Ordinary routes carry request deadlines; future stream routes mount separately. |
+| `server.go`       | `serveHTTP` wires services and controllers, starts the API and shuts HTTP down; `readinessChecks` supplies dependency pings.                                                  |
+| `routes.go`       | Registers every path, method and per-route middleware on the Gin engine; ordinary routes carry request deadlines and future stream routes mount separately. |
+| `session_purge.go` | Runs the scheduled cross-tenant expired-session purge with its own job request id. |
 | `migrate.go`      | `applyMigrations` applies or rolls back migrations; `reportMigrationStatus` logs each returned status row.                                                          |
 | `outbox_relay.go` | `runOutboxRelay` starts the worker that publishes committed outbox events to Redis Streams.                                                                         |
 | `healthcheck.go`  | `checkHTTPHealth` checks the local HTTP liveness endpoint for Docker.                                                                                               |
 
-The same compiled `core` executable serves three roles in Compose: `migrate`
+The CLI dispatches `serve` through `runProcess` ? `executeCommand` ? `serveHTTP`. Compose and the Dockerfile both invoke `core serve`. The same compiled `core` executable serves three roles in Compose: `migrate`
 exits after preparing the database, `serve` runs the API, and `outbox-relay` runs the
 outbox worker. Separate processes give the API and worker independent lifetimes;
 Compose starts them only after migration succeeds. `healthcheck` is a short
@@ -61,10 +62,10 @@ See the [shared naming glossary](../../../docs/glossary.md) for terms used acros
 
 Missing or unknown commands report CLI usage before configuration or dependencies
 are initialized. `healthcheck` reads the configured HTTP address and checks
-`/healthz` without opening database clients. `serve` opens and pings Postgres and
+`/healthz` through loopback with its own bounded HTTP client and without opening database clients. `serve` opens and pings Postgres and
 Redis before listening and includes both in `/readyz`.
 
-HTTP and telemetry shutdown use `CORE_SHUTDOWN_TIMEOUT` deadlines so unavailable
+`shutdownTelemetry` stays on `coreRuntime` as the teardown pair for telemetry setup in `newCoreRuntime` and uses the configured timeout. HTTP and telemetry shutdown use `CORE_SHUTDOWN_TIMEOUT` deadlines so unavailable
 collectors cannot hold process exit indefinitely. Listening logs use the active
 context. An interrupt or termination signal cancels the API or outbox relay work.
 
@@ -73,7 +74,7 @@ code 1. `status` logs version, path and applied/pending state from
 `postgres.MigrationStatuses`. Dependency failures (migration, Postgres open, Redis ping) emit one structured error with the catalog code and a sanitized error, never URLs or passwords. The process boundary
 recognizes an already logged error and returns a failure exit code without
 printing a second copy. Logger creation rejects unknown log levels.
-`newRouter` uses the injected logger for service identity. `newApplication` passes `Config.Environment` into the logger; process and HTTP logs follow the shared [log field contract](../../internal/platform/logging/README.md#log-field-contract).
+`serveHTTP` passes the injected logger to the Gin engine; `newCoreRuntime` passes `Config.Environment` into the logger; process and HTTP logs follow the shared [log field contract](../../internal/platform/logging/README.md#log-field-contract).
 
 ## Common failures
 
@@ -90,7 +91,7 @@ Core startup configures M0.2 platform-scoped modules. Their data belongs to the 
 All config-loading commands also require CORE_SERVICE_TOKEN with at least 32 characters; values beginning `change-me` are rejected outside dev. The identity test fixtures supply it explicitly. The serve process periodically purges expired sessions across all tenants through the explicit system-level auth method and refreshes `last_seen_at` during authenticated requests. Expiry decisions use the database clock. Each purge run logs with its own `job_` request id and `duration_ms`.
 
 `serve` validates the vault key before dependency access, bootstraps the owner,
-then injects the guarded provider catalog into the Registry. The route coverage
+then injects the guarded provider catalog into the LLM provider service. The route coverage
 test checks every mounted method/path against the shared OpenAPI contract.
 The generated Postman collection runs against a live HTTP server backed by
 disposable migrated Postgres and Redis in `TestAPI_GeneratedPostmanCollection`.

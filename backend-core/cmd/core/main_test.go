@@ -30,7 +30,7 @@ func TestApplication_DatabaseFailuresLogDiagnosticsOnce(t *testing.T) {
 			var output bytes.Buffer
 			log, logErr := logging.NewLogger(&output, "info", "core-test", "test", nil)
 			require.NoError(t, logErr)
-			a := &application{
+			a := &coreRuntime{
 				cfg: config.Config{DatabaseURL: "postgres://nobody:secret-password@127.0.0.1:1/none?connect_timeout=1"},
 				log: log,
 			}
@@ -129,8 +129,8 @@ func TestSanitizeDependencyError_RemovesCredentials(t *testing.T) {
 	}
 }
 
-func TestApplication_TelemetryShutdownHasDeadline(t *testing.T) {
-	a := &application{
+func TestCoreRuntime_TelemetryShutdownHasDeadline(t *testing.T) {
+	a := &coreRuntime{
 		cfg: config.Config{ShutdownTimeout: 20 * time.Millisecond},
 		telemetry: telemetry.Telemetry{Shutdown: func(ctx context.Context) error {
 			deadline, ok := ctx.Deadline()
@@ -175,7 +175,7 @@ func TestServe_ListeningLogUsesSharedFields(t *testing.T) {
 	output := &cancelOnListeningWriter{cancel: cancel}
 	log, err := logging.NewLogger(output, "info", "core-test", "test", nil)
 	require.NoError(t, err)
-	a := &application{
+	a := &coreRuntime{
 		cfg: config.Config{
 			DatabaseURL: databaseURL, RedisURL: redisURL, HTTPAddr: "127.0.0.1:0", ShutdownTimeout: time.Second,
 			Vault:        config.VaultConfig{KeyID: "v1", MasterKey: testVaultMasterKey},

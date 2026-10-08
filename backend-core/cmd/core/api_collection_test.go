@@ -10,10 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/stretchr/testify/require"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/metrics"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/vault"
 )
@@ -33,14 +37,23 @@ func TestAPI_GeneratedPostmanCollection(t *testing.T) {
 	t.Setenv("CORE_SERVICE_TOKEN", "fixture-api-service-token-with-at-least-32-characters")
 	cfg, err := config.Load()
 	require.NoError(t, err)
-	app := &application{cfg: cfg, log: slog.New(slog.NewJSONHandler(io.Discard, nil))}
+	app := &coreRuntime{
+		cfg:     cfg,
+		log:     slog.New(slog.NewJSONHandler(io.Discard, nil)),
+		metrics: metrics.New(cfg.Metrics.HTTPBuckets, cfg.Metrics.LLMBuckets),
+	}
 	redisClient, err := app.openRedis(t.Context())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, redisClient.Close()) })
 	cipher, err := vault.NewCipher(cfg.Vault.KeyID, cfg.Vault.MasterKey)
 	require.NoError(t, err)
-	router, err := app.buildRouter(t.Context(), pool, redisClient, cipher)
+	svc, err := app.newServices(t.Context(), pool, cipher)
 	require.NoError(t, err)
+	ctrl, err := app.newControllers(svc, redisClient)
+	require.NoError(t, err)
+	gin.SetMode(gin.ReleaseMode)
+	router := httpx.NewRouter(httpx.NewSlogErrorLogger(app.log))
+	registerRoutes(router, ctrl, middlewares{auth: svc.auth, serviceToken: cfg.ServiceToken, health: app.readinessChecks(pool, redisClient), requestTimeout: cfg.HTTP.RequestTimeout})
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 	runCollection(t, server.URL)

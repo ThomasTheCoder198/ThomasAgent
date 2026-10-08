@@ -1,6 +1,7 @@
-package handler
+package controller
 
 import (
+	"context"
 	"log/slog"
 	"net"
 	"net/http"
@@ -8,13 +9,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/gin-gonic/gin"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/dto"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/middleware"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/model"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
@@ -26,50 +26,55 @@ const (
 	invalidPeerIdentity = "invalid-peer"
 )
 
-type Handler struct {
-	svc                service.AuthService
+type authOperations interface {
+	Login(context.Context, string, string) (model.User, model.IssuedSession, error)
+	Logout(context.Context, string) error
+	RecordFailedLogin(context.Context) error
+}
+
+type AuthControllerParams struct {
+	Service            authOperations
+	Limiter            *limiter.Limiter
+	CookieSecure       bool
+	TrustedProxyHeader string
+	TrustedProxyCIDRs  []netip.Prefix
+	Logger             *slog.Logger
+}
+
+type AuthController struct {
+	svc                authOperations
 	lim                *limiter.Limiter
 	cookieSecure       bool
 	trustedProxyHeader string
-	log                *slog.Logger
 	trustedProxyCIDRs  []netip.Prefix
+	log                *slog.Logger
 }
 
-func NewAuthHandler(svc service.AuthService, lim *limiter.Limiter, cookieSecure bool) *Handler {
-	return &Handler{svc: svc, lim: lim, cookieSecure: cookieSecure}
+func NewAuthController(p AuthControllerParams) *AuthController {
+	return &AuthController{
+		svc:                p.Service,
+		lim:                p.Limiter,
+		cookieSecure:       p.CookieSecure,
+		trustedProxyHeader: p.TrustedProxyHeader,
+		trustedProxyCIDRs:  append([]netip.Prefix(nil), p.TrustedProxyCIDRs...),
+		log:                p.Logger,
+	}
 }
 
-func NewAuthHandlerWithProxyHeader(svc service.AuthService, lim *limiter.Limiter, cookieSecure bool, header string, logger *slog.Logger) *Handler {
-	return &Handler{svc: svc, lim: lim, cookieSecure: cookieSecure, trustedProxyHeader: header, log: logger}
-}
-
-func NewAuthHandlerWithTrustedProxies(svc service.AuthService, lim *limiter.Limiter, cookieSecure bool, header string, networks []netip.Prefix, logger *slog.Logger) *Handler {
-	h := NewAuthHandlerWithProxyHeader(svc, lim, cookieSecure, header, logger)
-	h.trustedProxyCIDRs = append([]netip.Prefix(nil), networks...)
-	return h
-}
-
-func (h *Handler) Mount(r chi.Router) {
-	r.Post("/api/v1/auth/login", h.login)
-	r.Group(func(pr chi.Router) {
-		pr.Use(middleware.RequireSession(h.svc))
-		pr.Post("/api/v1/auth/logout", h.logout)
-		pr.Get("/api/v1/auth/me", h.me)
-	})
-}
-
-func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
-	r = r.WithContext(tenant.WithID(r.Context(), tenant.PlatformID))
+func (h *AuthController) HandleLogin(c *gin.Context) {
+	w, r := c.Writer, c.Request
+	c.Request = r.WithContext(tenant.WithID(r.Context(), tenant.PlatformID))
+	r = c.Request
 	w.Header().Set(httpx.HeaderCacheControl, httpx.CacheControlNoStore)
 	ip := h.clientIP(r)
 	var req dto.LoginRequest
 	if err := httpx.DecodeJSON(w, r, &req, maxLoginBodyBytes); err != nil {
-		httpx.WriteError(w, r, err)
+		httpx.Fail(c, err)
 		return
 	}
 	decision, err := h.lim.Check(r.Context(), req.Email, ip)
 	if err != nil {
-		h.writeLimiterError(w, r, decision, err)
+		h.writeLimiterError(c, decision, err)
 		return
 	}
 	user, issued, err := h.svc.Login(r.Context(), req.Email, req.Password)
@@ -77,18 +82,19 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		if errors.ToAppError(err).Code == errors.CodeAuthInvalidCredentials && h.log != nil {
 			h.log.WarnContext(r.Context(), "auth login failed", slog.String("event", model.ActionLoginFailed), slog.String("identity", h.lim.Identity(req.Email)))
 		}
-		httpx.WriteError(w, r, err)
+		httpx.Fail(c, err)
 		return
 	}
 	if err := h.lim.ResetLogin(r.Context(), req.Email, ip); err != nil {
-		httpx.WriteError(w, r, err)
+		httpx.Fail(c, err)
 		return
 	}
 	h.setCookies(w, issued)
-	httpx.WriteSuccess(w, r, http.StatusOK, dto.FromIssuedSession(user, issued))
+	httpx.Success(c, http.StatusOK, dto.FromIssuedSession(user, issued))
 }
 
-func (h *Handler) writeLimiterError(w http.ResponseWriter, r *http.Request, decision limiter.LimitDecision, err error) {
+func (h *AuthController) writeLimiterError(c *gin.Context, decision limiter.LimitDecision, err error) {
+	w, r := c.Writer, c.Request
 	if decision.EmailTripped {
 		if auditErr := h.svc.RecordFailedLogin(r.Context()); auditErr != nil && h.log != nil {
 			h.log.WarnContext(r.Context(), "auth limiter audit unavailable")
@@ -100,10 +106,10 @@ func (h *Handler) writeLimiterError(w http.ResponseWriter, r *http.Request, deci
 			w.Header().Set(headerRetryAfter, strconv.FormatInt(seconds, 10))
 		}
 	}
-	httpx.WriteError(w, r, err)
+	httpx.Fail(c, err)
 }
 
-func (h *Handler) clientIP(r *http.Request) string {
+func (h *AuthController) clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
@@ -130,7 +136,7 @@ func (h *Handler) clientIP(r *http.Request) string {
 	return peer.String()
 }
 
-func (h *Handler) isTrustedProxy(ip netip.Addr) bool {
+func (h *AuthController) isTrustedProxy(ip netip.Addr) bool {
 	for _, network := range h.trustedProxyCIDRs {
 		if network.Contains(ip) {
 			return true
@@ -139,29 +145,54 @@ func (h *Handler) isTrustedProxy(ip netip.Addr) bool {
 	return false
 }
 
-func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
-	c, _ := r.Cookie(middleware.CookieSession)
-	if err := h.svc.Logout(r.Context(), c.Value); err != nil {
-		httpx.WriteError(w, r, err)
+func (h *AuthController) HandleLogout(c *gin.Context) {
+	w, r := c.Writer, c.Request
+	cookie, _ := r.Cookie(middleware.CookieSession)
+	if err := h.svc.Logout(r.Context(), cookie.Value); err != nil {
+		httpx.Fail(c, err)
 		return
 	}
 	h.clearCookies(w)
-	httpx.WriteSuccess(w, r, http.StatusOK, dto.LogoutResponse{LoggedOut: true})
+	httpx.Success(c, http.StatusOK, dto.LogoutResponse{LoggedOut: true})
 }
 
-func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
+func (h *AuthController) HandleMe(c *gin.Context) {
+	w, r := c.Writer, c.Request
 	w.Header().Set(httpx.HeaderCacheControl, httpx.CacheControlNoStore)
 	user, _ := middleware.UserFrom(r.Context())
-	httpx.WriteSuccess(w, r, http.StatusOK, dto.MeResponse{User: dto.FromUser(user)})
+	httpx.Success(c, http.StatusOK, dto.MeResponse{User: dto.FromUser(user)})
 }
 
-func (h *Handler) setCookies(w http.ResponseWriter, s model.IssuedSession) {
-	http.SetCookie(w, &http.Cookie{Name: middleware.CookieSession, Value: s.Token, Path: "/", Expires: s.ExpiresAt, HttpOnly: true, Secure: h.cookieSecure, SameSite: http.SameSiteLaxMode})
-	http.SetCookie(w, &http.Cookie{Name: middleware.CookieCSRF, Value: s.CSRFToken, Path: "/", Expires: s.ExpiresAt, Secure: h.cookieSecure, SameSite: http.SameSiteLaxMode})
+func (h *AuthController) setCookies(w http.ResponseWriter, s model.IssuedSession) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     middleware.CookieSession,
+		Value:    s.Token,
+		Path:     "/",
+		Expires:  s.ExpiresAt,
+		HttpOnly: true,
+		Secure:   h.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     middleware.CookieCSRF,
+		Value:    s.CSRFToken,
+		Path:     "/",
+		Expires:  s.ExpiresAt,
+		Secure:   h.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	})
 }
 
-func (h *Handler) clearCookies(w http.ResponseWriter) {
+func (h *AuthController) clearCookies(w http.ResponseWriter) {
 	for _, name := range []string{middleware.CookieSession, middleware.CookieCSRF} {
-		http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/", MaxAge: -1, HttpOnly: name == middleware.CookieSession, Secure: h.cookieSecure, SameSite: http.SameSiteLaxMode})
+		http.SetCookie(w, &http.Cookie{
+			Name:     name,
+			Value:    "",
+			Path:     "/",
+			MaxAge:   -1,
+			HttpOnly: name == middleware.CookieSession,
+			Secure:   h.cookieSecure,
+			SameSite: http.SameSiteLaxMode,
+		})
 	}
 }

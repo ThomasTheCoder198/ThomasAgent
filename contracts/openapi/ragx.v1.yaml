@@ -396,13 +396,14 @@ components:
         name: { type: string, minLength: 1, maxLength: 200 }
     KnowledgeBase:
       type: object
-      required: [id, name, isDefault, embeddingModel, embeddingDims, createdAt, updatedAt]
+      required: [id, name, isDefault, embeddingModel, embeddingDims, fileCount, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
         isDefault: { type: boolean }
         embeddingModel: { type: string }
         embeddingDims: { type: integer }
+        fileCount: { type: integer, minimum: 0 }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     KbFile:

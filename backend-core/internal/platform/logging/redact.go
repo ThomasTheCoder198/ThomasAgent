@@ -23,6 +23,12 @@ var (
 )
 
 var secretValuePattern = regexp.MustCompile(`(?i)(bearer\s+\S+|sk-[a-z0-9_\-]{3,}\S*)`)
+var connectionURLPattern = regexp.MustCompile(`(?i)(postgres(?:ql)?|redis(?:s)?)://[^\s` + "`" + `"<>]+`)
+
+// RedactConnectionURLs removes DSNs that dependency errors may echo verbatim.
+func RedactConnectionURLs(message string) string {
+	return connectionURLPattern.ReplaceAllString(message, RedactedPlaceholder)
+}
 
 func isSecretKey(key string) bool {
 	// JSON uses camelCase; retain its word boundaries before folding case so credential names stay recognizable.

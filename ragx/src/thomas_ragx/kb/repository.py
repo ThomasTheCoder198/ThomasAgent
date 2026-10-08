@@ -10,7 +10,9 @@ from thomas_ragx.registry.model import ModelRecord
 type Connection = AsyncConnection[DictRow]
 KB_SELECT: Final = (
     b"SELECT kb.id, kb.org_id, kb.name, kb.is_default, kb.embedding_dims, kb.created_at, kb.updated_at, "
-    b"m.name AS embedding_model FROM knowledge_bases kb JOIN models m ON m.id = kb.embedding_model_id "
+    b"m.name AS embedding_model, "
+    b"(SELECT count(*) FROM kb_files f WHERE f.kb_id = kb.id AND f.deleted_at IS NULL) AS file_count "
+    b"FROM knowledge_bases kb JOIN models m ON m.id = kb.embedding_model_id "
     b"WHERE kb.deleted_at IS NULL AND kb.org_id = %s"
 )
 
@@ -23,6 +25,7 @@ def to_kb(row: DictRow) -> KnowledgeBase:
         is_default=row["is_default"],
         embedding_model=row["embedding_model"],
         embedding_dims=row["embedding_dims"],
+        file_count=row["file_count"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )

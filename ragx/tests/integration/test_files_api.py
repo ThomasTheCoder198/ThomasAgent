@@ -284,6 +284,23 @@ async def test_delete_retry_and_preview(pool: Pool, minio_config: dict[str, Any]
     assert streams == ["thomas.ingest.requested", "thomas.ingest.requested", "thomas.kb.purge.requested"]
 
 
+async def test_file_count_ignores_deleted_files(
+    pool: Pool, minio_config: dict[str, Any], minio: Minio
+) -> None:
+    async with api_client(pool, minio_config=minio_config) as (client, app):
+        kb_id = await _kb(client, app)
+        kept = await _upload(client, kb_id, "kept.txt", b"first file")
+        dropped = await _upload(client, kb_id, "dropped.txt", b"second file")
+        assert (kept.status_code, dropped.status_code) == (201, 201)
+        deleted = await client.delete(
+            f"/v1/knowledge-bases/{kb_id}/files/{dropped.json()['data']['id']}",
+            headers=bearer(ORG, "kb:write"),
+        )
+        assert deleted.status_code == 204, deleted.text
+        fetched = await client.get(f"/v1/knowledge-bases/{kb_id}", headers=bearer(ORG, "kb:read"))
+    assert fetched.json()["data"]["fileCount"] == 1
+
+
 async def test_pagination_walks_every_file_once(
     pool: Pool, minio_config: dict[str, Any], minio: Minio
 ) -> None:

@@ -23,6 +23,7 @@ task gen
 Renderers emit LF and use catalog entries sorted by code. Golden fixtures in testdata are test inputs, not modules.
 Go named error constants cannot carry per-request state. The generated lookup switch supplies metadata
 without a mutable global map. Only one Go definition file is generated.
+Go rendering preserves the `LLM` initialism in generated names such as `ErrLLMProviderNotFound`.
 See the [glossary](../../../docs/glossary.md) for shared error terminology.
 For an intentional renderer change, regenerate golden files through the renderer tests from `contracts/`:
 ```bash

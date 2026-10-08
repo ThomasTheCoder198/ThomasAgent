@@ -42,7 +42,11 @@ func goNamedError(code string) string {
 func goCodeConstant(code string) string {
 	parts := strings.Split(strings.ToLower(code), "_")
 	for i, p := range parts {
-		parts[i] = strings.ToUpper(p[:1]) + p[1:]
+		if p == "llm" {
+			parts[i] = "LLM"
+		} else {
+			parts[i] = strings.ToUpper(p[:1]) + p[1:]
+		}
 	}
 	return "Code" + strings.Join(parts, "")
 }

@@ -4,7 +4,7 @@
 Owns JSON logs, secret redaction and request correlation.
 
 ## Entry points
-- `NewLogger(writer, level, service, environment, otelHandler)`, `ParseLevel`, `RedactValue`
+- `NewLogger(writer, level, service, environment, otelHandler)`, `ParseLevel`, `RedactValue`, `RedactConnectionURLs`, `FieldDurationMS`
 - `ContextWithRequestID` and `RequestIDFromContext` share request correlation with HTTP boundaries and application callers.
 
 ## Dependencies
@@ -18,7 +18,7 @@ go test ./internal/platform/logging/... -count=1
 
 ## Conventions
 See the [shared naming glossary](../../../../docs/glossary.md) for terms used across services.
-Secret leaf keys and bearer/sk values are redacted in JSON and OTEL, including bound attributes and groups. Usage token counters remain visible. The configured level applies to both sinks. Do not log raw document content or opaque objects containing credentials.
+Secret leaf keys and bearer/sk values are redacted in JSON and OTEL, including bound attributes and groups. Usage token counters remain visible. The configured level applies to both sinks. Do not log raw document content or opaque objects containing credentials. `RedactConnectionURLs` removes Postgres/Redis DSNs echoed by dependency errors before they reach logs.
 
 Secret key matching preserves camelCase and acronym boundaries (`accessToken`, `clientSecret`, `APIKey`, `privateKey`) alongside snake_case and header names. `inputTokens`/`input_tokens` and `tokenCount`/`token_count` remain usage counters. This shared policy applies to stdout, OTLP, ancestor groups and structured call content.
 

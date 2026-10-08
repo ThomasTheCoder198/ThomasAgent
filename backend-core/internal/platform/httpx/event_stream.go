@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 )
@@ -66,7 +68,7 @@ func newEventStream(w http.ResponseWriter, r *http.Request, heartbeat, writeTime
 		return nil, errors.ErrInternalError.WithCause(fmt.Errorf("set event stream header deadline: %w", err))
 	}
 	w.WriteHeader(http.StatusOK)
-	flushErr := controller.Flush()
+	flushErr := flushEventStream(w)
 	deadlineErr := setEventStreamDeadline(controller, time.Time{})
 	if err := stderrors.Join(flushErr, deadlineErr); err != nil {
 		return nil, errors.ErrInternalError.WithCause(fmt.Errorf("flush event stream headers: %w", err))
@@ -121,12 +123,38 @@ func (s *EventStream) write(frame []byte) error {
 		s.closed = true
 		return fmt.Errorf("write event frame: %w", err)
 	}
-	if err := s.controller.Flush(); err != nil {
+	if err := flushEventStream(s.writer); err != nil {
 		s.stopOnce.Do(func() { close(s.stop) })
 		s.closed = true
 		return fmt.Errorf("flush event frame: %w", err)
 	}
 	return nil
+}
+
+// Gin's writer exposes Flush but discards an underlying FlushError, so streaming
+// reaches the actual writer after first committing Gin's status.
+func flushEventStream(w http.ResponseWriter) error {
+	if ginWriter, ok := w.(gin.ResponseWriter); ok {
+		ginWriter.WriteHeaderNow()
+		if unwrapper, ok := w.(interface{ Unwrap() http.ResponseWriter }); ok {
+			w = unwrapper.Unwrap()
+		}
+	}
+	for w != nil {
+		if flusher, ok := w.(interface{ FlushError() error }); ok {
+			return flusher.FlushError()
+		}
+		if unwrapper, ok := w.(interface{ Unwrap() http.ResponseWriter }); ok {
+			w = unwrapper.Unwrap()
+			continue
+		}
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+			return nil
+		}
+		return http.ErrNotSupported
+	}
+	return http.ErrNotSupported
 }
 
 func setEventStreamDeadline(controller *http.ResponseController, deadline time.Time) error {

@@ -46,13 +46,13 @@ func NewClient(timeout time.Duration, privateAllowlist []string) (*http.Client, 
 }
 
 func rejectRedirect(*http.Request, []*http.Request) error {
-	return errors.ErrRegistryProviderRejected.WithMessage("outbound redirects are not permitted")
+	return errors.ErrLLMProviderRejected.WithMessage("outbound redirects are not permitted")
 }
 
 func (p *policy) dialContext(ctx context.Context, network, destination string, lookup resolver, connection dialer) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(destination)
 	if err != nil || !validHost(host) || !validPort(port) {
-		return nil, errors.ErrRegistryProviderRejected
+		return nil, errors.ErrLLMProviderRejected
 	}
 	addresses, err := resolveAddresses(ctx, host, lookup)
 	if err != nil {
@@ -64,7 +64,7 @@ func (p *policy) dialContext(ctx context.Context, network, destination string, l
 	}
 	for _, address := range addresses {
 		if !p.permitsAddress(address, privateAllowed) {
-			return nil, errors.ErrRegistryProviderRejected.WithMessage("outbound address is not permitted")
+			return nil, errors.ErrLLMProviderRejected.WithMessage("outbound address is not permitted")
 		}
 	}
 	// Dial a checked IP rather than the hostname so DNS cannot change between validation and connection.

@@ -39,26 +39,23 @@ func runProcess() int {
 }
 
 func executeCommand(ctx context.Context, command string, args []string) error {
+	var run func(*coreRuntime) error
 	switch command {
-	case serveCommand, migrateCommand, outboxRelayCommand, healthcheckCommand:
+	case healthcheckCommand:
+		run = func(rt *coreRuntime) error { return checkHTTPHealth(ctx, rt.cfg.HTTPAddr) }
+	case serveCommand:
+		run = func(rt *coreRuntime) error { return rt.serveHTTP(ctx) }
+	case outboxRelayCommand:
+		run = func(rt *coreRuntime) error { return rt.runOutboxRelay(ctx) }
+	case migrateCommand:
+		run = func(rt *coreRuntime) error { return rt.applyMigrations(ctx, args) }
 	default:
 		return fmt.Errorf("unknown command %q; %s", command, usageMessage)
 	}
-	a, err := newApplication(ctx)
+	rt, err := newCoreRuntime(ctx)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = a.shutdownTelemetry() }()
-	switch command {
-	case healthcheckCommand:
-		return checkHTTPHealth(ctx, a.cfg.HTTPAddr)
-	case serveCommand:
-		return a.serveHTTP(ctx)
-	case outboxRelayCommand:
-		return a.runOutboxRelay(ctx)
-	case migrateCommand:
-		return a.applyMigrations(ctx, args)
-	default:
-		return fmt.Errorf("unknown command %q; %s", command, usageMessage)
-	}
+	defer func() { _ = rt.shutdownTelemetry() }()
+	return run(rt)
 }

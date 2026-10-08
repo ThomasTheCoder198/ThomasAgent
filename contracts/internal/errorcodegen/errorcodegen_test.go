@@ -48,6 +48,11 @@ func TestRenderGo_DefinesNamedErrorsAndReadableDefinitions(t *testing.T) {
 	require.NotContains(t, out, "var catalog")
 }
 
+func TestRenderGo_PreservesLLMInitialism(t *testing.T) {
+	require.Equal(t, "CodeLLMProviderNotFound", goCodeConstant("LLM_PROVIDER_NOT_FOUND"))
+	require.Equal(t, "ErrLLMProviderNotFound", goNamedError("LLM_PROVIDER_NOT_FOUND"))
+}
+
 func TestRenderPython_MatchesGolden(t *testing.T) {
 	output := RenderPython(loadFixture(t))
 	require.Equal(t, golden(t, "golden.py.txt", output), output)

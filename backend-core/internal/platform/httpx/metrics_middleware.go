@@ -1,30 +1,27 @@
 package httpx
 
 import (
-	"net/http"
 	"time"
+
+	"github.com/gin-gonic/gin"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 )
 
-// HTTPMetrics is the part of the metrics registry the router needs.
 type HTTPMetrics interface {
 	ObserveHTTP(method, route string, status int, elapsed time.Duration, requestID string)
 }
 
-// RecordMetrics observes every request after routing, so the route label is the chi pattern. Nil disables it.
 func RecordMetrics(rec HTTPMetrics) Middleware {
-	return func(next http.Handler) http.Handler {
+	return func(c *gin.Context) {
 		if rec == nil {
-			return next
+			c.Next()
+			return
 		}
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			start := time.Now()
-			status := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-			defer func() {
-				rec.ObserveHTTP(r.Method, RoutePattern(r), status.status, time.Since(start), logging.RequestIDFromContext(r.Context()))
-			}()
-			next.ServeHTTP(status, r)
-		})
+		start := time.Now()
+		defer func() {
+			rec.ObserveHTTP(c.Request.Method, RoutePattern(c), c.Writer.Status(), time.Since(start), logging.RequestIDFromContext(c.Request.Context()))
+		}()
+		c.Next()
 	}
 }

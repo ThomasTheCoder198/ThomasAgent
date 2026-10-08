@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/model"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/model"
 )
 
 type ProviderRequest struct {

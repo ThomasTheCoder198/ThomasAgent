@@ -16,13 +16,12 @@ import (
 	"testing"
 	"time"
 
-	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/handler"
+	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/controller"
 	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
 	authmiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/middleware"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
@@ -47,8 +46,8 @@ func newAuthenticatedStream(t *testing.T, handler http.HandlerFunc) (*http.Respo
 	logs := &authLogBuffer{}
 	logger := slog.New(slog.NewJSONHandler(logs, nil))
 	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
-	authhandler.NewAuthHandler(svc, authlimiter.NewLimiter(startRedis(t), 10, time.Minute), false).Mount(router)
-	router.Group(func(pr chi.Router) { pr.Use(authmiddleware.RequireSession(svc)); pr.Post("/stream", handler) })
+	mountAuthForTest(router, authhandler.AuthControllerParams{Service: svc, Limiter: authlimiter.NewLimiter(startRedis(t), 10, time.Minute)})
+	router.Group("", authmiddleware.RequireSession(svc)).POST("/stream", wrapAuthHTTP(handler))
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 	jar, err := cookiejar.New(nil)
@@ -112,19 +111,17 @@ func TestSessionAndCSRF_NonReadingClientBoundsShutdown(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
 	result := make(chan error, 1)
-	router.Group(func(pr chi.Router) {
-		pr.Use(authmiddleware.RequireSession(svc))
-		pr.Post("/stream", func(w http.ResponseWriter, r *http.Request) {
-			stream, err := httpx.NewEventStream(w, r, config.HTTPConfig{EventStreamHeartbeat: time.Hour, EventStreamWriteTimeout: 50 * time.Millisecond})
-			if err != nil {
-				result <- err
-				return
-			}
-			err = stream.Send(bytes.Repeat([]byte{'x'}, 1<<20))
-			stream.Close()
+	pr := router.Group("", authmiddleware.RequireSession(svc))
+	pr.POST("/stream", wrapAuthHTTP(func(w http.ResponseWriter, r *http.Request) {
+		stream, err := httpx.NewEventStream(w, r, config.HTTPConfig{EventStreamHeartbeat: time.Hour, EventStreamWriteTimeout: 50 * time.Millisecond})
+		if err != nil {
 			result <- err
-		})
-	})
+			return
+		}
+		err = stream.Send(bytes.Repeat([]byte{'x'}, 1<<20))
+		stream.Close()
+		result <- err
+	}))
 	server, client := net.Pipe()
 	defer server.Close()
 	defer client.Close()

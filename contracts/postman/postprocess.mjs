@@ -3,9 +3,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 const FOLDER_ORDER = [
   "Health",
   "Auth",
-  "Providers",
-  "Models",
-  "Model roles",
+  "LLM providers",
+  "LLM models",
+  "LLM model roles",
   "Internal",
   "Lifecycle",
   "Logout",

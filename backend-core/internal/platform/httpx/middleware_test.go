@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
@@ -19,10 +20,10 @@ import (
 func TestLogAccess_PreservesCommittedStatusAfterPanic(t *testing.T) {
 	var logs bytes.Buffer
 	r := NewRouter(nil, LogAccess(slog.New(slog.NewJSONHandler(&logs, nil))))
-	r.Get("/partial", func(w http.ResponseWriter, _ *http.Request) {
+	r.GET("/partial", wrapHTTP(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("partial"))
 		panic("after commit")
-	})
+	}))
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/partial", nil)
 	// The response is committed, so recovery aborts the connection instead of appending an error body.
@@ -33,37 +34,16 @@ func TestLogAccess_PreservesCommittedStatusAfterPanic(t *testing.T) {
 	require.EqualValues(t, http.StatusOK, entry["status"])
 }
 
-func TestStatusRecorder_KeepsFirstFinalResponse(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		write func(*statusRecorder)
-		want  int
-	}{
-		{"explicit", func(s *statusRecorder) {
-			s.WriteHeader(http.StatusCreated)
-			s.WriteHeader(http.StatusInternalServerError)
-		}, http.StatusCreated},
-		{"implicit-write", func(s *statusRecorder) { _, _ = s.Write([]byte("body")); s.WriteHeader(http.StatusInternalServerError) }, http.StatusOK},
-		{"implicit-flush", func(s *statusRecorder) { s.Flush(); s.WriteHeader(http.StatusInternalServerError) }, http.StatusOK},
-		{"informational", func(s *statusRecorder) { s.WriteHeader(http.StatusEarlyHints); s.WriteHeader(http.StatusAccepted) }, http.StatusAccepted},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				s := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-				tc.write(s)
-				if s.status != tc.want {
-					t.Errorf("recorded status = %d, want %d", s.status, tc.want)
-				}
-			}))
-			defer server.Close()
-			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
-			require.NoError(t, err)
-			response, err := server.Client().Do(req)
-			require.NoError(t, err)
-			defer func() { require.NoError(t, response.Body.Close()) }()
-			require.Equal(t, tc.want, response.StatusCode)
-		})
-	}
+func TestGinWriter_KeepsFirstCommittedStatus(t *testing.T) {
+	r := NewRouter(nil)
+	r.GET("/status", func(c *gin.Context) {
+		c.Writer.WriteHeader(http.StatusCreated)
+		c.Writer.WriteHeaderNow()
+		c.Writer.WriteHeader(http.StatusInternalServerError)
+		require.True(t, ResponseCommitted(c.Writer))
+	})
+	rec := performRequest(r, http.MethodGet, "/status", "en")
+	require.Equal(t, http.StatusCreated, rec.Code)
 }
 
 func TestRouter_LogsShareRequestID(t *testing.T) {
@@ -73,10 +53,10 @@ func TestRouter_LogsShareRequestID(t *testing.T) {
 			logger, err := logging.NewLogger(&output, "info", "core-test", "test", nil)
 			require.NoError(t, err)
 			router := NewRouter(NewSlogErrorLogger(logger), LogAccess(logger))
-			router.Get("/log", func(w http.ResponseWriter, req *http.Request) {
+			router.GET("/log", wrapHTTP(func(w http.ResponseWriter, req *http.Request) {
 				logger.InfoContext(req.Context(), "handler event")
 				WriteError(w, req, errors.ErrInternalError)
-			})
+			}))
 			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/log", nil)
 			req.Header.Set("X-Request-Id", requestID)
 			response := httptest.NewRecorder()

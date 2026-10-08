@@ -25,6 +25,7 @@ class KnowledgeBase:
     is_default: bool
     embedding_model: str
     embedding_dims: int
+    file_count: int
     created_at: datetime
     updated_at: datetime
 

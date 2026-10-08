@@ -26,6 +26,7 @@ async def test_provision_is_idempotent_and_creates_one_default_kb(pool: Pool) ->
     kbs = listed.json()["data"]
     assert [kb["isDefault"] for kb in kbs] == [True]
     assert kbs[0]["embeddingDims"] == 1536
+    assert kbs[0]["fileCount"] == 0
 
 
 async def test_concurrent_first_provisions_create_one_default_kb(pool: Pool) -> None:
@@ -47,7 +48,7 @@ async def test_provision_without_embedding_role_creates_nothing(pool: Pool) -> N
             "/v1/orgs/org-new", json=PROVISION, headers=bearer("org-new", "org:provision")
         )
         listed = await client.get("/v1/knowledge-bases", headers=bearer("org-new", "kb:read"))
-    assert response.json()["error"]["code"] == "REGISTRY_ROLE_NOT_ASSIGNED"
+    assert response.json()["error"]["code"] == "LLM_ROLE_NOT_ASSIGNED"
     assert listed.json()["error"]["code"] == "ORG_NOT_PROVISIONED"
 
 

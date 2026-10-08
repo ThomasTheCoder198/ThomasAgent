@@ -10,7 +10,7 @@ Encrypts secrets with AES-256-GCM and persists encrypted rows. Rotation and re-e
 
 ## Dependencies
 - Uses: Go crypto, google UUID, shared `internal/errors` sentinels and `postgres.DBTX` (pool or transaction).
-- Used by: provider registry services for API-key storage and resolution.
+- Used by: LLM provider services for API-key storage and resolution.
 
 ## Run & test
 ```bash

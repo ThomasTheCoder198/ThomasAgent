@@ -4,7 +4,7 @@
 Checks session cookies, CSRF tokens and trusted tenant scope at the HTTP boundary.
 
 ## Entry points
-`RequireSession`, `UserFrom`, cookie/header constants.
+`RequireSession` returns a Gin middleware function; `UserFrom` and cookie/header constants support protected controllers.
 
 ## Dependencies
 Uses the auth service's `SessionAuthenticator` interface, auth model, shared HTTP response and named errors.

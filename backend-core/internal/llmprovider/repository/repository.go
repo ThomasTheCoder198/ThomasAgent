@@ -9,9 +9,9 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/model"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/model"
 )
 
 const providerColumns = `id, kind, name, base_url, api_key_secret_id IS NOT NULL, enabled, created_at, updated_at`
@@ -25,7 +25,7 @@ func ScanProvider(row pgx.Row) (model.Provider, error) {
 	var p model.Provider
 	err := row.Scan(&p.ID, &p.Kind, &p.Name, &p.BaseURL, &p.HasAPIKey, &p.Enabled, &p.CreatedAt, &p.UpdatedAt)
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return model.Provider{}, errors.ErrRegistryProviderNotFound
+		return model.Provider{}, errors.ErrLLMProviderNotFound
 	}
 	if err != nil {
 		return model.Provider{}, fmt.Errorf("scan provider: %w", err)
@@ -42,7 +42,7 @@ func (repo PGRepository) InsertProvider(ctx context.Context, db postgres.DBTX, i
 	p, err := ScanProvider(db.QueryRow(ctx, `INSERT INTO providers (tenant_id, kind, name, base_url, api_key_secret_id, enabled)
 		VALUES ($6, $1, $2, $3, $4, $5) RETURNING `+providerColumns, in.Kind, in.Name, in.BaseURL, secretID, enabled, tenantID))
 	if postgres.IsUniqueViolation(err) {
-		return model.Provider{}, errors.ErrRegistryNameTaken
+		return model.Provider{}, errors.ErrLLMNameTaken
 	}
 	return p, err
 }
@@ -56,7 +56,7 @@ func (repo PGRepository) GetProvider(ctx context.Context, db postgres.DBTX, id u
 	err = db.QueryRow(ctx, `SELECT `+providerColumns+`, api_key_secret_id FROM providers WHERE id = $1 AND tenant_id = $2`, id, tenantID).
 		Scan(&r.ID, &r.Kind, &r.Name, &r.BaseURL, &r.HasAPIKey, &r.Enabled, &r.CreatedAt, &r.UpdatedAt, &r.SecretID)
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return ProviderRow{}, errors.ErrRegistryProviderNotFound
+		return ProviderRow{}, errors.ErrLLMProviderNotFound
 	}
 	if err != nil {
 		return ProviderRow{}, fmt.Errorf("get provider: %w", err)
@@ -72,7 +72,7 @@ func (repo PGRepository) UpdateProvider(ctx context.Context, db postgres.DBTX, i
 	p, err := ScanProvider(db.QueryRow(ctx, `UPDATE providers SET name = $2, base_url = $3, enabled = $4,
 		api_key_secret_id = $5, updated_at = now() WHERE id = $1 AND tenant_id = $6 RETURNING `+providerColumns, id, name, baseURL, enabled, secretID, tenantID))
 	if postgres.IsUniqueViolation(err) {
-		return model.Provider{}, errors.ErrRegistryNameTaken
+		return model.Provider{}, errors.ErrLLMNameTaken
 	}
 	return p, err
 }
@@ -85,10 +85,10 @@ func (repo PGRepository) DeleteProvider(ctx context.Context, db postgres.DBTX, i
 	var secretID *uuid.UUID
 	err = db.QueryRow(ctx, `DELETE FROM providers WHERE id = $1 AND tenant_id = $2 RETURNING api_key_secret_id`, id, tenantID).Scan(&secretID)
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return nil, errors.ErrRegistryProviderNotFound
+		return nil, errors.ErrLLMProviderNotFound
 	}
 	if postgres.IsForeignKeyViolation(err) {
-		return nil, errors.ErrRegistryModelInUse
+		return nil, errors.ErrLLMModelInUse
 	}
 	if err != nil {
 		return nil, fmt.Errorf("delete provider: %w", err)
@@ -126,7 +126,7 @@ func ScanModel(row pgx.Row) (model.Model, error) {
 	err := row.Scan(&m.ID, &m.ProviderID, &m.ModelRef, &m.DisplayName, &caps, &m.ContextWindow, &m.EmbeddingDims,
 		&m.InputPricePerMTok, &m.OutputPricePerMTok, &m.Source)
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return model.Model{}, errors.ErrRegistryModelNotFound
+		return model.Model{}, errors.ErrLLMModelNotFound
 	}
 	if err != nil {
 		return model.Model{}, fmt.Errorf("scan model: %w", err)
@@ -172,10 +172,10 @@ func (repo PGRepository) UpsertModel(ctx context.Context, db postgres.DBTX, in m
 	err = row.Scan(&m.ID, &m.ProviderID, &m.ModelRef, &m.DisplayName, &caps, &m.ContextWindow, &m.EmbeddingDims,
 		&m.InputPricePerMTok, &m.OutputPricePerMTok, &m.Source, &inserted)
 	if postgres.IsForeignKeyViolation(err) {
-		return model.Model{}, false, errors.ErrRegistryProviderNotFound
+		return model.Model{}, false, errors.ErrLLMProviderNotFound
 	}
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return model.Model{}, false, errors.ErrRegistryNameTaken
+		return model.Model{}, false, errors.ErrLLMNameTaken
 	}
 	if err != nil {
 		return model.Model{}, false, fmt.Errorf("upsert model: %w", err)
@@ -245,13 +245,13 @@ func (repo PGRepository) DeleteModel(ctx context.Context, db postgres.DBTX, id u
 	}
 	tag, err := db.Exec(ctx, `DELETE FROM models WHERE id = $1 AND tenant_id = $2`, id, tenantID)
 	if postgres.IsForeignKeyViolation(err) {
-		return errors.ErrRegistryModelInUse
+		return errors.ErrLLMModelInUse
 	}
 	if err != nil {
 		return fmt.Errorf("delete model: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return errors.ErrRegistryModelNotFound
+		return errors.ErrLLMModelNotFound
 	}
 	return nil
 }

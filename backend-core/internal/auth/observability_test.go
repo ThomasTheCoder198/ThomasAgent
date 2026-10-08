@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/handler"
+	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/controller"
 	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
@@ -25,7 +25,7 @@ func TestLogin_ThresholdAuditBoundedAndWarningsRedacted(t *testing.T) {
 	require.NoError(t, err)
 	lim := authlimiter.NewLoginLimiter(client, config.AuthConfig{LoginMaxAttempts: 10, LoginEmailMaxAttempts: 2, LoginIPMaxAttempts: 100, LoginWindow: time.Minute}, []byte("test-hmac-key-with-at-least-32-bytes"))
 	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger))
-	authhandler.NewAuthHandlerWithProxyHeader(svc, lim, false, "", logger).Mount(router)
+	mountAuthForTest(router, authhandler.AuthControllerParams{Service: svc, Limiter: lim, Logger: logger})
 	for index, want := range []int{401, 401, 429, 429, 429} {
 		require.Equal(t, want, attemptFrom(router, ownerEmail, "192.0.2.1:9999", "").Code, "attempt %d", index)
 	}

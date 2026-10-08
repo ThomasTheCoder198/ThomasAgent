@@ -69,7 +69,7 @@ def _litellm_models(provider: str, access: ProviderAccess) -> list[str]:
 
     info = ProviderConfigManager.get_provider_model_info(model=None, provider=LlmProviders(provider))
     if info is None:
-        raise AppError(ErrorCode.REGISTRY_SYNC_UNSUPPORTED)
+        raise AppError(ErrorCode.LLM_PROVIDER_SYNC_UNSUPPORTED)
     # get_models raises on HTTP errors, unlike get_valid_models, which hides a bad key behind an empty list.
     return list(info.get_models(api_key=_key(access), api_base=access.base_url or None))
 
@@ -99,7 +99,7 @@ class ModelListing:
     async def list_models(self, access: ProviderAccess) -> list[str]:
         route = LISTING_ROUTES[access.kind]
         if route.method is ListingMethod.MANUAL:
-            raise AppError(ErrorCode.REGISTRY_SYNC_UNSUPPORTED)
+            raise AppError(ErrorCode.LLM_PROVIDER_SYNC_UNSUPPORTED)
         if route.requires_api_key and access.api_key is None:
             raise _required_field("apiKey")
         try:
@@ -108,4 +108,4 @@ class ModelListing:
             raise
         except Exception as exc:
             log.warning("model listing failed", kind=access.kind.value, error_type=type(exc).__name__)
-            raise AppError(ErrorCode.REGISTRY_PROVIDER_REJECTED) from None
+            raise AppError(ErrorCode.LLM_PROVIDER_REJECTED) from None

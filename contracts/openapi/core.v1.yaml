@@ -14,9 +14,9 @@ servers:
 tags:
   - name: Health
   - name: Auth
-  - name: Providers
-  - name: Models
-  - name: Model roles
+  - name: LLM providers
+  - name: LLM models
+  - name: LLM model roles
   - name: Internal
 security:
   - sessionCookie: []
@@ -101,15 +101,15 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
   /api/v1/providers:
     get:
-      tags: [Providers]
-      operationId: listProviders
+      tags: [LLM providers]
+      operationId: listLLMProviders
       security: [{ sessionCookie: [] }]
       responses:
         "200": { $ref: "#/components/responses/ProviderList" }
         "401": { $ref: "#/components/responses/Unauthorized" }
     post:
-      tags: [Providers]
-      operationId: createProvider
+      tags: [LLM providers]
+      operationId: createLLMProvider
       requestBody:
         required: true
         content:
@@ -140,8 +140,8 @@ paths:
           example: "{{providerId}}",
         }
     patch:
-      tags: [Providers]
-      operationId: updateProvider
+      tags: [LLM providers]
+      operationId: updateLLMProvider
       requestBody:
         required: true
         content:
@@ -158,8 +158,8 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
     delete:
-      tags: [Providers]
-      operationId: deleteProvider
+      tags: [LLM providers]
+      operationId: deleteLLMProvider
       responses:
         "200": { $ref: "#/components/responses/DeleteResult" }
         "404": { $ref: "#/components/responses/Error" }
@@ -177,8 +177,8 @@ paths:
           example: "{{providerId}}",
         }
     post:
-      tags: [Providers]
-      operationId: testProvider
+      tags: [LLM providers]
+      operationId: testLLMProvider
       responses:
         "200": { $ref: "#/components/responses/ProviderTestResult" }
         "400": { $ref: "#/components/responses/Error" }
@@ -198,8 +198,8 @@ paths:
           example: "{{providerId}}",
         }
     post:
-      tags: [Providers]
-      operationId: syncProvider
+      tags: [LLM providers]
+      operationId: syncLLMProviderModels
       responses:
         "200":
           description: Sync counts.
@@ -222,8 +222,8 @@ paths:
         "503": { $ref: "#/components/responses/Error" }
   /api/v1/models:
     get:
-      tags: [Models]
-      operationId: listModels
+      tags: [LLM models]
+      operationId: listLLMModels
       parameters:
         - {
             name: providerId,
@@ -241,8 +241,8 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "400": { $ref: "#/components/responses/Error" }
     post:
-      tags: [Models]
-      operationId: createModel
+      tags: [LLM models]
+      operationId: createLLMModel
       requestBody:
         required: true
         content:
@@ -273,8 +273,8 @@ paths:
           example: "{{modelId}}",
         }
     delete:
-      tags: [Models]
-      operationId: deleteModel
+      tags: [LLM models]
+      operationId: deleteLLMModel
       responses:
         "200": { $ref: "#/components/responses/DeleteResult" }
         "404": { $ref: "#/components/responses/Error" }
@@ -284,8 +284,8 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /api/v1/model-roles:
     get:
-      tags: [Model roles]
-      operationId: listModelRoles
+      tags: [LLM model roles]
+      operationId: listLLMModelRoles
       security: [{ sessionCookie: [] }]
       responses:
         "200":
@@ -318,8 +318,8 @@ paths:
           example: chat.fast,
         }
     put:
-      tags: [Model roles]
-      operationId: assignModelRole
+      tags: [LLM model roles]
+      operationId: assignLLMModelRole
       requestBody:
         required: true
         content:
@@ -343,7 +343,7 @@ paths:
   /internal/models/resolve:
     get:
       tags: [Internal]
-      operationId: resolveModel
+      operationId: resolveLLMModel
       security: [{ serviceToken: [] }]
       parameters:
         - {

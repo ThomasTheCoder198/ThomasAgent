@@ -235,3 +235,21 @@ func TestLoad_RejectsInvalidProviderSettings(t *testing.T) {
 		})
 	}
 }
+
+func TestLoad_AppTokenDefaultsAndLimits(t *testing.T) {
+	setRequired(t)
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, "thomas-core", cfg.App.TokenIssuer)
+	require.Equal(t, "ragx", cfg.App.TokenAudience)
+	require.Equal(t, "dev-1", cfg.App.SigningKeyID)
+	require.Equal(t, 60*time.Second, cfg.App.TokenTTL)
+	t.Setenv("CORE_APP_TOKEN_TTL", "61s")
+	_, err = Load()
+	require.ErrorContains(t, err, "CORE_APP_TOKEN_TTL")
+	t.Setenv("CORE_APP_TOKEN_TTL", "60s")
+	t.Setenv("CORE_APP_SIGNING_KEY", "a")
+	t.Setenv("CORE_APP_SIGNING_KEY_FILE", "b")
+	_, err = Load()
+	require.ErrorContains(t, err, "CORE_APP_SIGNING_KEY")
+}

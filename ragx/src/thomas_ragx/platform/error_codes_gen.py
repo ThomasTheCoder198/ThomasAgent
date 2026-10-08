@@ -17,6 +17,14 @@ class ErrorCode(StrEnum):
     INTERNAL_TOKEN_INVALID = "INTERNAL_TOKEN_INVALID"
     KB_FILE_NOT_FOUND = "KB_FILE_NOT_FOUND"
     KB_NOT_FOUND = "KB_NOT_FOUND"
+    LLM_MODEL_CAPABILITY_MISMATCH = "LLM_MODEL_CAPABILITY_MISMATCH"
+    LLM_MODEL_IN_USE = "LLM_MODEL_IN_USE"
+    LLM_MODEL_NOT_FOUND = "LLM_MODEL_NOT_FOUND"
+    LLM_NAME_TAKEN = "LLM_NAME_TAKEN"
+    LLM_PROVIDER_NOT_FOUND = "LLM_PROVIDER_NOT_FOUND"
+    LLM_PROVIDER_REJECTED = "LLM_PROVIDER_REJECTED"
+    LLM_PROVIDER_SYNC_UNSUPPORTED = "LLM_PROVIDER_SYNC_UNSUPPORTED"
+    LLM_ROLE_NOT_ASSIGNED = "LLM_ROLE_NOT_ASSIGNED"
     METHOD_NOT_ALLOWED = "METHOD_NOT_ALLOWED"
     NOT_FOUND = "NOT_FOUND"
     ORG_NOT_PROVISIONED = "ORG_NOT_PROVISIONED"
@@ -24,14 +32,6 @@ class ErrorCode(StrEnum):
     PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
     RAGX_UNAVAILABLE = "RAGX_UNAVAILABLE"
     RATE_LIMITED = "RATE_LIMITED"
-    REGISTRY_CAPABILITY_MISMATCH = "REGISTRY_CAPABILITY_MISMATCH"
-    REGISTRY_MODEL_IN_USE = "REGISTRY_MODEL_IN_USE"
-    REGISTRY_MODEL_NOT_FOUND = "REGISTRY_MODEL_NOT_FOUND"
-    REGISTRY_NAME_TAKEN = "REGISTRY_NAME_TAKEN"
-    REGISTRY_PROVIDER_NOT_FOUND = "REGISTRY_PROVIDER_NOT_FOUND"
-    REGISTRY_PROVIDER_REJECTED = "REGISTRY_PROVIDER_REJECTED"
-    REGISTRY_ROLE_NOT_ASSIGNED = "REGISTRY_ROLE_NOT_ASSIGNED"
-    REGISTRY_SYNC_UNSUPPORTED = "REGISTRY_SYNC_UNSUPPORTED"
     UNAUTHENTICATED = "UNAUTHENTICATED"
     UNSUPPORTED_MEDIA_TYPE = "UNSUPPORTED_MEDIA_TYPE"
     VALIDATION_FAILED = "VALIDATION_FAILED"
@@ -58,6 +58,14 @@ ERROR_DEFINITIONS: Final[dict[ErrorCode, ErrorDefinition]] = {
     ErrorCode.INTERNAL_TOKEN_INVALID: ErrorDefinition(http_status=401, retryable=False, message_vi="Token dịch vụ không hợp lệ.", message_en="Invalid service token."),
     ErrorCode.KB_FILE_NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy tài liệu.", message_en="File not found."),
     ErrorCode.KB_NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy Knowledge Base.", message_en="Knowledge Base not found."),
+    ErrorCode.LLM_MODEL_CAPABILITY_MISMATCH: ErrorDefinition(http_status=422, retryable=False, message_vi="Model không có khả năng cần cho vai trò này.", message_en="The model lacks a capability this role requires."),
+    ErrorCode.LLM_MODEL_IN_USE: ErrorDefinition(http_status=409, retryable=False, message_vi="Model đang được gán cho một vai trò.", message_en="The model is assigned to a role."),
+    ErrorCode.LLM_MODEL_NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy model.", message_en="Model not found."),
+    ErrorCode.LLM_NAME_TAKEN: ErrorDefinition(http_status=409, retryable=False, message_vi="Tên này đã được dùng.", message_en="This name is already in use."),
+    ErrorCode.LLM_PROVIDER_NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy provider.", message_en="Provider not found."),
+    ErrorCode.LLM_PROVIDER_REJECTED: ErrorDefinition(http_status=400, retryable=False, message_vi="Provider từ chối key hoặc cấu hình.", message_en="The provider rejected the key or configuration."),
+    ErrorCode.LLM_PROVIDER_SYNC_UNSUPPORTED: ErrorDefinition(http_status=400, retryable=False, message_vi="Provider này chưa hỗ trợ đồng bộ model.", message_en="Model sync is not supported for this provider."),
+    ErrorCode.LLM_ROLE_NOT_ASSIGNED: ErrorDefinition(http_status=404, retryable=False, message_vi="Vai trò này chưa được gán model.", message_en="No model is assigned to this role."),
     ErrorCode.METHOD_NOT_ALLOWED: ErrorDefinition(http_status=405, retryable=False, message_vi="Phương thức không được hỗ trợ.", message_en="This method is not allowed."),
     ErrorCode.NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy tài nguyên.", message_en="The resource was not found."),
     ErrorCode.ORG_NOT_PROVISIONED: ErrorDefinition(http_status=409, retryable=False, message_vi="Tổ chức chưa được khởi tạo trong ragx.", message_en="The organization is not provisioned in ragx yet."),
@@ -65,14 +73,6 @@ ERROR_DEFINITIONS: Final[dict[ErrorCode, ErrorDefinition]] = {
     ErrorCode.PROVIDER_UNAVAILABLE: ErrorDefinition(http_status=503, retryable=True, message_vi="Dịch vụ bên ngoài đang không khả dụng.", message_en="An upstream provider is unavailable."),
     ErrorCode.RAGX_UNAVAILABLE: ErrorDefinition(http_status=503, retryable=True, message_vi="Dịch vụ tài liệu đang không khả dụng. Vui lòng thử lại.", message_en="The document service is unavailable. Please try again."),
     ErrorCode.RATE_LIMITED: ErrorDefinition(http_status=429, retryable=True, message_vi="Quá nhiều yêu cầu, vui lòng thử lại sau.", message_en="Too many requests, please retry later."),
-    ErrorCode.REGISTRY_CAPABILITY_MISMATCH: ErrorDefinition(http_status=422, retryable=False, message_vi="Model không có khả năng cần cho vai trò này.", message_en="The model lacks a capability this role requires."),
-    ErrorCode.REGISTRY_MODEL_IN_USE: ErrorDefinition(http_status=409, retryable=False, message_vi="Model đang được gán cho một vai trò.", message_en="The model is assigned to a role."),
-    ErrorCode.REGISTRY_MODEL_NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy model.", message_en="Model not found."),
-    ErrorCode.REGISTRY_NAME_TAKEN: ErrorDefinition(http_status=409, retryable=False, message_vi="Tên này đã được dùng.", message_en="This name is already in use."),
-    ErrorCode.REGISTRY_PROVIDER_NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy provider.", message_en="Provider not found."),
-    ErrorCode.REGISTRY_PROVIDER_REJECTED: ErrorDefinition(http_status=400, retryable=False, message_vi="Provider từ chối key hoặc cấu hình.", message_en="The provider rejected the key or configuration."),
-    ErrorCode.REGISTRY_ROLE_NOT_ASSIGNED: ErrorDefinition(http_status=404, retryable=False, message_vi="Vai trò này chưa được gán model.", message_en="No model is assigned to this role."),
-    ErrorCode.REGISTRY_SYNC_UNSUPPORTED: ErrorDefinition(http_status=400, retryable=False, message_vi="Provider này chưa hỗ trợ đồng bộ model.", message_en="Model sync is not supported for this provider."),
     ErrorCode.UNAUTHENTICATED: ErrorDefinition(http_status=401, retryable=False, message_vi="Bạn cần đăng nhập.", message_en="You need to sign in."),
     ErrorCode.UNSUPPORTED_MEDIA_TYPE: ErrorDefinition(http_status=415, retryable=False, message_vi="Kiểu nội dung yêu cầu không được hỗ trợ.", message_en="The request content type is not supported."),
     ErrorCode.VALIDATION_FAILED: ErrorDefinition(http_status=400, retryable=False, message_vi="Dữ liệu gửi lên không hợp lệ.", message_en="The request data is invalid."),

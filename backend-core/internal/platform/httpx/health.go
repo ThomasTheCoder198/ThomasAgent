@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/gin-gonic/gin"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
@@ -21,21 +21,21 @@ type DependencyPinger interface {
 	Ping(ctx context.Context) error
 }
 
-func MountHealth(r chi.Router, deps map[string]DependencyPinger) {
-	r.Get(LivenessPath, func(w http.ResponseWriter, req *http.Request) {
-		WriteSuccess(w, req, http.StatusOK, map[string]string{"status": LivenessStatus})
+func MountHealth(r gin.IRoutes, deps map[string]DependencyPinger) {
+	r.GET(LivenessPath, func(c *gin.Context) {
+		Success(c, http.StatusOK, map[string]string{"status": LivenessStatus})
 	})
-	r.Get(ReadinessPath, func(w http.ResponseWriter, req *http.Request) {
+	r.GET(ReadinessPath, func(c *gin.Context) {
 		failing := map[string]any{}
 		for name, dep := range deps {
-			if err := dep.Ping(req.Context()); err != nil {
+			if err := dep.Ping(c.Request.Context()); err != nil {
 				failing[name] = DependencyUnreachableStatus
 			}
 		}
 		if len(failing) > 0 {
-			WriteError(w, req, errors.ErrProviderUnavailable.WithDetails(failing))
+			Fail(c, errors.ErrProviderUnavailable.WithDetails(failing))
 			return
 		}
-		WriteSuccess(w, req, http.StatusOK, map[string]string{"status": ReadinessStatus})
+		Success(c, http.StatusOK, map[string]string{"status": ReadinessStatus})
 	})
 }

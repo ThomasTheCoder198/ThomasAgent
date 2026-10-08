@@ -7,7 +7,9 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/gin-gonic/gin"
+
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 )
 
 const (
@@ -17,7 +19,6 @@ const (
 	fieldMethod              = "method"
 	fieldRoute               = "route"
 	fieldStatus              = "status"
-	fieldDurationMS          = "duration_ms"
 	fieldIdempotencyKey      = "idempotency_key"
 	fieldIdempotencyRejected = "idempotency_key_rejected"
 	fieldRequestIDSource     = "request_id_source"
@@ -25,8 +26,8 @@ const (
 	requestIDSourceGenerated = "generated"
 )
 
-// Idempotency keys are client text; only a bounded token alphabet reaches the logs.
 var validIdempotencyKey = regexp.MustCompile(`^[A-Za-z0-9_-]{8,128}$`)
+var ginRouteParam = regexp.MustCompile(`:([A-Za-z][A-Za-z0-9_]*)`)
 
 type requestIDOrigin int
 
@@ -47,18 +48,14 @@ func requestIDOriginFrom(ctx context.Context) requestIDOrigin {
 	return origin
 }
 
-// LogAccess writes one line per request when it finishes: 2xx/3xx info, 4xx warn, 5xx error.
 func LogAccess(l *slog.Logger) Middleware {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			start := time.Now()
-			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-			// Deferred so a connection aborted mid-stream (http.ErrAbortHandler) still gets an access-log line.
-			defer func() {
-				l.LogAttrs(r.Context(), accessLevel(rec.status), accessLogMessage, accessAttrs(r, rec.status, time.Since(start))...)
-			}()
-			next.ServeHTTP(rec, r)
-		})
+	return func(c *gin.Context) {
+		start := time.Now()
+		defer func() {
+			status := c.Writer.Status()
+			l.LogAttrs(c.Request.Context(), accessLevel(status), accessLogMessage, accessAttrs(c, status, time.Since(start))...)
+		}()
+		c.Next()
 	}
 }
 
@@ -73,12 +70,13 @@ func accessLevel(status int) slog.Level {
 	}
 }
 
-func accessAttrs(r *http.Request, status int, elapsed time.Duration) []slog.Attr {
+func accessAttrs(c *gin.Context, status int, elapsed time.Duration) []slog.Attr {
+	r := c.Request
 	attrs := []slog.Attr{
 		slog.String(fieldMethod, r.Method),
-		slog.String(fieldRoute, RoutePattern(r)),
+		slog.String(fieldRoute, RoutePattern(c)),
 		slog.Int(fieldStatus, status),
-		slog.Int64(fieldDurationMS, elapsed.Milliseconds()),
+		slog.Int64(logging.FieldDurationMS, elapsed.Milliseconds()),
 	}
 	switch requestIDOriginFrom(r.Context()) {
 	case requestIDGenerated:
@@ -96,13 +94,11 @@ func accessAttrs(r *http.Request, status int, elapsed time.Duration) []slog.Attr
 	return attrs
 }
 
-// RoutePattern returns the matched chi pattern (for example /api/v1/providers/{id}), never the raw URL, so logs
-// and metric labels stay low-cardinality. Call it after the router has served the request.
-func RoutePattern(r *http.Request) string {
-	if rctx := chi.RouteContext(r.Context()); rctx != nil {
-		if pattern := rctx.RoutePattern(); pattern != "" {
-			return pattern
-		}
+// RoutePattern preserves the contract's brace syntax for route labels.
+func RoutePattern(c *gin.Context) string {
+	pattern := c.FullPath()
+	if pattern == "" {
+		return unmatchedRoute
 	}
-	return unmatchedRoute
+	return ginRouteParam.ReplaceAllString(pattern, "{$1}")
 }

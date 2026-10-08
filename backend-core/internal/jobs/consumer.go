@@ -22,7 +22,6 @@ const (
 	streamStartID   = "0"
 	newMessagesID   = ">"
 	autoClaimStart  = "0-0"
-	fieldDurationMS = "duration_ms"
 )
 
 type Message struct {
@@ -131,7 +130,7 @@ func (c *Consumer) handle(ctx context.Context, raw redis.XMessage, handler Handl
 	if herr == nil {
 		c.ack(ctx, raw.ID)
 		c.observe(metrics.OutcomeSuccess)
-		c.Log.InfoContext(ctx, "job handled", "stream", c.Stream, "id", raw.ID, "outbox_id", msg.OutboxID, "deliveries", deliveries, fieldDurationMS, elapsed)
+		c.Log.InfoContext(ctx, "job handled", "stream", c.Stream, "id", raw.ID, "outbox_id", msg.OutboxID, "deliveries", deliveries, logging.FieldDurationMS, elapsed)
 		return
 	}
 	if deliveries >= int64(c.MaxDeliveries) {
@@ -139,7 +138,7 @@ func (c *Consumer) handle(ctx context.Context, raw redis.XMessage, handler Handl
 		return
 	}
 	c.observe(metrics.OutcomeRetry)
-	c.Log.WarnContext(ctx, "job failed, will retry", "stream", c.Stream, "id", raw.ID, "outbox_id", msg.OutboxID, "deliveries", deliveries, "error_code", errors.CodeOf(herr), fieldDurationMS, elapsed)
+	c.Log.WarnContext(ctx, "job failed, will retry", "stream", c.Stream, "id", raw.ID, "outbox_id", msg.OutboxID, "deliveries", deliveries, "error_code", errors.CodeOf(herr), logging.FieldDurationMS, elapsed)
 }
 
 // messageRequestID trusts only well-formed ids; entries from an older relay or forged entries get a fresh job id.
@@ -178,7 +177,7 @@ func (c *Consumer) deadLetter(ctx context.Context, m Message, cause error, elaps
 		return
 	}
 	c.ack(ctx, m.StreamEntryID)
-	c.Log.ErrorContext(ctx, "job moved to DLQ", "stream", c.Stream, "id", m.StreamEntryID, "outbox_id", m.OutboxID, "deliveries", m.Deliveries, "error_code", errors.CodeOf(cause), fieldDurationMS, elapsed)
+	c.Log.ErrorContext(ctx, "job moved to DLQ", "stream", c.Stream, "id", m.StreamEntryID, "outbox_id", m.OutboxID, "deliveries", m.Deliveries, "error_code", errors.CodeOf(cause), logging.FieldDurationMS, elapsed)
 	c.observe(metrics.OutcomeDeadLetter)
 }
 

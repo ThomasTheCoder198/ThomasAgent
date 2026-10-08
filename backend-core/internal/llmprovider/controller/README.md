@@ -1,19 +1,30 @@
-# Registry handler
+# LLM provider controllers
 
 ## Purpose
-Owns public provider/model/role routes and the service-token protected model resolver route.
+
+Translate public provider, model and role requests and the internal resolve request into service calls and shared response DTOs.
 
 ## Entry points
-`NewRegistryHandler`, `Mount`, `MountInternal`, `RequireServiceToken`.
+
+- `NewProviderController`, `NewModelController`, `NewModelRoleController`, `NewInternalModelController` construct one controller per API surface.
+- Exported `HandleXxx(*gin.Context)` methods are registered only in `cmd/core/routes.go`.
 
 ## Dependencies
-Consumes registry service interfaces, DTOs and shared HTTP response/error helpers.
+
+- Uses: `llmprovider/service`, `llmprovider/dto`, `llmprovider/model`, `httpx`.
+- Used by: `cmd/core/server.go` and `cmd/core/routes.go`.
 
 ## Run & test
-Covered by `go test ./internal/registry/...` and the generated API collection.
+
+```bash
+cd backend-core
+go test ./internal/llmprovider/... -count=1
+```
 
 ## Conventions
-Public responses map domain models to DTOs. The resolver response may contain a provider key only behind the internal service token.
+
+Controllers do not register routes or authenticate requests. Public responses never contain provider keys. The internal resolve route is protected by `llmprovider/middleware.RequireServiceToken`.
 
 ## Common failures
-Invalid bearer tokens return the named INTERNAL_TOKEN_INVALID error.
+
+Invalid path UUIDs and JSON bodies return catalog validation errors through `httpx.Fail`.

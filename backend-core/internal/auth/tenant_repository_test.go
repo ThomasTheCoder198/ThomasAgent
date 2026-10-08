@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
@@ -42,7 +43,8 @@ func TestRequireSessionDerivesTenantFromSessionRow(t *testing.T) {
 	require.NoError(t, err)
 	token := "other-session-token"
 	require.NoError(t, svc.repo.CreateSession(otherCtx, other.ID, authtoken.Hash(token), "csrf", time.Now().Add(time.Hour)))
-	handler := authmiddleware.RequireSession(svc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httpx.NewRouter(nil)
+	handler.GET("/tenant-data", authmiddleware.RequireSession(svc), wrapAuthHTTP(func(w http.ResponseWriter, r *http.Request) {
 		scope, err := tenant.ID(r.Context())
 		require.NoError(t, err)
 		require.Equal(t, "other", scope)

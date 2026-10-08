@@ -1,4 +1,4 @@
-package registry
+package llmprovider
 
 import (
 	"context"
@@ -18,12 +18,13 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/metrics"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/model"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/retry"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/model"
 )
 
 const (
@@ -33,7 +34,6 @@ const (
 	headerRetryAfter    = "Retry-After"
 	catalogOperation    = "provider.list_models"
 	catalogSuccess      = "success"
-	catalogDurationMS   = "duration_ms"
 	decimalBase         = 10
 	intBits             = 64
 	maxRetryAfter       = time.Duration(1<<63 - 1)
@@ -176,20 +176,20 @@ func (c *HTTPCatalog) fetch(ctx context.Context, kind model.ProviderKind, baseUR
 			c.Metrics.ObserveOutbound(string(kind), outcome, elapsed)
 		}
 		if c.log != nil {
-			c.log.InfoContext(ctx, catalogOperation, slog.Bool(catalogSuccess, err == nil), slog.Int64(catalogDurationMS, elapsed.Milliseconds()))
+			c.log.InfoContext(ctx, catalogOperation, slog.Bool(catalogSuccess, err == nil), slog.Int64(logging.FieldDurationMS, elapsed.Milliseconds()))
 		}
 	}()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+modelsPath, nil)
 	if err != nil {
-		return errors.ErrRegistryProviderRejected
+		return errors.ErrLLMProviderRejected
 	}
 	if apiKey != "" {
 		req.Header.Set(headerAuthorization, bearerPrefix+apiKey)
 	}
 	res, err := c.Client.Do(req)
 	if err != nil {
-		if stderrors.Is(err, errors.ErrRegistryProviderRejected) {
-			return errors.ErrRegistryProviderRejected
+		if stderrors.Is(err, errors.ErrLLMProviderRejected) {
+			return errors.ErrLLMProviderRejected
 		}
 		if ctx.Err() != nil {
 			return errors.ErrProviderUnavailable.WithCause(ctx.Err())
@@ -210,13 +210,13 @@ func (c *HTTPCatalog) decodeModels(body io.Reader, out *openRouterModels) error 
 		return errors.ErrProviderUnavailable
 	}
 	if int64(len(raw)) > c.MaxResponseBytes {
-		return errors.ErrRegistryProviderRejected
+		return errors.ErrLLMProviderRejected
 	}
 	var envelope struct {
 		Data []json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil || envelope.Data == nil {
-		return errors.ErrRegistryProviderRejected
+		return errors.ErrLLMProviderRejected
 	}
 	out.Data = make([]openRouterModel, len(envelope.Data))
 	for i, entry := range envelope.Data {
@@ -262,7 +262,7 @@ func errorForStatus(status int) error {
 	case status >= http.StatusInternalServerError:
 		return errors.ErrProviderUnavailable.WithCause(statusError{status})
 	case status >= http.StatusBadRequest:
-		return errors.ErrRegistryProviderRejected
+		return errors.ErrLLMProviderRejected
 	}
 	return nil
 }

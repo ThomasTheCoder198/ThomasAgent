@@ -5,7 +5,7 @@ Owns the versioned Postgres schema embedded in the core executable.
 The platform migration establishes the outbox and audit event tables.
 The identity/registry migration establishes users, sessions, secrets, providers,
 models, and tenant-specific model roles.
-Sessions reference users with the composite `(tenant_id, user_id)` foreign key, and session/audit/registry repository queries explicitly scope the Platform tenant.
+Sessions reference users with the composite `(tenant_id, user_id)` foreign key, and session/audit/LLM provider repository queries explicitly scope the Platform tenant.
 
 `20261004000002_tenant_context_required.sql` removes all eight business-table
 `tenant_id` defaults. Every INSERT supplies trusted context scope; Down restores

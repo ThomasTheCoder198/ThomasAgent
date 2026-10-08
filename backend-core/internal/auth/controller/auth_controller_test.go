@@ -1,4 +1,4 @@
-package handler
+package controller
 
 import (
 	"net/http"
@@ -10,9 +10,9 @@ import (
 )
 
 func TestLoginProxyTrustSelectsRightmostUntrustedHop(t *testing.T) {
-	h := NewAuthHandlerWithTrustedProxies(nil, nil, false, "X-Forwarded-For", []netip.Prefix{
+	h := NewAuthController(AuthControllerParams{TrustedProxyHeader: "X-Forwarded-For", TrustedProxyCIDRs: []netip.Prefix{
 		netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("2001:db8:1::/48"),
-	}, nil)
+	}})
 	for _, test := range []struct{ peer, header, want string }{
 		{"192.0.2.10:1234", "198.51.100.1", "192.0.2.10"},
 		{"10.0.0.1:1234", "198.51.100.1, 192.0.2.8, 10.0.0.2", "192.0.2.8"},
@@ -28,9 +28,9 @@ func TestLoginProxyTrustSelectsRightmostUntrustedHop(t *testing.T) {
 }
 
 func TestClientIPJoinsForwardingHeaderLines(t *testing.T) {
-	h := NewAuthHandlerWithTrustedProxies(nil, nil, false, "X-Forwarded-For", []netip.Prefix{
+	h := NewAuthController(AuthControllerParams{TrustedProxyHeader: "X-Forwarded-For", TrustedProxyCIDRs: []netip.Prefix{
 		netip.MustParsePrefix("10.0.0.0/8"),
-	}, nil)
+	}})
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	req.RemoteAddr = "10.0.0.1:9000"
 	req.Header.Add("X-Forwarded-For", "192.0.2.99")

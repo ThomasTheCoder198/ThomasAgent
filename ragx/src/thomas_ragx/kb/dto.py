@@ -51,6 +51,7 @@ class KnowledgeBaseResponse(CamelModel):
     is_default: bool
     embedding_model: str
     embedding_dims: int
+    file_count: int
     created_at: datetime
     updated_at: datetime
 
@@ -62,6 +63,7 @@ class KnowledgeBaseResponse(CamelModel):
             is_default=kb.is_default,
             embedding_model=kb.embedding_model,
             embedding_dims=kb.embedding_dims,
+            file_count=kb.file_count,
             created_at=kb.created_at,
             updated_at=kb.updated_at,
         )

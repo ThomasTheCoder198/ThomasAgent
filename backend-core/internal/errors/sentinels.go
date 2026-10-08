@@ -13,4 +13,7 @@ var (
 	ErrEventHeartbeatInvalid = stderrors.New("event stream heartbeat must be positive")
 	ErrEventWriteTimeout     = stderrors.New("event stream write timeout must be positive")
 	ErrTrailingJSON          = stderrors.New("unexpected data after JSON value")
+	ErrAppSigningKeyMissing  = stderrors.New("app signing key: set CORE_APP_SIGNING_KEY or CORE_APP_SIGNING_KEY_FILE")
+	ErrAppSigningKeyInvalid  = stderrors.New("app signing key: expected one PKCS#8 PEM Ed25519 private key")
+	ErrAppTokenClaimsInvalid = stderrors.New("app token: an org (not the platform), a scope and a valid request id are required")
 )

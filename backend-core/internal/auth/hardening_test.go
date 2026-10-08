@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/handler"
+	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/controller"
 	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
 
 	"github.com/redis/go-redis/v9"
@@ -37,7 +37,7 @@ func TestLogin_IgnoresSpoofedForwardingFromUntrustedPeer(t *testing.T) {
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger))
-	authhandler.NewAuthHandlerWithProxyHeader(svc, authlimiter.NewLimiter(startRedis(t), 1, time.Minute), false, "X-Forwarded-For", logger).Mount(router)
+	mountAuthForTest(router, authhandler.AuthControllerParams{Service: svc, Limiter: authlimiter.NewLimiter(startRedis(t), 1, time.Minute), TrustedProxyHeader: "X-Forwarded-For", Logger: logger})
 	require.Equal(t, 401, attemptFrom(router, ownerEmail, "192.0.2.1:9999", "198.51.100.1").Code)
 	require.Equal(t, 429, attemptFrom(router, ownerEmail, "192.0.2.1:9999", "198.51.100.2").Code)
 }

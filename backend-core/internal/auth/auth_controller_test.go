@@ -14,14 +14,15 @@ import (
 	"testing"
 	"time"
 
-	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/handler"
+	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/controller"
 	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
 	authmiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/middleware"
+	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
 	authtoken "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/token"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
@@ -43,19 +44,27 @@ func startRedis(t *testing.T) *redis.Client {
 	return client
 }
 
+func mountAuthForTest(r *gin.Engine, p authhandler.AuthControllerParams) {
+	ctrl := authhandler.NewAuthController(p)
+	r.POST("/api/v1/auth/login", ctrl.HandleLogin)
+	protected := r.Group("", authmiddleware.RequireSession(p.Service.(authservice.SessionAuthenticator)))
+	protected.POST("/api/v1/auth/logout", ctrl.HandleLogout)
+	protected.GET("/api/v1/auth/me", ctrl.HandleMe)
+}
+
+func wrapAuthHTTP(h http.HandlerFunc) gin.HandlerFunc { return gin.WrapF(h) }
+
 func newServer(t *testing.T, maxAttempts int) (http.Handler, *clock) {
 	t.Helper()
 	svc, c := newService(t)
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	r := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
-	authhandler.NewAuthHandler(svc, authlimiter.NewLimiter(startRedis(t), maxAttempts, time.Minute), false).Mount(r)
-	r.Group(func(pr chi.Router) {
-		pr.Use(authmiddleware.RequireSession(svc))
-		pr.Post("/api/v1/things", func(w http.ResponseWriter, req *http.Request) {
-			httpx.WriteSuccess(w, req, http.StatusCreated, map[string]bool{"ok": true})
-		})
-		pr.Post("/api/v1/stream-probe", streamProbe)
-	})
+	mountAuthForTest(r, authhandler.AuthControllerParams{Service: svc, Limiter: authlimiter.NewLimiter(startRedis(t), maxAttempts, time.Minute)})
+	pr := r.Group("", authmiddleware.RequireSession(svc))
+	pr.POST("/api/v1/things", wrapAuthHTTP(func(w http.ResponseWriter, req *http.Request) {
+		httpx.WriteSuccess(w, req, http.StatusCreated, map[string]bool{"ok": true})
+	}))
+	pr.POST("/api/v1/stream-probe", wrapAuthHTTP(streamProbe))
 	return r, c
 }
 
@@ -148,7 +157,7 @@ func TestMutationWithoutCSRFIsForbidden(t *testing.T) {
 func TestExpiredSessionIsRejectedOverHTTP(t *testing.T) {
 	service, _ := newService(t)
 	h := httpx.NewRouter(nil)
-	authhandler.NewAuthHandler(service, authlimiter.NewLimiter(startRedis(t), 10, time.Minute), false).Mount(h)
+	mountAuthForTest(h, authhandler.AuthControllerParams{Service: service, Limiter: authlimiter.NewLimiter(startRedis(t), 10, time.Minute)})
 	rec := login(t, h, ownerEmail, ownerPassword)
 	_, err := service.db.Exec(t.Context(), `UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1`, authtoken.Hash(cookie(rec, authmiddleware.CookieSession).Value))
 	require.NoError(t, err)
@@ -186,7 +195,7 @@ func TestLoginLimiterSeparatesForwardedIPsAndEmails(t *testing.T) {
 	client := startRedis(t)
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger))
-	authhandler.NewAuthHandlerWithTrustedProxies(svc, authlimiter.NewLoginLimiter(client, config.AuthConfig{LoginMaxAttempts: 1, LoginEmailMaxAttempts: 10, LoginIPMaxAttempts: 100, LoginWindow: time.Minute}, []byte("test-limiter-hmac-key-at-least-32-chars")), false, "X-Trusted-Client-IP", []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, logger).Mount(router)
+	mountAuthForTest(router, authhandler.AuthControllerParams{Service: svc, Limiter: authlimiter.NewLoginLimiter(client, config.AuthConfig{LoginMaxAttempts: 1, LoginEmailMaxAttempts: 10, LoginIPMaxAttempts: 100, LoginWindow: time.Minute}, []byte("test-limiter-hmac-key-at-least-32-chars")), TrustedProxyHeader: "X-Trusted-Client-IP", TrustedProxyCIDRs: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, Logger: logger})
 	attempt := func(email, ip string) int {
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"email":"`+email+`","password":"wrong-password"}`))
 		request.RemoteAddr = "10.0.0.1:1234"

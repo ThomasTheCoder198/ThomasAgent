@@ -16,6 +16,7 @@ import (
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
@@ -47,14 +48,12 @@ func (b *lockedBuffer) String() string {
 
 // requireHeader stands in for the session and CSRF middleware that Task 4 adds, so this gate runs the same chain shape.
 func requireHeader(name string) Middleware {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Header.Get(name) == "" {
-				WriteError(w, r, errors.ErrUnauthenticated)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
+	return func(c *gin.Context) {
+		if c.Request.Header.Get(name) == "" {
+			Fail(c, errors.ErrUnauthenticated)
+			return
+		}
+		c.Next()
 	}
 }
 
@@ -64,7 +63,7 @@ func newChainServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *
 	logger := slog.New(slog.NewJSONHandler(logs, nil))
 	r := NewRouter(NewSlogErrorLogger(logger), LogAccess(logger),
 		requireHeader(chainSessionHeader), requireHeader(chainCSRFHeader))
-	r.Post("/stream", handler)
+	r.POST("/stream", wrapHTTP(handler))
 	server := httptest.NewServer(r)
 	t.Cleanup(server.Close)
 	return server, logs

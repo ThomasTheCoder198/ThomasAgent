@@ -10,7 +10,7 @@ from thomas_ragx.platform.errors import AppError
 from thomas_ragx.registry.dev_seed import DEV_EMBEDDING_DIMS, seed_dev_registry
 from thomas_ragx.registry.listing import ModelListing
 from thomas_ragx.registry.model import EMPTY_FACTS, Capability, ModelFacts, ProviderKind, Role
-from thomas_ragx.registry.service import RegistryService
+from thomas_ragx.registry.service import LLMProviderService
 from thomas_ragx.registry.vault import Vault
 
 pytestmark = pytest.mark.integration
@@ -26,9 +26,9 @@ def _facts(kind: ProviderKind, name: str) -> ModelFacts:
 
 def _service(
     pool: Pool, lister: FakeLister | None = None, vault_key: SecretStr = MASTER_KEY
-) -> RegistryService:
+) -> LLMProviderService:
     lister = lister or FakeLister()
-    return RegistryService(pool, Vault(vault_key), ModelListing(lister, lister), FakeChecker(), _facts)
+    return LLMProviderService(pool, Vault(vault_key), ModelListing(lister, lister), FakeChecker(), _facts)
 
 
 async def test_provider_key_is_write_only_and_stored_encrypted(pool: Pool) -> None:
@@ -78,10 +78,10 @@ async def test_role_requires_capability_and_embedding_requires_dims(pool: Pool) 
     )
     with pytest.raises(AppError) as mismatch:
         await service.assign_role(Role.EMBEDDING, chat.id)
-    assert mismatch.value.code is ErrorCode.REGISTRY_CAPABILITY_MISMATCH
+    assert mismatch.value.code is ErrorCode.LLM_MODEL_CAPABILITY_MISMATCH
     with pytest.raises(AppError) as missing_dims:
         await service.assign_role(Role.EMBEDDING, no_dims.id)
-    assert missing_dims.value.code is ErrorCode.REGISTRY_CAPABILITY_MISMATCH
+    assert missing_dims.value.code is ErrorCode.LLM_MODEL_CAPABILITY_MISMATCH
     await service.assign_role(Role.CHAT_FAST, chat.id)
     assert (await service.roles())[Role.CHAT_FAST] == chat
 
@@ -91,10 +91,10 @@ async def test_model_in_a_role_cannot_be_deleted(pool: Pool) -> None:
     model = await seed_dev_registry(service)
     with pytest.raises(AppError) as in_use:
         await service.delete_model(model.id)
-    assert in_use.value.code is ErrorCode.REGISTRY_MODEL_IN_USE
+    assert in_use.value.code is ErrorCode.LLM_MODEL_IN_USE
     with pytest.raises(AppError) as provider_in_use:
         await service.delete_provider(model.provider_id)
-    assert provider_in_use.value.code is ErrorCode.REGISTRY_MODEL_IN_USE
+    assert provider_in_use.value.code is ErrorCode.LLM_MODEL_IN_USE
 
 
 async def test_dev_seed_is_idempotent_and_offline(pool: Pool) -> None:
@@ -120,4 +120,4 @@ async def test_duplicate_provider_name_is_reported(pool: Pool) -> None:
     await service.create_provider(ProviderKind.OPENROUTER, "OpenRouter", "", API_KEY)
     with pytest.raises(AppError) as taken:
         await service.create_provider(ProviderKind.OPENROUTER, "OpenRouter", "", API_KEY)
-    assert taken.value.code is ErrorCode.REGISTRY_NAME_TAKEN
+    assert taken.value.code is ErrorCode.LLM_NAME_TAKEN

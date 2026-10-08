@@ -1,16 +1,16 @@
-# Registry repository
+# LLM provider repository
 
 ## Purpose
 Owns tenant-scoped SQL access for providers, models and role assignments.
 
 ## Entry points
-`NewRegistryRepository` returns `PGRepository`, which implements the focused provider, model and role interfaces. Its methods take a `postgres.DBTX` supplied by the service transaction.
+`NewLLMProviderRepository` returns `PGRepository`, which implements the focused provider, model and role interfaces. Its methods take a `postgres.DBTX` supplied by the service transaction.
 
 ## Dependencies
-Uses registry domain models and inputs, Postgres DBTX, UUID and the shared errors catalog.
+Uses LLM provider domain models and inputs, Postgres DBTX, UUID and the shared errors catalog.
 
 ## Run & test
-Covered by `go test ./internal/registry/...` with migrated Postgres testcontainers.
+Covered by `go test ./internal/llmprovider/...` with migrated Postgres testcontainers.
 
 ## Conventions
 Every business query gets the tenant from context. Service transactions pass their own DBTX; repository methods do not create transactions.

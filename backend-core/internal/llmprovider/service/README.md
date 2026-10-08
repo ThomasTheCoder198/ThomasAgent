@@ -1,16 +1,16 @@
-# Registry service
+# LLM provider service
 
 ## Purpose
-Owns registry business orchestration and defines the behaviors required by HTTP handlers.
+Owns LLM provider business orchestration and defines the behaviors required by HTTP controllers.
 
 ## Entry points
-`Service`, `NewRegistryService`, `RegistryService` and `Resolver` interfaces.
+`Service`, `NewLLMProviderService`, `LLMProviderService` and `Resolver` interfaces.
 
 ## Dependencies
-Depends on registry models, repository, catalog interface, vault and audit. HTTP DTOs are converted by the handler.
+Depends on LLM provider models, repository, catalog interface, vault and audit. HTTP DTOs are converted by the controllers.
 
 ## Run & test
-Covered by `go test ./internal/registry/...`.
+Covered by `go test ./internal/llmprovider/...`.
 
 ## Conventions
 Public API and internal resolver depend only on the methods they consume. Implementation owns validation, transaction and catalog orchestration.

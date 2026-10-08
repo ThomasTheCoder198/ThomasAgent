@@ -3,19 +3,31 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"time"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 )
 
-const localHealthBaseURL = "http://127.0.0.1"
+const (
+	localHealthHost    = "127.0.0.1"
+	localHealthScheme  = "http://"
+	healthcheckTimeout = 3 * time.Second
+)
 
 func checkHTTPHealth(ctx context.Context, addr string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, localHealthBaseURL+addr+httpx.LivenessPath, nil)
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("healthcheck address: %w", err)
+	}
+	url := localHealthScheme + net.JoinHostPort(localHealthHost, port) + httpx.LivenessPath
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("create healthcheck request: %w", err)
 	}
-	res, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: healthcheckTimeout}
+	res, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("healthcheck request: %w", err)
 	}

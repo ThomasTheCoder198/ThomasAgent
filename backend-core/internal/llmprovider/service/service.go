@@ -12,9 +12,9 @@ import (
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/audit"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/model"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/repository"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/model"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/repository"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/vault"
 )
 
@@ -33,17 +33,17 @@ type Service struct {
 	secrets         *vault.Store
 	catalog         Catalog
 	maxRemoteModels int
-	repo            repository.RegistryRepository
+	repo            repository.LLMProviderRepository
 }
 
-var _ RegistryService = (*Service)(nil)
+var _ LLMProviderService = (*Service)(nil)
 var _ Resolver = (*Service)(nil)
 
-func NewRegistryService(pool *pgxpool.Pool, secrets *vault.Store, catalog Catalog, maxRemoteModels int) *Service {
-	return NewRegistryServiceWithRepository(pool, secrets, catalog, maxRemoteModels, repository.NewRegistryRepository())
+func NewLLMProviderService(pool *pgxpool.Pool, secrets *vault.Store, catalog Catalog, maxRemoteModels int) *Service {
+	return NewLLMProviderServiceWithRepository(pool, secrets, catalog, maxRemoteModels, repository.NewLLMProviderRepository())
 }
 
-func NewRegistryServiceWithRepository(pool *pgxpool.Pool, secrets *vault.Store, catalog Catalog, maxRemoteModels int, repo repository.RegistryRepository) *Service {
+func NewLLMProviderServiceWithRepository(pool *pgxpool.Pool, secrets *vault.Store, catalog Catalog, maxRemoteModels int, repo repository.LLMProviderRepository) *Service {
 	return &Service{pool: pool, secrets: secrets, catalog: catalog, maxRemoteModels: maxRemoteModels, repo: repo}
 }
 
@@ -309,7 +309,7 @@ func (s *Service) SyncModels(ctx context.Context, providerID uuid.UUID) (model.S
 		return model.SyncResult{}, err
 	}
 	if p.Kind != model.KindOpenRouter {
-		return model.SyncResult{}, errors.ErrRegistrySyncUnsupported
+		return model.SyncResult{}, errors.ErrLLMProviderSyncUnsupported
 	}
 	remote, err := s.catalog.ListModels(ctx, p.ID, p.Kind, p.BaseURL, key)
 	if err != nil {
@@ -348,11 +348,11 @@ func (s *Service) syncRemoteModels(ctx context.Context, tx pgx.Tx, providerID uu
 			Capabilities: remoteModel.Capabilities, ContextWindow: remoteModel.ContextWindow,
 			InputPricePerMTok: remoteModel.InputPricePerMTok, OutputPricePerMTok: remoteModel.OutputPricePerMTok}
 		if err := validateModel(&input); err != nil {
-			return nil, errors.ErrRegistryProviderRejected.WithCause(err)
+			return nil, errors.ErrLLMProviderRejected.WithCause(err)
 		}
 		model, inserted, err := s.repo.UpsertModel(ctx, tx, input, sourceSync)
 		if err != nil {
-			if errors.ToAppError(err).Code == errors.CodeRegistryNameTaken {
+			if errors.ToAppError(err).Code == errors.CodeLLMNameTaken {
 				result.Skipped++
 				continue
 			}
@@ -395,7 +395,7 @@ func (s *Service) AssignRole(ctx context.Context, role model.Role, modelID uuid.
 			return err
 		}
 		if !satisfies(m, role) {
-			return errors.ErrRegistryCapabilityMismatch.WithDetails(map[string]any{"role": string(role), "requires": model.RequirementsForRole(role)})
+			return errors.ErrLLMModelCapabilityMismatch.WithDetails(map[string]any{"role": string(role), "requires": model.RequirementsForRole(role)})
 		}
 		if err := s.repo.UpsertRole(ctx, tx, role, modelID); err != nil {
 			return err
@@ -430,7 +430,7 @@ func (s *Service) Resolve(ctx context.Context, role model.Role) (model.ResolvedM
 		return model.ResolvedModel{}, errors.ErrProviderUnavailable
 	}
 	if !satisfies(m, effective) {
-		return model.ResolvedModel{}, errors.ErrRegistryCapabilityMismatch.WithDetails(map[string]any{"role": string(effective), "requires": model.RequirementsForRole(effective)})
+		return model.ResolvedModel{}, errors.ErrLLMModelCapabilityMismatch.WithDetails(map[string]any{"role": string(effective), "requires": model.RequirementsForRole(effective)})
 	}
 	return model.ResolvedModel{Role: effective, FallbackFrom: fallbackFrom, ProviderKind: p.Kind, BaseURL: p.BaseURL, APIKey: key,
 		ModelRef: m.ModelRef, Capabilities: m.Capabilities, EmbeddingDims: m.EmbeddingDims}, nil
@@ -450,7 +450,7 @@ func (s *Service) resolveAssignment(ctx context.Context, role model.Role) (model
 		}
 	}
 	if !ok {
-		return effective, fallbackFrom, id, errors.ErrRegistryRoleNotAssigned.WithDetails(map[string]any{"role": string(role)})
+		return effective, fallbackFrom, id, errors.ErrLLMRoleNotAssigned.WithDetails(map[string]any{"role": string(role)})
 	}
 	return effective, fallbackFrom, id, nil
 }

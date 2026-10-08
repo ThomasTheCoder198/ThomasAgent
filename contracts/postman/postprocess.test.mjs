@@ -7,7 +7,7 @@ const raw = {
   info: { name: "ThomasAgent Core API" },
   item: [
     {
-      name: "Providers",
+      name: "LLM providers",
       item: [
         {
           name: "create Provider",
@@ -70,7 +70,7 @@ test("login stores csrfToken and create requests store ids", () => {
   const out = postprocess(structuredClone(raw));
   const login = out.item.find((f) => f.name === "Auth").item[0];
   assert.match(login.event[0].script.exec.join("\n"), /csrfToken/);
-  const create = out.item.find((f) => f.name === "Providers").item[0];
+  const create = out.item.find((f) => f.name === "LLM providers").item[0];
   assert.match(create.event[0].script.exec.join("\n"), /providerId/);
 });
 
@@ -142,7 +142,7 @@ test("runs deletion checks and logout after model role assignment", () => {
       },
     });
   input.item
-    .find((folder) => folder.name === "Providers")
+    .find((folder) => folder.name === "LLM providers")
     .item.push({
       name: "delete provider",
       request: {
@@ -151,7 +151,7 @@ test("runs deletion checks and logout after model role assignment", () => {
       },
     });
   input.item.push({
-    name: "Models",
+    name: "LLM models",
     item: [
       {
         name: "delete model",
@@ -162,7 +162,7 @@ test("runs deletion checks and logout after model role assignment", () => {
       },
     ],
   });
-  input.item.push({ name: "Model roles", item: [] });
+  input.item.push({ name: "LLM model roles", item: [] });
   const output = postprocess(input);
   assert.deepEqual(
     output.item.slice(-2).map((folder) => folder.name),
@@ -181,7 +181,7 @@ test("runs deletion checks and logout after model role assignment", () => {
 test("asserts successful login and create status instead of accepting unauthorized responses", () => {
   const output = postprocess(structuredClone(raw));
   const login = output.item.find((folder) => folder.name === "Auth").item[0];
-  const create = output.item.find((folder) => folder.name === "Providers")
+  const create = output.item.find((folder) => folder.name === "LLM providers")
     .item[0];
   assert.match(login.event[0].script.exec.join("\n"), /expected status.*200/);
   assert.match(create.event[0].script.exec.join("\n"), /expected status.*201/);
@@ -205,7 +205,7 @@ test("uses the cookie jar publicly and an explicit service token internally", ()
   const output = postprocess(input);
   assert.deepEqual(output.auth, { type: "noauth" });
   assert.deepEqual(
-    output.item.find((folder) => folder.name === "Providers").item[0].request
+    output.item.find((folder) => folder.name === "LLM providers").item[0].request
       .auth,
     { type: "noauth" },
   );

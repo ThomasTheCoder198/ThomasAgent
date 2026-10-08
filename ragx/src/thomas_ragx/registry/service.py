@@ -50,13 +50,13 @@ def _clean_base_url(base_url: str) -> str:
 
 def _require_role_fit(role: Role, model: ModelRecord) -> None:
     if not model.capabilities & ROLE_CAPABILITIES[role]:
-        raise AppError(ErrorCode.REGISTRY_CAPABILITY_MISMATCH)
+        raise AppError(ErrorCode.LLM_MODEL_CAPABILITY_MISMATCH)
     if role is Role.EMBEDDING and not model.embedding_dims:
         # A KB copies its dims at creation; an embedding model without dims could never build a collection.
-        raise AppError(ErrorCode.REGISTRY_CAPABILITY_MISMATCH)
+        raise AppError(ErrorCode.LLM_MODEL_CAPABILITY_MISMATCH)
 
 
-class RegistryService:
+class LLMProviderService:
     def __init__(
         self,
         pool: Pool,
@@ -84,7 +84,7 @@ class RegistryService:
     async def _access(self, conn: Connection, provider_id: UUID) -> ProviderAccess:
         row = await repository.get_provider_row(conn, provider_id)
         if row is None:
-            raise AppError(ErrorCode.REGISTRY_PROVIDER_NOT_FOUND)
+            raise AppError(ErrorCode.LLM_PROVIDER_NOT_FOUND)
         key = None
         if row["api_key_ciphertext"] is not None:
             sealed = Sealed(nonce=bytes(row["api_key_nonce"]), ciphertext=bytes(row["api_key_ciphertext"]))
@@ -106,7 +106,7 @@ class RegistryService:
                     self._seal(provider_id, api_key),
                 )
         except pg_errors.UniqueViolation:
-            raise AppError(ErrorCode.REGISTRY_NAME_TAKEN) from None
+            raise AppError(ErrorCode.LLM_NAME_TAKEN) from None
 
     async def update_provider(
         self, provider_id: UUID, name: str, base_url: str, api_key: SecretStr | None, clear_api_key: bool
@@ -117,7 +117,7 @@ class RegistryService:
                     conn, provider_id, _clean_name(name), _clean_base_url(base_url)
                 )
                 if updated is None:
-                    raise AppError(ErrorCode.REGISTRY_PROVIDER_NOT_FOUND)
+                    raise AppError(ErrorCode.LLM_PROVIDER_NOT_FOUND)
                 if clear_api_key or api_key is not None:
                     await repository.set_provider_key(
                         conn, provider_id, None if clear_api_key else self._seal(provider_id, api_key)
@@ -126,15 +126,15 @@ class RegistryService:
                 assert row is not None  # noqa: S101 - same transaction as the update
                 return repository.to_provider(row)
         except pg_errors.UniqueViolation:
-            raise AppError(ErrorCode.REGISTRY_NAME_TAKEN) from None
+            raise AppError(ErrorCode.LLM_NAME_TAKEN) from None
 
     async def delete_provider(self, provider_id: UUID) -> None:
         try:
             async with self._transaction() as conn:
                 if not await repository.delete_provider(conn, provider_id):
-                    raise AppError(ErrorCode.REGISTRY_PROVIDER_NOT_FOUND)
+                    raise AppError(ErrorCode.LLM_PROVIDER_NOT_FOUND)
         except (pg_errors.ForeignKeyViolation, pg_errors.RestrictViolation):
-            raise AppError(ErrorCode.REGISTRY_MODEL_IN_USE) from None
+            raise AppError(ErrorCode.LLM_MODEL_IN_USE) from None
 
     async def list_providers(self) -> list[Provider]:
         async with self._pool.connection() as conn:
@@ -162,7 +162,7 @@ class RegistryService:
         try:
             async with self._transaction() as conn:
                 if await repository.get_provider_row(conn, provider_id) is None:
-                    raise AppError(ErrorCode.REGISTRY_PROVIDER_NOT_FOUND)
+                    raise AppError(ErrorCode.LLM_PROVIDER_NOT_FOUND)
                 return await repository.insert_manual_model(
                     conn,
                     uuid.uuid4(),
@@ -173,7 +173,7 @@ class RegistryService:
                     context_window,
                 )
         except pg_errors.UniqueViolation:
-            raise AppError(ErrorCode.REGISTRY_NAME_TAKEN) from None
+            raise AppError(ErrorCode.LLM_NAME_TAKEN) from None
 
     async def update_model(
         self, model_id: UUID, capabilities: frozenset[Capability], embedding_dims: int | None
@@ -181,16 +181,16 @@ class RegistryService:
         async with self._transaction() as conn:
             updated = await repository.update_model(conn, model_id, capabilities, embedding_dims)
         if updated is None:
-            raise AppError(ErrorCode.REGISTRY_MODEL_NOT_FOUND)
+            raise AppError(ErrorCode.LLM_MODEL_NOT_FOUND)
         return updated
 
     async def delete_model(self, model_id: UUID) -> None:
         try:
             async with self._transaction() as conn:
                 if not await repository.delete_model(conn, model_id):
-                    raise AppError(ErrorCode.REGISTRY_MODEL_NOT_FOUND)
+                    raise AppError(ErrorCode.LLM_MODEL_NOT_FOUND)
         except (pg_errors.ForeignKeyViolation, pg_errors.RestrictViolation):
-            raise AppError(ErrorCode.REGISTRY_MODEL_IN_USE) from None
+            raise AppError(ErrorCode.LLM_MODEL_IN_USE) from None
 
     async def list_models(self, provider_id: UUID | None = None) -> list[ModelRecord]:
         async with self._pool.connection() as conn:
@@ -200,7 +200,7 @@ class RegistryService:
         async with self._pool.connection() as conn:
             model = await repository.get_model(conn, model_id)
             if model is None:
-                raise AppError(ErrorCode.REGISTRY_MODEL_NOT_FOUND)
+                raise AppError(ErrorCode.LLM_MODEL_NOT_FOUND)
             access = await self._access(conn, model.provider_id)
         await self._checker.check(access, model)
 
@@ -208,7 +208,7 @@ class RegistryService:
         async with self._transaction() as conn:
             model = await repository.get_model(conn, model_id)
             if model is None:
-                raise AppError(ErrorCode.REGISTRY_MODEL_NOT_FOUND)
+                raise AppError(ErrorCode.LLM_MODEL_NOT_FOUND)
             _require_role_fit(role, model)
             await repository.assign_role(conn, role, model_id)
 
@@ -224,5 +224,5 @@ class RegistryService:
     async def role_model(self, conn: Connection, role: Role) -> ModelRecord:
         model = (await repository.role_assignments(conn)).get(role)
         if model is None:
-            raise AppError(ErrorCode.REGISTRY_ROLE_NOT_ASSIGNED)
+            raise AppError(ErrorCode.LLM_ROLE_NOT_ASSIGNED)
         return model

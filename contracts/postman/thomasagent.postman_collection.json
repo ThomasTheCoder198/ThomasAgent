@@ -211,13 +211,13 @@
       ]
     },
     {
-      "name": "Providers",
+      "name": "LLM providers",
       "description": "",
       "item": [
         {
-          "name": "list Providers",
+          "name": "list LLM Providers",
           "request": {
-            "name": "list Providers",
+            "name": "list LLM Providers",
             "description": {},
             "url": {
               "path": [
@@ -260,9 +260,9 @@
           }
         },
         {
-          "name": "create Provider",
+          "name": "create LLM Provider",
           "request": {
-            "name": "create Provider",
+            "name": "create LLM Provider",
             "description": {},
             "url": {
               "path": [
@@ -319,9 +319,9 @@
           }
         },
         {
-          "name": "update Provider",
+          "name": "update LLM Provider",
           "request": {
-            "name": "update Provider",
+            "name": "update LLM Provider",
             "description": {},
             "url": {
               "path": [
@@ -389,9 +389,9 @@
           }
         },
         {
-          "name": "test Provider",
+          "name": "test LLM Provider",
           "request": {
-            "name": "test Provider",
+            "name": "test LLM Provider",
             "description": {},
             "url": {
               "path": [
@@ -447,9 +447,9 @@
           }
         },
         {
-          "name": "sync Provider",
+          "name": "sync LLM Provider Models",
           "request": {
-            "name": "sync Provider",
+            "name": "sync LLM Provider Models",
             "description": {},
             "url": {
               "path": [
@@ -507,13 +507,13 @@
       ]
     },
     {
-      "name": "Models",
+      "name": "LLM models",
       "description": "",
       "item": [
         {
-          "name": "list Models",
+          "name": "list LLM Models",
           "request": {
-            "name": "list Models",
+            "name": "list LLM Models",
             "description": {},
             "url": {
               "path": [
@@ -575,9 +575,9 @@
           }
         },
         {
-          "name": "create Model",
+          "name": "create LLM Model",
           "request": {
-            "name": "create Model",
+            "name": "create LLM Model",
             "description": {},
             "url": {
               "path": [
@@ -636,13 +636,13 @@
       ]
     },
     {
-      "name": "Model roles",
+      "name": "LLM model roles",
       "description": "",
       "item": [
         {
-          "name": "list Model Roles",
+          "name": "list LLM Model Roles",
           "request": {
-            "name": "list Model Roles",
+            "name": "list LLM Model Roles",
             "description": {},
             "url": {
               "path": [
@@ -685,9 +685,9 @@
           }
         },
         {
-          "name": "assign Model Role",
+          "name": "assign LLM Model Role",
           "request": {
-            "name": "assign Model Role",
+            "name": "assign LLM Model Role",
             "description": {},
             "url": {
               "path": [
@@ -761,9 +761,9 @@
       "description": "",
       "item": [
         {
-          "name": "resolve Model",
+          "name": "resolve LLM Model",
           "request": {
-            "name": "resolve Model",
+            "name": "resolve LLM Model",
             "description": {},
             "url": {
               "path": [
@@ -828,9 +828,9 @@
       "name": "Lifecycle",
       "item": [
         {
-          "name": "delete Model",
+          "name": "delete LLM Model",
           "request": {
-            "name": "delete Model",
+            "name": "delete LLM Model",
             "description": {},
             "url": {
               "path": [
@@ -885,9 +885,9 @@
           }
         },
         {
-          "name": "delete Provider",
+          "name": "delete LLM Provider",
           "request": {
-            "name": "delete Provider",
+            "name": "delete LLM Provider",
             "description": {},
             "url": {
               "path": [

@@ -16,11 +16,11 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/metrics"
 )
 
-func metricsApp(t *testing.T, addr string, output *bytes.Buffer) *application {
+func metricsApp(t *testing.T, addr string, output *bytes.Buffer) *coreRuntime {
 	t.Helper()
 	log, err := logging.NewLogger(output, "info", "core-test", "test", nil)
 	require.NoError(t, err)
-	return &application{
+	return &coreRuntime{
 		cfg:     config.Config{Metrics: config.MetricsConfig{Addr: addr}, ShutdownTimeout: time.Second, ReadHeaderTimeout: time.Second},
 		log:     log,
 		metrics: metrics.New([]float64{0.1, 1}, []float64{1, 10}),

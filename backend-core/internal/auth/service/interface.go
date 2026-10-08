@@ -11,7 +11,7 @@ type SessionAuthenticator interface {
 	Authenticate(context.Context, string) (model.User, model.Session, error)
 }
 
-// AuthService is the behavior consumed by the auth HTTP handler.
+// AuthService is the behavior supplied to the auth HTTP controller and session middleware.
 type AuthService interface {
 	SessionAuthenticator
 	Login(context.Context, string, string) (model.User, model.IssuedSession, error)

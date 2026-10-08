@@ -8,8 +8,8 @@ HTTP serialization and boundary logging belong to `platform/httpx` and callers.
 ## Entry points
 - `FieldError`, `FieldCodeRequired` and `FieldCodeInvalid` supply validation field details without submitted values.
 - Generated `errors.go`: `ErrNotFound`, other named errors, `Code` constants and `LookupDefinition`.
-- `sentinels.go`: internal causes for vault, tenant and HTTP stream/decoder operations. These are not public HTTP codes; a boundary normalizes them to a catalog error.
-- Identity/registry definitions include authentication, service-token validation, provider/model lookup, capability, synchronization, and conflict errors.
+- `sentinels.go`: internal causes for vault, tenant, App-token signing and HTTP stream/decoder operations. These are not public HTTP codes; a boundary normalizes them to a catalog error.
+- Identity/LLM provider definitions include authentication, service-token validation, provider/model lookup, capability, synchronization, and conflict errors.
 - `ErrorDefinition`: explicit `HTTPStatus`, `Retryable`, `MessageVI` and `MessageEN` metadata.
 - `ErrNotFound.WithCause(err)`, `.WithDetails(details)` and `.WithMessage(message)` construct fresh `*AppError` values.
 - `ToAppError` and `CodeOf`: find wrapped application errors and normalizes named errors; unknown causes become INTERNAL_ERROR.

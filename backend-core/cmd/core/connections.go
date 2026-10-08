@@ -4,7 +4,6 @@ import (
 	"context"
 	stderrors "errors"
 	"net/url"
-	"regexp"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,15 +15,18 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/redisx"
 )
 
-const dependencyURLPattern = "(?i)(postgres(?:ql)?|redis(?:s)?)://[^\\s`\"<>]+"
-
 type alreadyLoggedError struct{ error }
+
+const (
+	databaseStartupFailureMessage = "database startup failed"
+	redisStartupFailureMessage    = "redis startup failed"
+)
 
 func (e alreadyLoggedError) Unwrap() error { return e.error }
 
 func sanitizeDependencyError(err error, dsn string) error {
 	message := strings.ReplaceAll(err.Error(), dsn, logging.RedactedPlaceholder)
-	message = regexp.MustCompile(dependencyURLPattern).ReplaceAllString(message, logging.RedactedPlaceholder)
+	message = logging.RedactConnectionURLs(message)
 	password := ""
 	if parsed, parseErr := url.Parse(dsn); parseErr == nil && parsed.User != nil {
 		password, _ = parsed.User.Password()
@@ -38,25 +40,25 @@ func sanitizeDependencyError(err error, dsn string) error {
 	return stderrors.New(message)
 }
 
-func (a *application) recordDependencyFailure(ctx context.Context, message string, err error, dsn string) error {
+func (rt *coreRuntime) recordDependencyFailure(ctx context.Context, message string, err error, dsn string) error {
 	clean := sanitizeDependencyError(err, dsn)
 	appErr := errors.ToAppError(err).WithCause(clean)
-	a.log.ErrorContext(ctx, message, "error_code", appErr.Code, "error", clean)
+	rt.log.ErrorContext(ctx, message, logging.FieldErrorCode, appErr.Code, logging.FieldError, clean)
 	return alreadyLoggedError{appErr}
 }
 
-func (a *application) openPostgres(ctx context.Context) (*pgxpool.Pool, error) {
-	pool, err := postgres.Open(ctx, a.cfg.DatabaseURL)
+func (rt *coreRuntime) openPostgres(ctx context.Context) (*pgxpool.Pool, error) {
+	pool, err := postgres.Open(ctx, rt.cfg.DatabaseURL)
 	if err != nil {
-		return nil, a.recordDependencyFailure(ctx, "database startup failed", err, a.cfg.DatabaseURL)
+		return nil, rt.recordDependencyFailure(ctx, databaseStartupFailureMessage, err, rt.cfg.DatabaseURL)
 	}
 	return pool, nil
 }
 
-func (a *application) openRedis(ctx context.Context) (*redis.Client, error) {
-	redisClient, err := redisx.Open(ctx, a.cfg.RedisURL)
+func (rt *coreRuntime) openRedis(ctx context.Context) (*redis.Client, error) {
+	redisClient, err := redisx.Open(ctx, rt.cfg.RedisURL)
 	if err != nil {
-		return nil, a.recordDependencyFailure(ctx, "redis startup failed", err, a.cfg.RedisURL)
+		return nil, rt.recordDependencyFailure(ctx, redisStartupFailureMessage, err, rt.cfg.RedisURL)
 	}
 	return redisClient, nil
 }

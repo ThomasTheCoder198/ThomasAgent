@@ -24,7 +24,7 @@ from thomas_ragx.platform.http_response import request_id_of
 from thomas_ragx.platform.request_id import is_valid_request_id
 from thomas_ragx.registry.listing import LISTING_ROUTES, ListingMethod
 from thomas_ragx.registry.model import ROLE_CAPABILITIES, Capability, ModelRecord, ProviderKind, Role
-from thomas_ragx.registry.service import RegistryService
+from thomas_ragx.registry.service import LLMProviderService
 from thomas_ragx.ui.i18n import LANG_COOKIE, LANG_VALUES, error_text, translator, ui_language
 from thomas_ragx.ui.session import (
     LOGIN_PATH,
@@ -74,8 +74,8 @@ class UiSettings:
     cookie_secure: bool
 
 
-def _registry(request: Request) -> RegistryService:
-    return cast(RegistryService, request.app.state.registry_service)
+def _registry(request: Request) -> LLMProviderService:
+    return cast(LLMProviderService, request.app.state.registry_service)
 
 
 def _admin(request: Request) -> AdminService:

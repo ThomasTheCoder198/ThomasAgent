@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
@@ -30,18 +30,18 @@ func decodeResponse(t *testing.T, rec *httptest.ResponseRecorder) responseBody {
 	return response
 }
 
-func newTestRouter(logged *[]*errors.AppError) chi.Router {
+func newTestRouter(logged *[]*errors.AppError) *gin.Engine {
 	r := NewRouter(func(_ context.Context, e *errors.AppError) { *logged = append(*logged, e) })
-	r.Get("/ok", func(w http.ResponseWriter, req *http.Request) {
+	r.GET("/ok", wrapHTTP(func(w http.ResponseWriter, req *http.Request) {
 		WriteSuccess(w, req, http.StatusOK, map[string]string{"hello": "world"})
-	})
-	r.Get("/conflict", func(w http.ResponseWriter, req *http.Request) {
+	}))
+	r.GET("/conflict", wrapHTTP(func(w http.ResponseWriter, req *http.Request) {
 		WriteError(w, req, errors.New(errors.CodeConflict, errors.WithDetails(map[string]any{"field": "name"})))
-	})
-	r.Get("/boom", func(w http.ResponseWriter, req *http.Request) {
+	}))
+	r.GET("/boom", wrapHTTP(func(w http.ResponseWriter, req *http.Request) {
 		WriteError(w, req, context.DeadlineExceeded)
-	})
-	r.Get("/panic", func(http.ResponseWriter, *http.Request) { panic("secret internal state") })
+	}))
+	r.GET("/panic", wrapHTTP(func(http.ResponseWriter, *http.Request) { panic("secret internal state") }))
 	return r
 }
 
@@ -128,7 +128,7 @@ func TestWriteError_ServerErrorSanitizesOverridesAndCarriesRequestID(t *testing.
 
 func TestRecoverPanics_ReturnsClientRequestIDWithNilLogger(t *testing.T) {
 	r := NewRouter(nil)
-	r.Get("/panic", func(http.ResponseWriter, *http.Request) { panic("secret panic") })
+	r.GET("/panic", wrapHTTP(func(http.ResponseWriter, *http.Request) { panic("secret panic") }))
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/panic", nil)
 	req.Header.Set(requestid.Header, testRequestID)
 	rec := httptest.NewRecorder()
@@ -157,21 +157,30 @@ func TestMountHealth_ReadinessReportsUnavailableDependency(t *testing.T) {
 func TestWriteError_AfterCommitOnlyLogs(t *testing.T) {
 	var logged []*errors.AppError
 	r := NewRouter(func(_ context.Context, e *errors.AppError) { logged = append(logged, e) })
-	r.Get("/late", func(w http.ResponseWriter, req *http.Request) {
+	r.GET("/late", wrapHTTP(func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("partial"))
 		WriteError(w, req, errors.ErrProviderUnavailable)
-	})
+	}))
 	rec := performRequest(r, http.MethodGet, "/late", "vi")
 	require.Equal(t, "partial", rec.Body.String())
 	require.Len(t, logged, 1)
 	require.Equal(t, errors.CodeProviderUnavailable, logged[0].Code)
 }
 
-func TestResponseCommitted_SeesThroughWrappers(t *testing.T) {
-	rec := &statusRecorder{ResponseWriter: httptest.NewRecorder(), status: http.StatusOK}
-	require.False(t, ResponseCommitted(rec))
-	rec.WriteHeader(http.StatusOK)
-	require.True(t, ResponseCommitted(rec))
+func TestResponseCommitted_GinWriterAfterWriteAndFlush(t *testing.T) {
+	r := NewRouter(nil)
+	r.GET("/write", func(c *gin.Context) {
+		require.False(t, ResponseCommitted(c.Writer))
+		_, _ = c.Writer.Write([]byte("body"))
+		require.True(t, ResponseCommitted(c.Writer))
+	})
+	r.GET("/flush", func(c *gin.Context) {
+		require.False(t, ResponseCommitted(c.Writer))
+		c.Writer.Flush()
+		require.True(t, ResponseCommitted(c.Writer))
+	})
+	performRequest(r, http.MethodGet, "/write", "en")
+	performRequest(r, http.MethodGet, "/flush", "en")
 	require.False(t, ResponseCommitted(httptest.NewRecorder()))
 }

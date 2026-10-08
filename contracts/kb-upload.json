@@ -1,0 +1,5 @@
+{
+  "maxFileBytes": 104857600,
+  "multipartOverheadBytes": 65536,
+  "extensions": [".pdf", ".docx", ".xlsx", ".csv", ".pptx", ".md", ".txt", ".html", ".htm", ".png", ".jpg", ".jpeg"]
+}

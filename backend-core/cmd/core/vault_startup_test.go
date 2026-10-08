@@ -14,7 +14,7 @@ func TestServe_InvalidVaultKeyFailsBeforeDependencies(t *testing.T) {
 	var output bytes.Buffer
 	logger, err := logging.NewLogger(&output, "info", "core-test", "test", nil)
 	require.NoError(t, err)
-	app := &application{
+	app := &coreRuntime{
 		cfg: config.Config{
 			Vault:       config.VaultConfig{KeyID: "v1", MasterKey: "bad"},
 			DatabaseURL: "postgres://test:never-log-this@127.0.0.1:1/test?connect_timeout=1",

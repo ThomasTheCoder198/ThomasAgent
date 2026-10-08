@@ -192,7 +192,7 @@ func TestClient_RejectsRedirectWithoutForwardingAuthorization(t *testing.T) {
 		require.NoError(t, res.Body.Close())
 	}
 	require.Error(t, err)
-	require.ErrorIs(t, err, errors.ErrRegistryProviderRejected)
+	require.ErrorIs(t, err, errors.ErrLLMProviderRejected)
 	require.Zero(t, targetCalls)
 }
 
@@ -211,7 +211,7 @@ func TestTransport_RejectsURLBeforeDialAndSanitizesTLSFailure(t *testing.T) {
 	if res != nil {
 		require.NoError(t, res.Body.Close())
 	}
-	require.ErrorIs(t, err, errors.ErrRegistryProviderRejected)
+	require.ErrorIs(t, err, errors.ErrLLMProviderRejected)
 	require.Zero(t, dials)
 	require.NotContains(t, err.Error(), "raw-secret")
 	req, err = http.NewRequestWithContext(t.Context(), http.MethodGet, "https://api.example", nil)
@@ -234,7 +234,7 @@ func TestDial_IPLiteralsAvoidDNSAndEmptyDNSFailsClosed(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, r.calls)
 	_, err = p.dialContext(t.Context(), "tcp", "127.0.0.1:443", r, d)
-	require.ErrorIs(t, err, errors.ErrRegistryProviderRejected)
+	require.ErrorIs(t, err, errors.ErrLLMProviderRejected)
 	require.Equal(t, 1, d.calls)
 	_, err = p.dialContext(t.Context(), "tcp", "api.example:443", r, d)
 	require.ErrorIs(t, err, errors.ErrProviderUnavailable)

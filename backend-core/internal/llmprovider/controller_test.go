@@ -1,4 +1,4 @@
-package registry
+package llmprovider
 
 import (
 	"bytes"
@@ -10,16 +10,18 @@ import (
 	"testing"
 	"time"
 
-	registryhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/handler"
-	registrymodel "github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/model"
+	llmprovidercontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/controller"
+	llmprovidermiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/middleware"
+	llmprovidermodel "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/model"
+	llmproviderservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/service"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
-	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/handler"
+	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/controller"
 	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
 	authmiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/middleware"
 	authrepo "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
@@ -36,24 +38,41 @@ const (
 	testMaxBodyBytes = 64 << 10
 )
 
-func newRouter(t *testing.T, logs *bytes.Buffer) (chi.Router, *registryFixture) {
+func mountProviderForTest(r gin.IRoutes, svc llmproviderservice.LLMProviderService, maxBodyBytes int64) {
+	provider := llmprovidercontroller.NewProviderController(svc, maxBodyBytes)
+	model := llmprovidercontroller.NewModelController(svc, maxBodyBytes)
+	role := llmprovidercontroller.NewModelRoleController(svc, maxBodyBytes)
+	r.GET("/api/v1/providers", provider.HandleListProviders)
+	r.POST("/api/v1/providers", provider.HandleCreateProvider)
+	r.PATCH("/api/v1/providers/:providerId", provider.HandleUpdateProvider)
+	r.DELETE("/api/v1/providers/:providerId", provider.HandleDeleteProvider)
+	r.POST("/api/v1/providers/:providerId/test", provider.HandleTestProvider)
+	r.POST("/api/v1/providers/:providerId/sync", provider.HandleSyncProvider)
+	r.GET("/api/v1/models", model.HandleListModels)
+	r.POST("/api/v1/models", model.HandleCreateModel)
+	r.DELETE("/api/v1/models/:modelId", model.HandleDeleteModel)
+	r.GET("/api/v1/model-roles", role.HandleListRoles)
+	r.PUT("/api/v1/model-roles/:role", role.HandleAssignRole)
+}
+
+func newRouter(t *testing.T, logs *bytes.Buffer) (*gin.Engine, *llmproviderFixture) {
 	t.Helper()
 	s := newTestService(t, &fakeCatalog{})
 	log, err := logging.NewLogger(logs, "debug", "test", "test", nil)
 	require.NoError(t, err)
 	r := httpx.NewRouter(httpx.NewSlogErrorLogger(log), httpx.LogAccess(log))
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r.WithContext(platformContext(r.Context())))
-		})
+	r.Use(func(c *gin.Context) {
+		c.Request = c.Request.WithContext(platformContext(c.Request.Context()))
+		c.Next()
 	})
-	registryhandler.NewRegistryHandler(s, testMaxBodyBytes).Mount(r)
-	registryhandler.MountInternal(r, s, serviceToken)
+	mountProviderForTest(r, s, testMaxBodyBytes)
+	r.GET("/internal/models/resolve", llmprovidermiddleware.RequireServiceToken(serviceToken), llmprovidercontroller.NewInternalModelController(s).HandleResolve)
 	return r, s
 }
 
 func TestServiceTokenSetsExplicitPlatformTenant(t *testing.T) {
-	handler := registryhandler.RequireServiceToken(serviceToken)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httpx.NewRouter(nil)
+	handler.GET("/internal/probe", llmprovidermiddleware.RequireServiceToken(serviceToken), gin.WrapF(func(w http.ResponseWriter, r *http.Request) {
 		got, err := tenant.ID(r.Context())
 		require.NoError(t, err)
 		require.Equal(t, "default", got)
@@ -71,7 +90,7 @@ func TestServiceToken_RejectsMissingBearerPrefixAndEmptyConfiguration(t *testing
 		for _, header := range []string{"", serviceToken, "Basic " + serviceToken, "Bearer ", "Bearer wrong"} {
 			called := false
 			router := httpx.NewRouter(func(context.Context, *errors.AppError) {})
-			router.With(registryhandler.RequireServiceToken(token)).Get("/probe", func(w http.ResponseWriter, _ *http.Request) { called = true; w.WriteHeader(http.StatusNoContent) })
+			router.GET("/probe", llmprovidermiddleware.RequireServiceToken(token), gin.WrapF(func(w http.ResponseWriter, _ *http.Request) { called = true; w.WriteHeader(http.StatusNoContent) }))
 			res := send(router, http.MethodGet, "/probe", "", map[string]string{"Authorization": header})
 			require.Equal(t, http.StatusUnauthorized, res.Code, token+"/"+header)
 			require.False(t, called)
@@ -82,7 +101,7 @@ func TestServiceToken_RejectsMissingBearerPrefixAndEmptyConfiguration(t *testing
 
 func TestServiceTokenAcceptsMixedCaseBearerAndNeverCaches(t *testing.T) {
 	router := httpx.NewRouter(nil)
-	router.With(registryhandler.RequireServiceToken(serviceToken)).Get("/probe", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	router.GET("/probe", llmprovidermiddleware.RequireServiceToken(serviceToken), gin.WrapF(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
 	for _, fixture := range []struct {
 		header string
 		status int
@@ -93,9 +112,9 @@ func TestServiceTokenAcceptsMixedCaseBearerAndNeverCaches(t *testing.T) {
 	}
 }
 
-func TestRegistryHTTP_RejectsInvalidPathsQueriesAndSecretBodies(t *testing.T) {
+func TestLLMProviderHTTP_RejectsInvalidPathsQueriesAndSecretBodies(t *testing.T) {
 	router := httpx.NewRouter(func(context.Context, *errors.AppError) {})
-	registryhandler.NewRegistryHandler(nil, 128).Mount(router)
+	mountProviderForTest(router, nil, 128)
 	for _, tc := range []struct {
 		method, path, body string
 		status             int
@@ -116,14 +135,14 @@ func TestRegistryHTTP_RejectsInvalidPathsQueriesAndSecretBodies(t *testing.T) {
 
 func TestAssignRoleRequiresModelIDField(t *testing.T) {
 	router := httpx.NewRouter(nil)
-	registryhandler.NewRegistryHandler(nil, 128).Mount(router)
+	mountProviderForTest(router, nil, 128)
 	response := send(router, http.MethodPut, "/api/v1/model-roles/chat.fast", `{}`, nil)
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"modelId"`)
 	require.Contains(t, response.Body.String(), `"REQUIRED"`)
 }
 
-func registryRedis(t *testing.T) *redis.Client {
+func llmproviderRedis(t *testing.T) *redis.Client {
 	t.Helper()
 	container, err := tcredis.Run(platformContext(t.Context()), "redis:8.10.2")
 	require.NoError(t, err)
@@ -137,18 +156,20 @@ func registryRedis(t *testing.T) *redis.Client {
 	return client
 }
 
-func TestRegistryHTTP_RealLoginSessionAndCSRF(t *testing.T) {
+func TestLLMProviderHTTP_RealLoginSessionAndCSRF(t *testing.T) {
 	var logs bytes.Buffer
 	router, svc := newRouter(t, &logs)
 	authCfg := config.AuthConfig{OwnerEmail: "owner@example.com", OwnerPassword: "strong-test-password", SessionTTL: time.Hour, MinPasswordLength: 12}
 	authSvc := authservice.NewAuthService(authrepo.NewAuthRepository(svc.pool), svc.pool, authCfg, time.Now)
 	require.NoError(t, authSvc.EnsureOwner(platformContext(t.Context())))
-	authhandler.NewAuthHandler(authSvc, authlimiter.NewLimiter(registryRedis(t), 10, time.Minute), false).Mount(router)
-	logger, err := logging.NewLogger(&logs, "debug", "registry-test", "test", nil)
+	auth := authhandler.NewAuthController(authhandler.AuthControllerParams{Service: authSvc, Limiter: authlimiter.NewLimiter(llmproviderRedis(t), 10, time.Minute)})
+	router.POST("/api/v1/auth/login", auth.HandleLogin)
+	router.POST("/api/v1/auth/logout", authmiddleware.RequireSession(authSvc), auth.HandleLogout)
+	router.GET("/api/v1/auth/me", authmiddleware.RequireSession(authSvc), auth.HandleMe)
+	logger, err := logging.NewLogger(&logs, "debug", "llmprovider-test", "test", nil)
 	require.NoError(t, err)
 	protected := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
-	protected.Use(authmiddleware.RequireSession(authSvc))
-	registryhandler.NewRegistryHandler(svc, testMaxBodyBytes).Mount(protected)
+	mountProviderForTest(protected.Group("", authmiddleware.RequireSession(authSvc)), svc, testMaxBodyBytes)
 	unauth := send(protected, http.MethodGet, "/api/v1/providers", "", nil)
 	require.Equal(t, http.StatusUnauthorized, unauth.Code)
 	login := send(router, http.MethodPost, "/api/v1/auth/login", `{"email":"owner@example.com","password":"strong-test-password"}`, nil)
@@ -176,12 +197,12 @@ func TestRegistryHTTP_RealLoginSessionAndCSRF(t *testing.T) {
 	require.Contains(t, logs.String(), "request_id")
 }
 
-func TestRegistryHTTP_CRUDRoutesAndWriteOnlyKeyUpdates(t *testing.T) {
+func TestLLMProviderHTTP_CRUDRoutesAndWriteOnlyKeyUpdates(t *testing.T) {
 	var logs bytes.Buffer
 	router, svc := newRouter(t, &logs)
 	created := send(router, http.MethodPost, "/api/v1/providers", `{"kind":"openrouter","name":"Routes","apiKey":"`+secretKey+`"}`, nil)
 	require.Equal(t, http.StatusCreated, created.Code)
-	var providerResponse struct{ Data registrymodel.Provider }
+	var providerResponse struct{ Data llmprovidermodel.Provider }
 	require.NoError(t, json.Unmarshal(created.Body.Bytes(), &providerResponse))
 	providerPath := "/api/v1/providers/" + providerResponse.Data.ID.String()
 	updated := send(router, http.MethodPatch, providerPath, `{"name":"Routes renamed","apiKey":"replacement-secret"}`, nil)
@@ -191,17 +212,17 @@ func TestRegistryHTTP_CRUDRoutesAndWriteOnlyKeyUpdates(t *testing.T) {
 	tested := send(router, http.MethodPost, providerPath+"/test", "", nil)
 	require.Equal(t, http.StatusOK, tested.Code)
 	require.Contains(t, tested.Body.String(), `"modelCount":0`)
-	svc.catalog.(*fakeCatalog).models = []registrymodel.RemoteModel{{ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []registrymodel.Capability{registrymodel.CapChat}}}
+	svc.catalog.(*fakeCatalog).models = []llmprovidermodel.RemoteModel{{ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []llmprovidermodel.Capability{llmprovidermodel.CapChat}}}
 	synced := send(router, http.MethodPost, providerPath+"/sync", "", nil)
 	require.Equal(t, http.StatusOK, synced.Code)
 	require.Contains(t, synced.Body.String(), `"added":1`)
 	modelCreated := send(router, http.MethodPost, "/api/v1/models", `{"providerId":"`+providerResponse.Data.ID.String()+`","modelRef":"x/manual","displayName":"Manual","capabilities":["chat","tools"]}`, nil)
 	require.Equal(t, http.StatusCreated, modelCreated.Code)
-	var modelResponse struct{ Data registrymodel.Model }
+	var modelResponse struct{ Data llmprovidermodel.Model }
 	require.NoError(t, json.Unmarshal(modelCreated.Body.Bytes(), &modelResponse))
 	models := send(router, http.MethodGet, "/api/v1/models?providerId="+providerResponse.Data.ID.String()+"&capability=tools", "", nil)
 	require.Equal(t, http.StatusOK, models.Code)
-	var listResponse struct{ Data []registrymodel.Model }
+	var listResponse struct{ Data []llmprovidermodel.Model }
 	require.NoError(t, json.Unmarshal(models.Body.Bytes(), &listResponse))
 	require.Len(t, listResponse.Data, 1)
 	require.Equal(t, modelResponse.Data.ID, listResponse.Data[0].ID)
@@ -229,7 +250,7 @@ func TestRegistryHTTP_CRUDRoutesAndWriteOnlyKeyUpdates(t *testing.T) {
 	deletedModel := send(router, http.MethodDelete, "/api/v1/models/"+removableID.String(), "", nil)
 	require.Equal(t, http.StatusOK, deletedModel.Code)
 	require.Contains(t, deletedModel.Body.String(), `"deleted":true`)
-	emptyProvider, err := svc.CreateProvider(platformContext(t.Context()), registrymodel.ProviderInput{Kind: registrymodel.KindOpenRouter, Name: "Empty"})
+	emptyProvider, err := svc.CreateProvider(platformContext(t.Context()), llmprovidermodel.ProviderInput{Kind: llmprovidermodel.KindOpenRouter, Name: "Empty"})
 	require.NoError(t, err)
 	deletedProvider := send(router, http.MethodDelete, "/api/v1/providers/"+emptyProvider.ID.String(), "", nil)
 	require.Equal(t, http.StatusOK, deletedProvider.Code)
@@ -289,7 +310,7 @@ func TestRoleAssignmentOverHTTP(t *testing.T) {
 	var logs bytes.Buffer
 	r, s := newRouter(t, &logs)
 	p := seedProvider(t, s)
-	m, err := s.CreateModel(platformContext(context.Background()), registrymodel.ModelInput{ProviderID: p.ID, ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []registrymodel.Capability{registrymodel.CapChat}})
+	m, err := s.CreateModel(platformContext(context.Background()), llmprovidermodel.ModelInput{ProviderID: p.ID, ModelRef: "x/fast", DisplayName: "Fast", Capabilities: []llmprovidermodel.Capability{llmprovidermodel.CapChat}})
 	require.NoError(t, err)
 
 	bad := send(r, http.MethodPut, "/api/v1/model-roles/chat.default", `{"modelId":"`+m.ID.String()+`"}`, nil)

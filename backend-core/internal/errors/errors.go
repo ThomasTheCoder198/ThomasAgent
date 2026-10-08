@@ -17,6 +17,14 @@ const (
 	CodeInternalTokenInvalid       Code = "INTERNAL_TOKEN_INVALID"
 	CodeKbFileNotFound             Code = "KB_FILE_NOT_FOUND"
 	CodeKbNotFound                 Code = "KB_NOT_FOUND"
+	CodeLLMModelCapabilityMismatch Code = "LLM_MODEL_CAPABILITY_MISMATCH"
+	CodeLLMModelInUse              Code = "LLM_MODEL_IN_USE"
+	CodeLLMModelNotFound           Code = "LLM_MODEL_NOT_FOUND"
+	CodeLLMNameTaken               Code = "LLM_NAME_TAKEN"
+	CodeLLMProviderNotFound        Code = "LLM_PROVIDER_NOT_FOUND"
+	CodeLLMProviderRejected        Code = "LLM_PROVIDER_REJECTED"
+	CodeLLMProviderSyncUnsupported Code = "LLM_PROVIDER_SYNC_UNSUPPORTED"
+	CodeLLMRoleNotAssigned         Code = "LLM_ROLE_NOT_ASSIGNED"
 	CodeMethodNotAllowed           Code = "METHOD_NOT_ALLOWED"
 	CodeNotFound                   Code = "NOT_FOUND"
 	CodeOrgNotProvisioned          Code = "ORG_NOT_PROVISIONED"
@@ -24,14 +32,6 @@ const (
 	CodeProviderUnavailable        Code = "PROVIDER_UNAVAILABLE"
 	CodeRagxUnavailable            Code = "RAGX_UNAVAILABLE"
 	CodeRateLimited                Code = "RATE_LIMITED"
-	CodeRegistryCapabilityMismatch Code = "REGISTRY_CAPABILITY_MISMATCH"
-	CodeRegistryModelInUse         Code = "REGISTRY_MODEL_IN_USE"
-	CodeRegistryModelNotFound      Code = "REGISTRY_MODEL_NOT_FOUND"
-	CodeRegistryNameTaken          Code = "REGISTRY_NAME_TAKEN"
-	CodeRegistryProviderNotFound   Code = "REGISTRY_PROVIDER_NOT_FOUND"
-	CodeRegistryProviderRejected   Code = "REGISTRY_PROVIDER_REJECTED"
-	CodeRegistryRoleNotAssigned    Code = "REGISTRY_ROLE_NOT_ASSIGNED"
-	CodeRegistrySyncUnsupported    Code = "REGISTRY_SYNC_UNSUPPORTED"
 	CodeUnauthenticated            Code = "UNAUTHENTICATED"
 	CodeUnsupportedMediaType       Code = "UNSUPPORTED_MEDIA_TYPE"
 	CodeValidationFailed           Code = "VALIDATION_FAILED"
@@ -50,6 +50,14 @@ const (
 	ErrInternalTokenInvalid       NamedError = NamedError(CodeInternalTokenInvalid)
 	ErrKbFileNotFound             NamedError = NamedError(CodeKbFileNotFound)
 	ErrKbNotFound                 NamedError = NamedError(CodeKbNotFound)
+	ErrLLMModelCapabilityMismatch NamedError = NamedError(CodeLLMModelCapabilityMismatch)
+	ErrLLMModelInUse              NamedError = NamedError(CodeLLMModelInUse)
+	ErrLLMModelNotFound           NamedError = NamedError(CodeLLMModelNotFound)
+	ErrLLMNameTaken               NamedError = NamedError(CodeLLMNameTaken)
+	ErrLLMProviderNotFound        NamedError = NamedError(CodeLLMProviderNotFound)
+	ErrLLMProviderRejected        NamedError = NamedError(CodeLLMProviderRejected)
+	ErrLLMProviderSyncUnsupported NamedError = NamedError(CodeLLMProviderSyncUnsupported)
+	ErrLLMRoleNotAssigned         NamedError = NamedError(CodeLLMRoleNotAssigned)
 	ErrMethodNotAllowed           NamedError = NamedError(CodeMethodNotAllowed)
 	ErrNotFound                   NamedError = NamedError(CodeNotFound)
 	ErrOrgNotProvisioned          NamedError = NamedError(CodeOrgNotProvisioned)
@@ -57,14 +65,6 @@ const (
 	ErrProviderUnavailable        NamedError = NamedError(CodeProviderUnavailable)
 	ErrRagxUnavailable            NamedError = NamedError(CodeRagxUnavailable)
 	ErrRateLimited                NamedError = NamedError(CodeRateLimited)
-	ErrRegistryCapabilityMismatch NamedError = NamedError(CodeRegistryCapabilityMismatch)
-	ErrRegistryModelInUse         NamedError = NamedError(CodeRegistryModelInUse)
-	ErrRegistryModelNotFound      NamedError = NamedError(CodeRegistryModelNotFound)
-	ErrRegistryNameTaken          NamedError = NamedError(CodeRegistryNameTaken)
-	ErrRegistryProviderNotFound   NamedError = NamedError(CodeRegistryProviderNotFound)
-	ErrRegistryProviderRejected   NamedError = NamedError(CodeRegistryProviderRejected)
-	ErrRegistryRoleNotAssigned    NamedError = NamedError(CodeRegistryRoleNotAssigned)
-	ErrRegistrySyncUnsupported    NamedError = NamedError(CodeRegistrySyncUnsupported)
 	ErrUnauthenticated            NamedError = NamedError(CodeUnauthenticated)
 	ErrUnsupportedMediaType       NamedError = NamedError(CodeUnsupportedMediaType)
 	ErrValidationFailed           NamedError = NamedError(CodeValidationFailed)
@@ -96,6 +96,22 @@ func LookupDefinition(code Code) ErrorDefinition {
 		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Không tìm thấy tài liệu.", MessageEN: "File not found."}
 	case CodeKbNotFound:
 		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Không tìm thấy Knowledge Base.", MessageEN: "Knowledge Base not found."}
+	case CodeLLMModelCapabilityMismatch:
+		return ErrorDefinition{HTTPStatus: 422, Retryable: false, MessageVI: "Model không có khả năng cần cho vai trò này.", MessageEN: "The model lacks a capability this role requires."}
+	case CodeLLMModelInUse:
+		return ErrorDefinition{HTTPStatus: 409, Retryable: false, MessageVI: "Model đang được gán cho một vai trò.", MessageEN: "The model is assigned to a role."}
+	case CodeLLMModelNotFound:
+		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Không tìm thấy model.", MessageEN: "Model not found."}
+	case CodeLLMNameTaken:
+		return ErrorDefinition{HTTPStatus: 409, Retryable: false, MessageVI: "Tên này đã được dùng.", MessageEN: "This name is already in use."}
+	case CodeLLMProviderNotFound:
+		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Không tìm thấy provider.", MessageEN: "Provider not found."}
+	case CodeLLMProviderRejected:
+		return ErrorDefinition{HTTPStatus: 400, Retryable: false, MessageVI: "Provider từ chối key hoặc cấu hình.", MessageEN: "The provider rejected the key or configuration."}
+	case CodeLLMProviderSyncUnsupported:
+		return ErrorDefinition{HTTPStatus: 400, Retryable: false, MessageVI: "Provider này chưa hỗ trợ đồng bộ model.", MessageEN: "Model sync is not supported for this provider."}
+	case CodeLLMRoleNotAssigned:
+		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Vai trò này chưa được gán model.", MessageEN: "No model is assigned to this role."}
 	case CodeMethodNotAllowed:
 		return ErrorDefinition{HTTPStatus: 405, Retryable: false, MessageVI: "Phương thức không được hỗ trợ.", MessageEN: "This method is not allowed."}
 	case CodeNotFound:
@@ -110,22 +126,6 @@ func LookupDefinition(code Code) ErrorDefinition {
 		return ErrorDefinition{HTTPStatus: 503, Retryable: true, MessageVI: "Dịch vụ tài liệu đang không khả dụng. Vui lòng thử lại.", MessageEN: "The document service is unavailable. Please try again."}
 	case CodeRateLimited:
 		return ErrorDefinition{HTTPStatus: 429, Retryable: true, MessageVI: "Quá nhiều yêu cầu, vui lòng thử lại sau.", MessageEN: "Too many requests, please retry later."}
-	case CodeRegistryCapabilityMismatch:
-		return ErrorDefinition{HTTPStatus: 422, Retryable: false, MessageVI: "Model không có khả năng cần cho vai trò này.", MessageEN: "The model lacks a capability this role requires."}
-	case CodeRegistryModelInUse:
-		return ErrorDefinition{HTTPStatus: 409, Retryable: false, MessageVI: "Model đang được gán cho một vai trò.", MessageEN: "The model is assigned to a role."}
-	case CodeRegistryModelNotFound:
-		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Không tìm thấy model.", MessageEN: "Model not found."}
-	case CodeRegistryNameTaken:
-		return ErrorDefinition{HTTPStatus: 409, Retryable: false, MessageVI: "Tên này đã được dùng.", MessageEN: "This name is already in use."}
-	case CodeRegistryProviderNotFound:
-		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Không tìm thấy provider.", MessageEN: "Provider not found."}
-	case CodeRegistryProviderRejected:
-		return ErrorDefinition{HTTPStatus: 400, Retryable: false, MessageVI: "Provider từ chối key hoặc cấu hình.", MessageEN: "The provider rejected the key or configuration."}
-	case CodeRegistryRoleNotAssigned:
-		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Vai trò này chưa được gán model.", MessageEN: "No model is assigned to this role."}
-	case CodeRegistrySyncUnsupported:
-		return ErrorDefinition{HTTPStatus: 400, Retryable: false, MessageVI: "Provider này chưa hỗ trợ đồng bộ model.", MessageEN: "Model sync is not supported for this provider."}
 	case CodeUnauthenticated:
 		return ErrorDefinition{HTTPStatus: 401, Retryable: false, MessageVI: "Bạn cần đăng nhập.", MessageEN: "You need to sign in."}
 	case CodeUnsupportedMediaType:

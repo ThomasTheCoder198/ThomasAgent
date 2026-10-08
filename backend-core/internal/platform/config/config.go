@@ -101,6 +101,33 @@ func (c HTTPConfig) validate() []error {
 	return errs
 }
 
+type AppConfig struct {
+	SigningKey     string        `env:"SIGNING_KEY"`
+	SigningKeyFile string        `env:"SIGNING_KEY_FILE"`
+	SigningKeyID   string        `env:"SIGNING_KEY_ID"`
+	TokenIssuer    string        `env:"TOKEN_ISSUER"`
+	TokenAudience  string        `env:"TOKEN_AUDIENCE"`
+	TokenTTL       time.Duration `env:"TOKEN_TTL"`
+}
+
+// MaxAppTokenTTL is the spec's upper bound (§3.1); ragx rejects longer tokens.
+const MaxAppTokenTTL = 60 * time.Second
+
+// The key itself is checked when serve or worker start, so migrate and outbox-relay run without it.
+func (c AppConfig) validate() []error {
+	var errs []error
+	if c.SigningKey != "" && c.SigningKeyFile != "" {
+		errs = append(errs, errors.New("set only one of CORE_APP_SIGNING_KEY and CORE_APP_SIGNING_KEY_FILE"))
+	}
+	if c.SigningKeyID == "" || c.TokenIssuer == "" || c.TokenAudience == "" {
+		errs = append(errs, errors.New("CORE_APP_SIGNING_KEY_ID, CORE_APP_TOKEN_ISSUER and CORE_APP_TOKEN_AUDIENCE must be set"))
+	}
+	if c.TokenTTL <= 0 || c.TokenTTL > MaxAppTokenTTL {
+		errs = append(errs, errors.New("CORE_APP_TOKEN_TTL must be > 0 and <= 60s"))
+	}
+	return errs
+}
+
 type VaultConfig struct {
 	MasterKey string `env:"MASTER_KEY,required,notEmpty"`
 	KeyID     string `env:"KEY_ID"`
@@ -205,6 +232,7 @@ type Config struct {
 	Auth                     AuthConfig        `envPrefix:"AUTH_"`
 	ServiceToken             string            `env:"SERVICE_TOKEN,required,notEmpty"`
 	Vault                    VaultConfig       `envPrefix:"VAULT_"`
+	App                      AppConfig         `envPrefix:"APP_"`
 	HTTP                     HTTPConfig        `envPrefix:"HTTP_"`
 	Metrics                  MetricsConfig     `envPrefix:"METRICS_"`
 	LLMLog                   LLMLogConfig      `envPrefix:"LLM_LOG_"`
@@ -321,6 +349,7 @@ func (c Config) validate() error {
 		errs = append(errs, errors.New("CORE_LLM_LOG_CONTENT_MAX_BYTES must be >= 1"))
 	}
 	errs = append(errs, c.Auth.validate()...)
+	errs = append(errs, c.App.validate()...)
 	errs = append(errs, c.validateServiceToken()...)
 	errs = append(errs, c.validateProvider()...)
 	errs = append(errs, c.validateLogsEndpoint()...)

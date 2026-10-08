@@ -20,11 +20,11 @@ func serveWithAccessLog(t *testing.T, req *http.Request) (*httptest.ResponseReco
 	t.Helper()
 	var logs bytes.Buffer
 	r := NewRouter(nil, LogAccess(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))))
-	r.Get("/api/v1/providers/{id}", func(w http.ResponseWriter, req *http.Request) {
+	r.GET("/api/v1/providers/:id", wrapHTTP(func(w http.ResponseWriter, req *http.Request) {
 		WriteSuccess(w, req, http.StatusOK, map[string]string{"id": "x"})
-	})
-	r.Get("/conflict", func(w http.ResponseWriter, req *http.Request) { WriteError(w, req, errors.ErrConflict) })
-	r.Get("/boom", func(w http.ResponseWriter, req *http.Request) { WriteError(w, req, errors.ErrInternalError) })
+	}))
+	r.GET("/conflict", wrapHTTP(func(w http.ResponseWriter, req *http.Request) { WriteError(w, req, errors.ErrConflict) }))
+	r.GET("/boom", wrapHTTP(func(w http.ResponseWriter, req *http.Request) { WriteError(w, req, errors.ErrInternalError) }))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	var entry map[string]any

@@ -11,7 +11,7 @@ or model parameters and does not choose a tenant when context is absent.
 
 ## Dependencies
 - Uses: context and the shared error catalog.
-- Used by: auth, audit, vault, registry, startup bootstrap and internal routes.
+- Used by: auth, audit, vault, llmprovider, startup bootstrap and internal routes.
 
 ## Run & test
 ```bash

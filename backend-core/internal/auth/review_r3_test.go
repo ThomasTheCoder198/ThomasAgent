@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/handler"
+	authhandler "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/controller"
 	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
 	authtoken "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/token"
 
@@ -27,7 +27,7 @@ func TestLogin_IPBudgetBlocksEmailSpray(t *testing.T) {
 	require.NoError(t, err)
 	service, _ := newService(t)
 	router := httpx.NewRouter(nil)
-	authhandler.NewAuthHandler(service, authlimiter.NewLoginLimiter(startRedis(t), cfg.Auth, []byte(cfg.ServiceToken)), false).Mount(router)
+	mountAuthForTest(router, authhandler.AuthControllerParams{Service: service, Limiter: authlimiter.NewLoginLimiter(startRedis(t), cfg.Auth, []byte(cfg.ServiceToken))})
 	for index := range 3 {
 		require.Equal(t, http.StatusUnauthorized, attemptFrom(router, fmt.Sprintf("spray%d@example.com", index), "192.0.2.1:9000", "").Code)
 	}

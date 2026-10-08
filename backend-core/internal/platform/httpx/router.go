@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/gin-gonic/gin"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
@@ -13,32 +13,27 @@ import (
 
 const panicCauseFormat = "panic: %v"
 
-type Middleware = func(http.Handler) http.Handler
+type Middleware = gin.HandlerFunc
 
-// Middlewares are registered before any route because chi panics on Use after routing starts.
-func NewRouter(errorLogger ErrorLogger, middlewares ...Middleware) chi.Router {
-	r := chi.NewRouter()
+func NewRouter(errorLogger ErrorLogger, middlewares ...Middleware) *gin.Engine {
+	r := gin.New()
+	r.HandleMethodNotAllowed = true
+	r.RedirectTrailingSlash = false
+	r.RedirectFixedPath = false
 	r.Use(assignRequestID)
 	r.Use(middlewares...)
-	r.Use(injectErrorLogger(errorLogger), trackCommit, recoverPanics)
-	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
-		WriteError(w, req, errors.ErrNotFound)
-	})
-	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
-		WriteError(w, req, errors.ErrMethodNotAllowed)
-	})
+	r.Use(injectErrorLogger(errorLogger), recoverPanics)
+	r.NoRoute(func(c *gin.Context) { Fail(c, errors.ErrNotFound) })
+	r.NoMethod(func(c *gin.Context) { Fail(c, errors.ErrMethodNotAllowed) })
 	return r
 }
 
-// assignRequestID trusts a client id only when it matches the shared pattern, so a forged header cannot inject
-// arbitrary text into every log line of the request.
-func assignRequestID(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id, origin := acceptRequestID(r.Header.Get(requestid.Header))
-		w.Header().Set(requestid.Header, id)
-		ctx := withRequestIDOrigin(logging.ContextWithRequestID(r.Context(), id), origin)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+func assignRequestID(c *gin.Context) {
+	id, origin := acceptRequestID(c.Request.Header.Get(requestid.Header))
+	c.Writer.Header().Set(requestid.Header, id)
+	ctx := withRequestIDOrigin(logging.ContextWithRequestID(c.Request.Context(), id), origin)
+	c.Request = c.Request.WithContext(ctx)
+	c.Next()
 }
 
 func acceptRequestID(sent string) (string, requestIDOrigin) {
@@ -52,39 +47,29 @@ func acceptRequestID(sent string) (string, requestIDOrigin) {
 	}
 }
 
-func injectErrorLogger(errorLogger ErrorLogger) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r.WithContext(withErrorLogger(r.Context(), errorLogger)))
-		})
+func injectErrorLogger(errorLogger ErrorLogger) Middleware {
+	return func(c *gin.Context) {
+		c.Request = c.Request.WithContext(withErrorLogger(c.Request.Context(), errorLogger))
+		c.Next()
 	}
 }
 
-// trackCommit gives handlers a writer that records whether the response was committed.
-func trackCommit(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(&statusRecorder{ResponseWriter: w, status: http.StatusOK}, r)
-	})
-}
-
-func recoverPanics(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			if rec := recover(); rec != nil {
-				handlePanic(w, r, rec)
-			}
-		}()
-		next.ServeHTTP(w, r)
-	})
+func recoverPanics(c *gin.Context) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			handlePanic(c.Writer, c.Request, rec)
+			c.Abort()
+		}
+	}()
+	c.Next()
 }
 
 func handlePanic(w http.ResponseWriter, r *http.Request, rec any) {
-	if rec == http.ErrAbortHandler { //nolint:errorlint // net/http named error compared as net/http documents
+	if rec == http.ErrAbortHandler { //nolint:errorlint // net/http documents this named panic value
 		panic(rec)
 	}
 	panicErr := errors.ErrInternalError.WithCause(fmt.Errorf(panicCauseFormat, rec))
 	if ResponseCommitted(w) {
-		// A partial response is already on the wire: log, then abort the connection instead of appending JSON.
 		logBoundaryError(r, panicErr)
 		panic(http.ErrAbortHandler)
 	}

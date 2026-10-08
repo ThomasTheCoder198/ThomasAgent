@@ -5,8 +5,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/model"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/model"
 )
 
 type ProviderRepository interface {
@@ -33,7 +33,7 @@ type RoleRepository interface {
 	RoleModelID(context.Context, postgres.DBTX, model.Role) (uuid.UUID, bool, error)
 }
 
-type RegistryRepository interface {
+type LLMProviderRepository interface {
 	ProviderRepository
 	ModelRepository
 	RoleRepository
@@ -41,6 +41,6 @@ type RegistryRepository interface {
 
 type PGRepository struct{}
 
-func NewRegistryRepository() *PGRepository { return &PGRepository{} }
+func NewLLMProviderRepository() *PGRepository { return &PGRepository{} }
 
-var _ RegistryRepository = PGRepository{}
+var _ LLMProviderRepository = PGRepository{}

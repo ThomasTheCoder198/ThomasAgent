@@ -3,34 +3,42 @@ package main
 import (
 	"context"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
+
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/migrations"
 )
 
-const migrationStatusCommand = "status"
+const (
+	migrationStatusCommand        = "status"
+	migrationFailureMessage       = "migration failed"
+	migrationStatusFailureMessage = "migration status failed"
+	migrationsAppliedMessage      = "migrations applied"
+	migrationStatusMessage        = "migration status"
+)
 
-func (a *application) applyMigrations(ctx context.Context, args []string) error {
+func (rt *coreRuntime) applyMigrations(ctx context.Context, args []string) error {
 	direction := postgres.Up
 	if len(args) > 0 {
 		if args[0] == migrationStatusCommand {
-			return a.reportMigrationStatus(ctx)
+			return rt.reportMigrationStatus(ctx)
 		}
 		direction = postgres.Direction(args[0])
 	}
-	if err := postgres.Migrate(ctx, a.cfg.DatabaseURL, migrations.FS, direction); err != nil {
-		return a.recordDependencyFailure(ctx, "migration failed", err, a.cfg.DatabaseURL)
+	if err := postgres.Migrate(ctx, rt.cfg.DatabaseURL, migrations.FS, direction); err != nil {
+		return rt.recordDependencyFailure(ctx, migrationFailureMessage, err, rt.cfg.DatabaseURL)
 	}
-	a.log.InfoContext(ctx, "migrations applied", "direction", string(direction))
+	rt.log.InfoContext(ctx, migrationsAppliedMessage, logging.FieldDirection, string(direction))
 	return nil
 }
 
-func (a *application) reportMigrationStatus(ctx context.Context) error {
-	statuses, err := postgres.MigrationStatuses(ctx, a.cfg.DatabaseURL, migrations.FS)
+func (rt *coreRuntime) reportMigrationStatus(ctx context.Context) error {
+	statuses, err := postgres.MigrationStatuses(ctx, rt.cfg.DatabaseURL, migrations.FS)
 	if err != nil {
-		return a.recordDependencyFailure(ctx, "migration status failed", err, a.cfg.DatabaseURL)
+		return rt.recordDependencyFailure(ctx, migrationStatusFailureMessage, err, rt.cfg.DatabaseURL)
 	}
 	for _, status := range statuses {
-		a.log.InfoContext(ctx, "migration status", "version", status.Source.Version, "path", status.Source.Path, "state", status.State)
+		rt.log.InfoContext(ctx, migrationStatusMessage, logging.FieldVersion, status.Source.Version, logging.FieldPath, status.Source.Path, logging.FieldState, status.State)
 	}
 	return nil
 }

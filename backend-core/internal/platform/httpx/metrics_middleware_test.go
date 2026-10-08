@@ -26,9 +26,9 @@ func (f *fakeHTTPMetrics) ObserveHTTP(method, route string, status int, _ time.D
 func TestRecordMetrics_UsesRoutePatternStatusAndRequestID(t *testing.T) {
 	fake := &fakeHTTPMetrics{}
 	r := NewRouter(nil, RecordMetrics(fake))
-	r.Get("/api/v1/providers/{id}", func(w http.ResponseWriter, req *http.Request) {
+	r.GET("/api/v1/providers/:id", wrapHTTP(func(w http.ResponseWriter, req *http.Request) {
 		WriteSuccess(w, req, http.StatusOK, nil)
-	})
+	}))
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/providers/abc", nil)
 	req.Header.Set(requestid.Header, "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21")
 	r.ServeHTTP(httptest.NewRecorder(), req)
@@ -41,7 +41,7 @@ func TestRecordMetrics_UsesRoutePatternStatusAndRequestID(t *testing.T) {
 
 func TestRecordMetrics_NilRecorderIsPassThrough(t *testing.T) {
 	r := NewRouter(nil, RecordMetrics(nil))
-	r.Get("/ok", func(w http.ResponseWriter, req *http.Request) { WriteSuccess(w, req, http.StatusOK, nil) })
+	r.GET("/ok", wrapHTTP(func(w http.ResponseWriter, req *http.Request) { WriteSuccess(w, req, http.StatusOK, nil) }))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ok", nil))
 	require.Equal(t, http.StatusOK, rec.Code)

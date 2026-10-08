@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/model"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/model"
 )
 
 type Catalog interface {
@@ -16,8 +16,8 @@ type Resolver interface {
 	Resolve(context.Context, model.Role) (model.ResolvedModel, error)
 }
 
-// RegistryService is the behavior required by the public registry HTTP handler.
-type RegistryService interface {
+// LLMProviderService is the behavior required by the public LLM provider controllers.
+type LLMProviderService interface {
 	CreateProvider(context.Context, model.ProviderInput) (model.Provider, error)
 	UpdateProvider(context.Context, uuid.UUID, model.ProviderInput) (model.Provider, error)
 	DeleteProvider(context.Context, uuid.UUID) error

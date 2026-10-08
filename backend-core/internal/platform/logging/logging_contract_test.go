@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
+
 	"go.opentelemetry.io/otel/attribute"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 
@@ -65,10 +67,10 @@ func TestNewLogger_OTLPContract(t *testing.T) {
 	logger, err := logging.NewLogger(&output, "info", "core-test", "test", otelslog.NewHandler("core-test", otelslog.WithLoggerProvider(provider)))
 	require.NoError(t, err)
 	router := httpx.NewRouter(nil)
-	router.Get("/log", func(w http.ResponseWriter, req *http.Request) {
+	router.GET("/log", gin.WrapF(func(w http.ResponseWriter, req *http.Request) {
 		logger.With("api_key", "bound-secret").InfoContext(req.Context(), "handler event", "Authorization", "record-secret")
 		httpx.WriteSuccess(w, req, http.StatusOK, nil)
-	})
+	}))
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/log", nil)
 	req.Header.Set("X-Request-Id", "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21")
 	router.ServeHTTP(httptest.NewRecorder(), req)

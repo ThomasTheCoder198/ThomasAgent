@@ -96,10 +96,10 @@ func validDNSCharacter(character rune) bool {
 
 func (p *policy) validateURL(destination *url.URL) error {
 	if !validURLAuthority(destination) {
-		return errors.ErrRegistryProviderRejected.WithMessage("outbound URL is invalid")
+		return errors.ErrLLMProviderRejected.WithMessage("outbound URL is invalid")
 	}
 	if destination.Scheme != schemeHTTPS && destination.Scheme != schemeHTTP {
-		return errors.ErrRegistryProviderRejected.WithMessage("outbound scheme is not permitted")
+		return errors.ErrLLMProviderRejected.WithMessage("outbound scheme is not permitted")
 	}
 	port := destination.Port()
 	if port == "" {
@@ -109,10 +109,10 @@ func (p *policy) validateURL(destination *url.URL) error {
 		}
 	}
 	if !validPort(port) {
-		return errors.ErrRegistryProviderRejected.WithMessage("outbound port is invalid")
+		return errors.ErrLLMProviderRejected.WithMessage("outbound port is invalid")
 	}
 	if destination.Scheme == schemeHTTP && !p.privateDestinations[net.JoinHostPort(strings.ToLower(destination.Hostname()), port)] {
-		return errors.ErrRegistryProviderRejected.WithMessage("outbound HTTP destination is not allowlisted")
+		return errors.ErrLLMProviderRejected.WithMessage("outbound HTTP destination is not allowlisted")
 	}
 	return nil
 }

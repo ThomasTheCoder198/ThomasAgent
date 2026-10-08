@@ -8,13 +8,13 @@ M0.2 data belongs to the [Platform tenant](../../../docs/glossary.md) (`default`
 ## Entry points
 
 - `repository.NewAuthRepository`, `service.NewAuthService`, `EnsureOwner`, `Login`, `Authenticate`, and `Logout`.
-- `handler.NewAuthHandler(...).Mount` registers POST `/api/v1/auth/login`, POST `/api/v1/auth/logout`, and GET `/api/v1/auth/me`.
+- `controller.NewAuthController(AuthControllerParams)` exposes login, logout and me handlers; `cmd/core/routes.go` registers their paths.
 - `middleware.RequireSession` authenticates cookies, checks CSRF on unsafe methods and exposes `UserFrom` to protected handlers; `limiter.NewLoginLimiter` counts login attempts.
 - `PurgeAllExpiredSessions` is the explicit system-job repository/service entry point; `PurgeExpiredSessions` remains tenant-scoped for request use.
 
 ## Dependencies
 
-- Uses: `model` for domain state, `dto` for HTTP shapes, `repository` for SQL and its interface, `service` for the HTTP-facing service interface, plus Postgres, Redis, typed `config.AuthConfig`, Argon2id, UUIDs, named catalog errors, audit recording, chi and shared httpx boundaries.
+- Uses: `model` for domain state, `dto` for HTTP shapes, `repository` for SQL and its interface, `service` for the HTTP-facing service interface, plus Postgres, Redis, typed `config.AuthConfig`, Argon2id, UUIDs, named catalog errors, audit recording, Gin and shared httpx boundaries.
 - Used by: core HTTP routing and the periodic expired-session purge job.
 
 ## Run & test

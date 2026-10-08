@@ -2,141 +2,165 @@ package main
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"fmt"
 	"net/http"
 	"net/netip"
 	"time"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
-
+	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	authcontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/controller"
 	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
 	authrepo "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
 	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider"
+	llmprovidercontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/controller"
+	llmproviderservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/service"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/redisx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/retry"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry"
-	registryservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/registry/service"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/vault"
 )
 
-func (a *application) serveHTTP(ctx context.Context) error {
-	cipher, err := vault.NewCipher(a.cfg.Vault.KeyID, a.cfg.Vault.MasterKey)
+const (
+	providerCatalogBreaker = "provider-catalog"
+	postgresDependency     = "postgres"
+	redisDependency        = "redis"
+	coreListeningMessage   = "core listening"
+)
+
+type providerService interface {
+	llmproviderservice.LLMProviderService
+	llmproviderservice.Resolver
+}
+
+type services struct {
+	auth     authservice.AuthService
+	purger   sessionPurger
+	provider providerService
+}
+
+type controllers struct {
+	auth          *authcontroller.AuthController
+	provider      *llmprovidercontroller.ProviderController
+	model         *llmprovidercontroller.ModelController
+	modelRole     *llmprovidercontroller.ModelRoleController
+	internalModel *llmprovidercontroller.InternalModelController
+}
+
+func (rt *coreRuntime) serveHTTP(ctx context.Context) error {
+	cipher, err := vault.NewCipher(rt.cfg.Vault.KeyID, rt.cfg.Vault.MasterKey)
 	if err != nil {
 		return fmt.Errorf("CORE_VAULT_MASTER_KEY: %w", err)
 	}
-	pool, err := a.openPostgres(ctx)
+	pool, err := rt.openPostgres(ctx)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
-	redisClient, err := a.openRedis(ctx)
+	redisClient, err := rt.openRedis(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = redisClient.Close() }()
-	router, err := a.buildRouter(ctx, pool, redisClient, cipher)
+	svc, err := rt.newServices(ctx, pool, cipher)
 	if err != nil {
 		return err
 	}
-	go a.purgeExpiredSessions(ctx, a.authService)
-	go a.serveMetrics(ctx)
-	return a.listenAndServe(ctx, router)
+	ctrl, err := rt.newControllers(svc, redisClient)
+	if err != nil {
+		return err
+	}
+	gin.SetMode(gin.ReleaseMode)
+	engine := httpx.NewRouter(httpx.NewSlogErrorLogger(rt.log), httpx.LogAccess(rt.log), httpx.RecordMetrics(rt.metrics))
+	registerRoutes(engine, ctrl, middlewares{
+		auth:           svc.auth,
+		serviceToken:   rt.cfg.ServiceToken,
+		health:         rt.readinessChecks(pool, redisClient),
+		requestTimeout: rt.cfg.HTTP.RequestTimeout,
+	})
+	go rt.purgeExpiredSessions(ctx, svc.purger)
+	go rt.serveMetrics(ctx)
+	return rt.listenAndServe(ctx, engine)
 }
 
-func (a *application) buildRouter(ctx context.Context, pool *pgxpool.Pool, redisClient *redis.Client, cipher *vault.Cipher) (http.Handler, error) {
-	authService := authservice.NewAuthService(authrepo.NewAuthRepositoryWithSessionTouchInterval(pool, a.cfg.Auth.SessionTouchInterval), pool, a.cfg.Auth, time.Now)
-	if err := authService.EnsureOwner(tenant.WithID(ctx, tenant.PlatformID)); err != nil {
-		return nil, err
+func (rt *coreRuntime) newServices(ctx context.Context, pool *pgxpool.Pool, cipher *vault.Cipher) (services, error) {
+	auth := authservice.NewAuthService(authrepo.NewAuthRepositoryWithSessionTouchInterval(pool, rt.cfg.Auth.SessionTouchInterval), pool, rt.cfg.Auth, time.Now)
+	if err := auth.EnsureOwner(tenant.WithID(ctx, tenant.PlatformID)); err != nil {
+		return services{}, err
 	}
-	a.authService = authService
-	client, err := outbound.NewClient(a.cfg.ProviderHTTPTimeout, a.cfg.ProviderPrivateAllowlist)
+	client, err := outbound.NewClient(rt.cfg.ProviderHTTPTimeout, rt.cfg.ProviderPrivateAllowlist)
 	if err != nil {
-		return nil, fmt.Errorf("provider HTTP configuration: %w", err)
+		return services{}, fmt.Errorf("provider HTTP configuration: %w", err)
 	}
-	breaker := retry.NewBreaker("provider-catalog", a.cfg.ProviderBreaker)
-	catalog := registry.NewHTTPCatalogWithClient(retry.NewPolicy(a.cfg.Retry), client, a.cfg.ProviderMaxResponseBytes, breaker, a.log, a.cfg.ProviderMaxBreakers)
-	if a.metrics != nil {
-		catalog.Metrics = a.metrics
+	breaker := retry.NewBreaker(providerCatalogBreaker, rt.cfg.ProviderBreaker)
+	catalog := llmprovider.NewHTTPCatalogWithClient(retry.NewPolicy(rt.cfg.Retry), client, rt.cfg.ProviderMaxResponseBytes, breaker, rt.log, rt.cfg.ProviderMaxBreakers)
+	catalog.Metrics = rt.metrics
+	provider := llmproviderservice.NewLLMProviderService(pool, vault.NewStore(cipher), catalog, rt.cfg.ProviderMaxRemoteModels)
+	return services{
+		auth:     auth,
+		purger:   auth,
+		provider: provider,
+	}, nil
+}
+
+func (rt *coreRuntime) newControllers(svc services, redisClient *redis.Client) (controllers, error) {
+	proxyNetworks, err := parseTrustedProxyCIDRs(rt.cfg.Auth.TrustedProxyCIDRs)
+	if err != nil {
+		return controllers{}, err
 	}
-	registryService := registryservice.NewRegistryService(pool, vault.NewStore(cipher), catalog, a.cfg.ProviderMaxRemoteModels)
-	var proxyNetworks []netip.Prefix
-	for _, cidr := range a.cfg.Auth.TrustedProxyCIDRs {
+	maxBodyBytes := rt.cfg.HTTP.MaxBodyBytes
+	return controllers{
+		auth: authcontroller.NewAuthController(authcontroller.AuthControllerParams{
+			Service:            svc.auth,
+			Limiter:            authlimiter.NewLoginLimiter(redisClient, rt.cfg.Auth, []byte(rt.cfg.ServiceToken)),
+			CookieSecure:       rt.cfg.Auth.CookieSecure,
+			TrustedProxyHeader: rt.cfg.Auth.TrustedProxyHeader,
+			TrustedProxyCIDRs:  proxyNetworks,
+			Logger:             rt.log,
+		}),
+		provider:      llmprovidercontroller.NewProviderController(svc.provider, maxBodyBytes),
+		model:         llmprovidercontroller.NewModelController(svc.provider, maxBodyBytes),
+		modelRole:     llmprovidercontroller.NewModelRoleController(svc.provider, maxBodyBytes),
+		internalModel: llmprovidercontroller.NewInternalModelController(svc.provider),
+	}, nil
+}
+
+func parseTrustedProxyCIDRs(cidrs []string) ([]netip.Prefix, error) {
+	networks := make([]netip.Prefix, 0, len(cidrs))
+	for _, cidr := range cidrs {
 		network, err := netip.ParsePrefix(cidr)
 		if err != nil {
 			return nil, fmt.Errorf("CORE_AUTH_TRUSTED_PROXY_CIDRS: %w", err)
 		}
-		proxyNetworks = append(proxyNetworks, network)
+		networks = append(networks, network)
 	}
-	deps := routerDeps{
-		log:                a.log,
-		auth:               authService,
-		limiter:            authlimiter.NewLoginLimiter(redisClient, a.cfg.Auth, []byte(a.cfg.ServiceToken)),
-		cookieSecure:       a.cfg.Auth.CookieSecure,
-		trustedProxyHeader: a.cfg.Auth.TrustedProxyHeader,
-		trustedProxyCIDRs:  proxyNetworks,
-		registry:           registryService, serviceToken: a.cfg.ServiceToken,
-		health:         a.readinessChecks(pool, redisClient),
-		requestTimeout: a.cfg.HTTP.RequestTimeout, maxBodyBytes: a.cfg.HTTP.MaxBodyBytes,
-	}
-	if a.metrics != nil {
-		deps.metrics = a.metrics
-	}
-	return newRouter(deps), nil
+	return networks, nil
 }
 
-type sessionPurger interface {
-	PurgeAllExpiredSessions(context.Context) (int64, error)
-}
-
-func (a *application) purgeExpiredSessions(ctx context.Context, service sessionPurger) {
-	if a.cfg.Auth.SessionPurgeInterval <= 0 {
-		return
+func (rt *coreRuntime) listenAndServe(ctx context.Context, handler http.Handler) error {
+	srv := &http.Server{
+		Addr:              rt.cfg.HTTPAddr,
+		Handler:           handler,
+		ReadHeaderTimeout: rt.cfg.ReadHeaderTimeout,
 	}
-	ticker := time.NewTicker(a.cfg.Auth.SessionPurgeInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			a.runSessionPurge(ctx, service)
-		}
-	}
-}
-
-// runSessionPurge is a scheduled job: each run gets its own job id so its log lines can be found together.
-func (a *application) runSessionPurge(ctx context.Context, service sessionPurger) {
-	ctx = logging.ContextWithRequestID(ctx, requestid.NewJob())
-	start := time.Now()
-	count, err := service.PurgeAllExpiredSessions(ctx)
-	if err != nil {
-		a.log.ErrorContext(ctx, "expired session purge failed", "error", err, fieldDurationMS, time.Since(start).Milliseconds())
-		return
-	}
-	a.log.InfoContext(ctx, "expired sessions purged", "count", count, fieldDurationMS, time.Since(start).Milliseconds())
-}
-
-func (a *application) listenAndServe(ctx context.Context, handler http.Handler) error {
-	srv := &http.Server{Addr: a.cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: a.cfg.ReadHeaderTimeout}
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
-	a.log.InfoContext(ctx, "core listening", "addr", a.cfg.HTTPAddr)
+	rt.log.InfoContext(ctx, coreListeningMessage, logging.FieldAddr, rt.cfg.HTTPAddr)
 	select {
 	case err := <-errCh:
-		if errors.Is(err, http.ErrServerClosed) {
+		if stderrors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
 		return fmt.Errorf("listen: %w", err)
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), a.cfg.ShutdownTimeout)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), rt.cfg.ShutdownTimeout)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			return fmt.Errorf("shutdown HTTP server: %w", err)
@@ -145,8 +169,9 @@ func (a *application) listenAndServe(ctx context.Context, handler http.Handler) 
 	}
 }
 
-func (a *application) readinessChecks(pool *pgxpool.Pool, redisClient *redis.Client) map[string]httpx.DependencyPinger {
-	return map[string]httpx.DependencyPinger{"postgres": pool, "redis": redisx.ClientPinger{Client: redisClient}}
+func (rt *coreRuntime) readinessChecks(pool *pgxpool.Pool, redisClient *redis.Client) map[string]httpx.DependencyPinger {
+	return map[string]httpx.DependencyPinger{
+		postgresDependency: pool,
+		redisDependency:    redisx.ClientPinger{Client: redisClient},
+	}
 }
-
-const fieldDurationMS = "duration_ms"

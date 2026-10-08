@@ -28,6 +28,8 @@ See the [shared naming glossary](../../../../docs/glossary.md) for terms used ac
 
 Metric buckets must be nonempty, finite, positive and strictly ascending. The metrics constructor receives the configured slices directly, keeping config independent of the Prometheus registry.
 
+`AppConfig` (`CORE_APP_*`) configures the App token core signs for ragx: key id, issuer, audience and TTL, with defaults in `config.yaml`. The TTL must be above zero and at most `MaxAppTokenTTL` (60 s, spec §3.1). The signing key is `CORE_APP_SIGNING_KEY` (PKCS#8 PEM value) or `CORE_APP_SIGNING_KEY_FILE` (a mounted file), never both. It is not required here: `apptoken.LoadSigningKey` checks it when `serve` or `worker` start, so `migrate` and `outbox-relay` run without it.
+
 Log levels are validated through `logging.ParseLevel`, the same parser used to construct loggers; unknown names fail startup.
 
 The logger's field contract is defined in the [logging README](../logging/README.md#log-field-contract). `Config.Environment` supplies every logger's deployment environment.
@@ -36,6 +38,7 @@ The logger's field contract is defined in the [logging README](../logging/README
 - Missing or empty vault master key ? generate with `openssl rand -base64 32` and set CORE_VAULT_MASTER_KEY. Format is checked when constructing the vault cipher.
 - Missing or empty database/Redis URL → set both required variables.
 - Invalid duration or integer → use Go duration syntax or an integer.
+- `CORE_APP_TOKEN_TTL` above 60s or both signing key variables set → startup fails; fix the value.
 - Unknown log level → choose debug, info, warn, or error.
 - Retry maximum delay below base delay → increase CORE_RETRY_MAX_DELAY.
 

@@ -7,23 +7,29 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
-func (a *application) runOutboxRelay(ctx context.Context) error {
+const outboxRelayStartedMessage = "outbox relay started"
+
+func (rt *coreRuntime) runOutboxRelay(ctx context.Context) error {
 	ctx = tenant.WithID(ctx, tenant.PlatformID)
-	pool, err := a.openPostgres(ctx)
+	pool, err := rt.openPostgres(ctx)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
-	redisClient, err := a.openRedis(ctx)
+	redisClient, err := rt.openRedis(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = redisClient.Close() }()
-	r := &jobs.OutboxRelay{Pool: pool, Redis: redisClient, BatchSize: a.cfg.OutboxRelay.BatchSize, PollInterval: a.cfg.OutboxRelay.PollInterval, Log: a.log}
-	if a.metrics != nil {
-		r.Metrics = a.metrics
+	r := &jobs.OutboxRelay{
+		Pool:         pool,
+		Redis:        redisClient,
+		BatchSize:    rt.cfg.OutboxRelay.BatchSize,
+		PollInterval: rt.cfg.OutboxRelay.PollInterval,
+		Log:          rt.log,
+		Metrics:      rt.metrics,
 	}
-	go a.serveMetrics(ctx)
-	a.log.InfoContext(ctx, "outbox relay started")
+	go rt.serveMetrics(ctx)
+	rt.log.InfoContext(ctx, outboxRelayStartedMessage)
 	return r.Run(ctx)
 }

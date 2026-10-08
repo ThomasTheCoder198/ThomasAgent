@@ -1,4 +1,4 @@
-# Registry
+# LLM provider
 
 ## Purpose
 
@@ -6,7 +6,7 @@ Owns the platform provider/model catalog, write-only vaulted provider keys, capa
 
 ## Entry points
 
-- `service.NewRegistryService` injects PostgreSQL, the vault, a `Catalog`, and the remote model count limit from typed config. `service.NewRegistryServiceWithRepository` accepts a repository interface.
+- `service.NewLLMProviderService` injects PostgreSQL, the vault, a `Catalog`, and the remote model count limit from typed config. `service.NewLLMProviderServiceWithRepository` accepts a repository interface.
 - Provider create/update/delete/list/test methods keep keys out of returned records and commit mutations with audit events.
 - Model create/delete/list/sync methods validate metadata and atomically import OpenRouter models.
 - `AssignRole`, `ListRoles`, `Resolve` enforce capability requirements; an unassigned decision role falls back to chat.fast. Disabled providers cannot resolve.
@@ -15,13 +15,13 @@ Owns the platform provider/model catalog, write-only vaulted provider keys, capa
 ## Dependencies
 
 - Uses: domain `model`, HTTP `dto`, SQL `repository`, service interface, vault, audit, PostgreSQL DBTX, named catalog errors, retry/breaker and platform outbound/config.
-- Used by: public Registry HTTP handlers and the service-token protected internal resolver.
+- Used by: public LLM provider HTTP controllers and the service-token protected internal resolver.
 
 ## Run & test
 
 ```bash
 cd backend-core
-go test ./internal/registry/... -count=1
+go test ./internal/llmprovider/... -count=1
 ```
 
 Database tests require Docker Desktop and create isolated PostgreSQL testcontainers; catalog tests use local HTTP fixtures through an explicitly injected test client.
@@ -43,9 +43,9 @@ Each catalog attempt emits one safe structured outcome log with `success` and `d
 
 ## HTTP interface (Task 7)
 
-`handler.NewRegistryHandler(service, maxBodyBytes).Mount(router)` adds provider CRUD/test/sync, model create/list/delete and model-role list/assignment under `/api/v1`. The caller mounts public handlers behind `auth/middleware.RequireSession`; unsafe methods require the session CSRF header. JSON body decoding enforces the configured byte cap and field-only errors. The handler maps request DTOs into domain inputs and maps domain results into response DTOs. Provider responses expose `hasApiKey` only; absent/null `apiKey` preserves an existing key unless `baseUrl` changes (then it is cleared), while an empty string removes it.
+`cmd/core/server.go` constructs the four domain controllers and `cmd/core/routes.go` registers all paths. Public routes sit behind `auth/middleware.RequireSession`; unsafe methods require the session CSRF header. Controllers decode JSON within the configured byte cap, convert request DTOs to domain inputs, and return response DTOs through `httpx`. Provider responses expose `hasApiKey` only; absent/null `apiKey` preserves an existing key unless `baseUrl` changes (then it is cleared), while an empty string removes it.
 
-`MountInternal(router, service, serviceToken)` exposes `GET /internal/models/resolve?role=chat.fast` with case-insensitive `Authorization: Bearer <token>` authentication. SHA-256 token digests are compared in constant time, and resolve responses use `Cache-Control: no-store`. The trusted internal `data` response includes `role`, `providerKind`, `baseUrl`, `apiKey`, `modelRef`, `capabilities`, optional `embeddingDims` and `fallbackFrom`; provider keys appear only here, never in the public API. The caller supplies the shared access-log router; HTTP handlers report errors once through `httpx.WriteError` and never log bodies or credentials.
+`llmprovider/middleware.RequireServiceToken` protects `GET /internal/models/resolve?role=chat.fast`. SHA-256 token digests are compared in constant time. The trusted response includes `role`, `providerKind`, `baseUrl`, `apiKey`, `modelRef`, `capabilities`, optional `embeddingDims` and `fallbackFrom`; provider keys appear only here. Responses use `Cache-Control: no-store`.
 
 Kinds: openrouter, openai, anthropic, google, azure, ollama, openai_compatible, cohere, voyage, jina, typesafe. Capabilities: chat, tools, vision, reasoning, embedding, rerank, decision. M0.2 catalog sync supports OpenRouter only; the Genkit ModelResolver arrives in M2.
 
@@ -58,10 +58,10 @@ Kinds: openrouter, openai, anthropic, google, azure, ollama, openai_compatible, 
 | rerank       | rerank or decision                           |
 | decision     | decision; unassigned falls back to chat.fast |
 
-Registry queries use the context tenant and reject missing context. Sync rejects malformed remote entries atomically, caps catalog size, updates only existing sync rows, and removes stale sync rows unless any tenant role still references them. Manual models are never overwritten by sync; collisions count as skipped. Business `tenant_id` comes from trusted context, never client/model parameters; M0.2 exposes no tenant selector.
+LLM provider queries use the context tenant and reject missing context. Sync rejects malformed remote entries atomically, caps catalog size, updates only existing sync rows, and removes stale sync rows unless any tenant role still references them. Manual models are never overwritten by sync; collisions count as skipped. Business `tenant_id` comes from trusted context, never client/model parameters; M0.2 exposes no tenant selector.
 
 CORE_PROVIDER_MAX_REMOTE_MODELS controls the sync cap (default 1000). Counts include manual collisions and entries omitted by the cap. Pruning runs only for complete nonempty snapshots: empty, failed, and truncated responses preserve existing rows. Malformed entries reject the entire import transaction, preserving previous rows and emitting no success audit. Catalog decoding retains an invalid placeholder so the service can reject the batch consistently.
 
-HTTP integration tests use isolated PostgreSQL and Redis containers for actual owner login/session/CSRF and use a fake catalog for provider calls. Run Docker suites serially with `go test ./internal/registry -count=1 -p 2` on Windows.
+HTTP integration tests use isolated PostgreSQL and Redis containers for actual owner login/session/CSRF and use a fake catalog for provider calls. Run Docker suites serially with `go test ./internal/llmprovider -count=1 -p 2` on Windows.
 
 Each provider ID owns its circuit breaker; failures of one catalog cannot open another provider's circuit. CORE_PROVIDER_MAX_BREAKERS bounds cached circuits (default 256). Cache pressure discards only inactive closed circuits with no consecutive failures, choosing the least recently used. Open, half-open, accumulating-failure, and in-flight circuits remain protected. If every cached circuit is protected, new provider calls return PROVIDER_UNAVAILABLE until capacity becomes safely reusable. The guarded catalog shares the response byte cap from typed config. Missing or nonpositive remote context lengths stay null. Duplicate manual creates return 409; sync conflicts with manual entries count as skipped. Stale sync models remain while any tenant role references them.

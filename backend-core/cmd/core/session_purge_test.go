@@ -28,7 +28,7 @@ func TestSessionPurgeJobDeletesExpiredRowsAndStopsOnCancellation(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateSession(tenant.WithID(t.Context(), tenant.PlatformID), user.ID, []byte("expired-job-session"), "csrf", time.Now().Add(-time.Hour)))
 	service := authservice.NewAuthService(repo, pool, config.AuthConfig{}, time.Now)
-	app := application{cfg: config.Config{Auth: config.AuthConfig{SessionPurgeInterval: 10 * time.Millisecond}}, log: slog.New(slog.NewJSONHandler(io.Discard, nil))}
+	app := coreRuntime{cfg: config.Config{Auth: config.AuthConfig{SessionPurgeInterval: 10 * time.Millisecond}}, log: slog.New(slog.NewJSONHandler(io.Discard, nil))}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	finished := make(chan struct{})
@@ -57,7 +57,7 @@ func TestSessionPurgeJobDeletesExpiredSessionsAcrossTenants(t *testing.T) {
 		require.NoError(t, repo.CreateSession(ctx, user.ID, []byte(tenantID+"-active"), "csrf", time.Now().Add(time.Hour)))
 	}
 	service := authservice.NewAuthService(repo, pool, config.AuthConfig{}, time.Now)
-	app := application{log: slog.New(slog.NewJSONHandler(io.Discard, nil))}
+	app := coreRuntime{log: slog.New(slog.NewJSONHandler(io.Discard, nil))}
 	app.runSessionPurge(t.Context(), service)
 	var expired, active int
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FILTER (WHERE expires_at<=now()), count(*) FILTER (WHERE expires_at>now()) FROM sessions`).Scan(&expired, &active))
@@ -71,7 +71,7 @@ func TestSessionPurgeLogsCarryJobRequestID(t *testing.T) {
 	var output bytes.Buffer
 	log, err := logging.NewLogger(&output, "info", "core-test", "test", nil)
 	require.NoError(t, err)
-	app := application{log: log}
+	app := coreRuntime{log: log}
 	app.runSessionPurge(t.Context(), service)
 	var record map[string]any
 	require.NoError(t, json.Unmarshal(bytes.TrimSpace(output.Bytes()), &record))

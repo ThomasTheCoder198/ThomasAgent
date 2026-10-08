@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines the core HTTP API contract for health, authentication, the registry, and internal model resolution.
+Defines the core HTTP API contract for health, authentication, the core LLM provider catalog, and internal model resolution.
 
 ## Entry points
 

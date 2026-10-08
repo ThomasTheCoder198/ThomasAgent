@@ -28,7 +28,6 @@ const (
 	fieldCachedTokens    = "cached_tokens"
 	fieldReasoningTokens = "reasoning_tokens"
 	fieldCost            = "cost"
-	fieldDurationMS      = "duration_ms"
 	fieldTTFTMS          = "ttft_ms"
 	fieldAttempt         = "attempt"
 	fieldFinishReason    = "finish_reason"
@@ -93,7 +92,7 @@ func (l *Logger) LLM(ctx context.Context, call LLMCall) {
 		slog.String(fieldProvider, call.Provider), slog.String(fieldModel, call.Model), slog.String(fieldRole, call.Role),
 		slog.Int64(fieldInputTokens, call.InputTokens), slog.Int64(fieldOutputTokens, call.OutputTokens),
 		slog.Int64(fieldCachedTokens, call.CachedTokens), slog.Int64(fieldReasoningTokens, call.ReasoningTokens),
-		slog.Float64(fieldCost, call.CostUSD), slog.Int64(fieldDurationMS, call.Duration.Milliseconds()),
+		slog.Float64(fieldCost, call.CostUSD), slog.Int64(logging.FieldDurationMS, call.Duration.Milliseconds()),
 		slog.Int64(fieldTTFTMS, call.TTFT.Milliseconds()), slog.Int(fieldAttempt, call.Attempt),
 		slog.String(fieldFinishReason, call.FinishReason), slog.String(fieldOutcome, outcome),
 	}
@@ -120,7 +119,7 @@ func (l *Logger) Tool(ctx context.Context, call ToolCall) {
 	}
 	attrs := []slog.Attr{
 		slog.String(fieldApp, call.App), slog.String(fieldTool, call.Tool),
-		slog.Int64(fieldDurationMS, call.Duration.Milliseconds()), slog.String(fieldOutcome, outcome),
+		slog.Int64(logging.FieldDurationMS, call.Duration.Milliseconds()), slog.String(fieldOutcome, outcome),
 	}
 	if call.ErrorCode != "" {
 		attrs = append(attrs, slog.String(fieldErrorCode, call.ErrorCode))

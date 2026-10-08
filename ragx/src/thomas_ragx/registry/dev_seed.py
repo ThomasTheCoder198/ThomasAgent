@@ -1,7 +1,7 @@
 from typing import Final
 
 from thomas_ragx.registry.model import Capability, ModelRecord, ProviderKind, Role
-from thomas_ragx.registry.service import RegistryService
+from thomas_ragx.registry.service import LLMProviderService
 
 DEV_PROVIDER_NAME: Final = "Dev seed (offline)"
 # A closed local port keeps the offline seed from reaching a provider.
@@ -10,7 +10,7 @@ DEV_EMBEDDING_MODEL: Final = "dev-embedding"
 DEV_EMBEDDING_DIMS: Final = 1536
 
 
-async def seed_dev_registry(service: RegistryService) -> ModelRecord:
+async def seed_dev_registry(service: LLMProviderService) -> ModelRecord:
     """Idempotent: provider, one embedding model and the embedding role, without any network call."""
     provider = next((p for p in await service.list_providers() if p.name == DEV_PROVIDER_NAME), None)
     if provider is None:

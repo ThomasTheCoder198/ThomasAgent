@@ -29,7 +29,7 @@ async def test_manual_kinds_report_sync_unsupported(kind: ProviderKind) -> None:
     listing = ModelListing(RecordingLister(), RecordingLister())
     with pytest.raises(AppError) as failure:
         await listing.list_models(ProviderAccess(kind, "", SecretStr("k")))
-    assert failure.value.code is ErrorCode.REGISTRY_SYNC_UNSUPPORTED
+    assert failure.value.code is ErrorCode.LLM_PROVIDER_SYNC_UNSUPPORTED
 
 
 async def test_openrouter_goes_through_the_openai_sdk_lister() -> None:
@@ -55,5 +55,5 @@ async def test_provider_failure_becomes_rejected_without_its_message() -> None:
         await ModelListing(failing, RecordingLister()).list_models(
             ProviderAccess(ProviderKind.ANTHROPIC, "", SecretStr("sk-secret"))
         )
-    assert failure.value.code is ErrorCode.REGISTRY_PROVIDER_REJECTED
+    assert failure.value.code is ErrorCode.LLM_PROVIDER_REJECTED
     assert "sk-secret" not in str(failure.value)

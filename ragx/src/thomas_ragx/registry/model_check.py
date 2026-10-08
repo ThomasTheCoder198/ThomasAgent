@@ -46,4 +46,4 @@ class LiteLLMModelChecker:
             raise
         except Exception as exc:
             log.warning("model check failed", kind=access.kind.value, error_type=type(exc).__name__)
-            raise AppError(ErrorCode.REGISTRY_PROVIDER_REJECTED) from None
+            raise AppError(ErrorCode.LLM_PROVIDER_REJECTED) from None

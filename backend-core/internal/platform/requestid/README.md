@@ -2,17 +2,17 @@
 
 ## Purpose
 Owns the request id format shared by core, ragx and the frontend: the `X-Request-Id` header name, the
-accepted pattern and the `req_`/`job_` generators. It does not store ids; the context helpers live in
-`internal/platform/logging`.
+accepted pattern and the `req_`/`job_` generators, and carries the id in `context.Context`.
 
 ## Entry points
 - `IsValid` — `httpx` checks incoming headers; `jobs` checks ids read from stream entries.
 - `NewRequest` — `httpx` when a header is missing or rejected.
 - `NewJob` — `jobs.EnqueueOutbox` and scheduled work when nothing started from a request.
+- `NewContext` / `FromContext` — set by the HTTP middleware and the job consumer; read by logging, audit, outbound calls and the outbox.
 
 ## Dependencies
 - Uses: `github.com/google/uuid`.
-- Used by: `internal/platform/httpx`, `internal/platform/jobs`, `cmd/core`.
+- Used by: `internal/platform/httpx`, `logging`, `audit`, `outbound`, `jobs`, `cmd/core`.
 
 ## Run & test
 ```bash

@@ -11,7 +11,7 @@ Explicit platform boundaries set the [Platform tenant](../../../../docs/glossary
 
 ## Dependencies
 
-- Uses: `postgres.DBTX`, JSON encoding, and the logging request-id context.
+- Uses: `postgres.DBTX`, JSON encoding, and the `requestid` context.
 - Used by: core domain services and the forthcoming HTTP/startup wiring.
 
 ## Run & test

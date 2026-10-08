@@ -7,6 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"time"
+
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 )
 
 const (
@@ -65,7 +67,7 @@ func NewLogger(w io.Writer, level, service, environment string, otelHandler slog
 type requestContextHandler struct{ slog.Handler }
 
 func (h requestContextHandler) Handle(ctx context.Context, r slog.Record) error {
-	if requestID := RequestIDFromContext(ctx); requestID != "" {
+	if requestID := requestid.FromContext(ctx); requestID != "" {
 		r.AddAttrs(slog.String(fieldRequestID, requestID))
 	}
 	if err := h.Handler.Handle(ctx, r); err != nil {

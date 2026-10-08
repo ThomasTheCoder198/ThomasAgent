@@ -14,7 +14,7 @@ Structured logger setup is injected by the application. Core has no tracing midd
 - `NewRouter` registers assignRequestID → caller middleware → injectErrorLogger → recoverPanics.
 - `WriteSuccess` serializes success data and request ID metadata.
 - `WriteError` localizes catalog errors and sanitizes server errors.
-- `logging.RequestIDFromContext` retrieves the shared request ID for callers that need it; logging receives it automatically.
+- `requestid.FromContext` retrieves the shared request ID for callers that need it; logging receives it automatically.
 
 ## Dependencies
 - Uses: `internal/errors`, platform logging, Gin v1.10.0, and `internal/platform/requestid`.
@@ -46,7 +46,7 @@ Callers must supply access logging middleware before registering routes.
 - Panic after headers were sent: recovery cannot replace an already committed response.
 
 ## Health and observability
-`MountHealth` uses `LivenessPath` and `ReadinessPath` with injected `DependencyPinger` capabilities. See [liveness and readiness](../../../../docs/glossary.md) for route meanings.
+`MountHealth` uses `LivenessPath` and `ReadinessPath` with injected `ReadinessDependency` capabilities. See [liveness and readiness](../../../../docs/glossary.md) for route meanings.
 
 `assignRequestID` accepts `X-Request-Id` only when it matches the shared pattern (`contracts/request-id.json`);
 otherwise it generates a `req_` id and never logs the rejected value. The id is in context, in the response header,
@@ -55,7 +55,7 @@ in `meta.requestId` and in `error.requestId`. `LogAccess` writes one line per re
 `idempotency_key`, and `request_id_source`/`client_request_id_rejected` when the id was generated. Level follows
 the status: 2xx/3xx info, 4xx warn, 5xx error. `RoutePattern` exposes the same low-cardinality route to metrics.
 
-`assignRequestID` uses `logging.ContextWithRequestID`; handler, access, and error logs follow the shared [log field contract](../logging/README.md#log-field-contract).
+`assignRequestID` uses `requestid.NewContext`; handler, access, and error logs follow the shared [log field contract](../logging/README.md#log-field-contract).
 
 Gin's writer preserves the first committed response status, including implicit commitment by Write or Flush.
 

@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
@@ -43,9 +42,9 @@ func TestEnqueueOutbox_StoresRequestIDOrJobID(t *testing.T) {
 	pool := startPool(t)
 	base := tenant.WithID(t.Context(), tenant.PlatformID)
 	const origin = "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21"
-	require.NoError(t, EnqueueOutbox(logging.ContextWithRequestID(base, origin), pool, testStream, map[string]string{"n": "1"}))
+	require.NoError(t, EnqueueOutbox(requestid.NewContext(base, origin), pool, testStream, map[string]string{"n": "1"}))
 	require.NoError(t, EnqueueOutbox(base, pool, testStream, map[string]string{"n": "2"}))
-	require.NoError(t, EnqueueOutbox(logging.ContextWithRequestID(base, "forged id"), pool, testStream, map[string]string{"n": "3"}))
+	require.NoError(t, EnqueueOutbox(requestid.NewContext(base, "forged id"), pool, testStream, map[string]string{"n": "3"}))
 	rows, err := pool.Query(base, `SELECT request_id FROM outbox ORDER BY payload->>'n'`)
 	require.NoError(t, err)
 	var ids []string

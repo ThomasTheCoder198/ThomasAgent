@@ -12,7 +12,7 @@ recovery, acknowledgement, and dead-letter delivery.
 
 ## Dependencies
 - Logger construction returns an error for unknown levels; callers must handle it before injecting a logger.
-- Uses: pgx/Postgres, go-redis/Redis Streams, `internal/errors`, logging request-id context, slog.
+- Uses: pgx/Postgres, go-redis/Redis Streams, `internal/errors`, `requestid` context, slog.
 - Used by: core outbox-relay and future domain workers.
 - Configure batch/poll limits from `config.OutboxRelayConfig`; consumer limits from
   `config.ConsumerConfig`. Callers provide clients and a structured logger.

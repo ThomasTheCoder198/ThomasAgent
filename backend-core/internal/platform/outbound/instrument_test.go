@@ -10,8 +10,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/metrics"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 )
 
 type recordedCall struct{ target, outcome string }
@@ -30,7 +30,7 @@ func TestInstrument_PropagatesRequestIDOnlyWhenAsked(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	ctx := logging.ContextWithRequestID(context.Background(), id)
+	ctx := requestid.NewContext(context.Background(), id)
 	for _, propagate := range []bool{true, false} {
 		client := &http.Client{Transport: Instrument(http.DefaultTransport, TargetRagx, nil, propagate)}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
@@ -71,7 +71,7 @@ func TestInstrument_RemovesSuppliedRequestIDForExternalProviders(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			}))
 			defer server.Close()
-			ctx := logging.ContextWithRequestID(t.Context(), "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21")
+			ctx := requestid.NewContext(t.Context(), "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21")
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
 			require.NoError(t, err)
 			req.Header.Set("X-Request-Id", "req_suppliedid")

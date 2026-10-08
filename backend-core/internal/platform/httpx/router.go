@@ -7,7 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 )
 
@@ -31,7 +30,7 @@ func NewRouter(errorLogger ErrorLogger, middlewares ...Middleware) *gin.Engine {
 func assignRequestID(c *gin.Context) {
 	id, origin := acceptRequestID(c.Request.Header.Get(requestid.Header))
 	c.Writer.Header().Set(requestid.Header, id)
-	ctx := withRequestIDOrigin(logging.ContextWithRequestID(c.Request.Context(), id), origin)
+	ctx := withRequestIDOrigin(requestid.NewContext(c.Request.Context(), id), origin)
 	c.Request = c.Request.WithContext(ctx)
 	c.Next()
 }

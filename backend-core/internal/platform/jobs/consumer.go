@@ -117,7 +117,7 @@ func (c *Consumer) handleEntries(ctx context.Context, msgs []redis.XMessage, han
 func (c *Consumer) handle(ctx context.Context, raw redis.XMessage, handler Handler) {
 	tenantID, _ := raw.Values[StreamFieldTenantID].(string)
 	requestID := messageRequestID(raw)
-	ctx = logging.ContextWithRequestID(tenant.WithID(ctx, tenantID), requestID)
+	ctx = requestid.NewContext(tenant.WithID(ctx, tenantID), requestID)
 	deliveries, err := c.deliveries(ctx, raw.ID)
 	if err != nil {
 		c.Log.ErrorContext(ctx, "read delivery count failed", "id", raw.ID, "error_code", errors.CodeOf(err))

@@ -35,7 +35,7 @@ func (rt *coreRuntime) purgeExpiredSessions(ctx context.Context, service session
 
 // Each scheduled run gets a job id so its log lines can be found together.
 func (rt *coreRuntime) runSessionPurge(ctx context.Context, service sessionPurger) {
-	ctx = logging.ContextWithRequestID(ctx, requestid.NewJob())
+	ctx = requestid.NewContext(ctx, requestid.NewJob())
 	start := time.Now()
 	count, err := service.PurgeExpiredSessionsAcrossTenants(ctx)
 	if err != nil {

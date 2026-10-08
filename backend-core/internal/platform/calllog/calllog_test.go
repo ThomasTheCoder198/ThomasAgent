@@ -13,6 +13,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/metrics"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 )
 
 const testRequestID = "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21"
@@ -51,7 +52,7 @@ func sampleCall() LLMCall {
 
 func TestLLM_LogsMetadataWithRequestIDAndRecordsMetrics(t *testing.T) {
 	l, output, recorder := newTestLogger(t, config.LLMLogConfig{ContentMaxBytes: 64})
-	l.LLM(logging.ContextWithRequestID(context.Background(), testRequestID), sampleCall())
+	l.LLM(requestid.NewContext(context.Background(), testRequestID), sampleCall())
 	record := lastRecord(t, output)
 	require.Equal(t, "llm.call", record["msg"])
 	require.Equal(t, "INFO", record["level"])
@@ -108,7 +109,7 @@ func TestLLM_LevelFollowsOutcome(t *testing.T) {
 
 func TestTool_LogsCallWithRagxTraceID(t *testing.T) {
 	l, output, _ := newTestLogger(t, config.LLMLogConfig{ContentMaxBytes: 64})
-	l.Tool(logging.ContextWithRequestID(context.Background(), testRequestID), ToolCall{
+	l.Tool(requestid.NewContext(context.Background(), testRequestID), ToolCall{
 		App: "ragx", Tool: "kb.getKnowledgebase", Duration: 150 * time.Millisecond,
 		RagxTraceID: "4bf92f3577b34da6a3ce929d0e0e4736",
 	})

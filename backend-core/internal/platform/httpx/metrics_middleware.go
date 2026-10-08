@@ -4,8 +4,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 )
 
 type HTTPMetrics interface {
@@ -20,7 +19,7 @@ func RecordMetrics(rec HTTPMetrics) Middleware {
 		}
 		start := time.Now()
 		defer func() {
-			rec.ObserveHTTP(c.Request.Method, RoutePattern(c), c.Writer.Status(), time.Since(start), logging.RequestIDFromContext(c.Request.Context()))
+			rec.ObserveHTTP(c.Request.Method, RoutePattern(c), c.Writer.Status(), time.Since(start), requestid.FromContext(c.Request.Context()))
 		}()
 		c.Next()
 	}

@@ -1,6 +1,7 @@
 package requestid
 
 import (
+	"context"
 	"regexp"
 
 	"github.com/google/uuid"
@@ -22,3 +23,16 @@ func IsValid(id string) bool { return validID.MatchString(id) }
 func NewRequest() string { return RequestPrefix + uuid.NewString() }
 
 func NewJob() string { return JobPrefix + uuid.NewString() }
+
+type contextKey struct{}
+
+// NewContext carries the request id to logs, outbound calls and outbox rows created under ctx.
+func NewContext(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, contextKey{}, id)
+}
+
+// FromContext returns "" when no id was assigned.
+func FromContext(ctx context.Context) string {
+	id, _ := ctx.Value(contextKey{}).(string)
+	return id
+}

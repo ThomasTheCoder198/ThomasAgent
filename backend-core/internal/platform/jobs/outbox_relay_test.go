@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
@@ -61,7 +61,7 @@ func TestOutboxRelayPreservesTenantForHandlerAndDeadLetter(t *testing.T) {
 
 func TestOutboxRelay_PublishesRequestID(t *testing.T) {
 	const origin = "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21"
-	ctx := logging.ContextWithRequestID(tenant.WithID(context.Background(), tenant.PlatformID), origin)
+	ctx := requestid.NewContext(tenant.WithID(context.Background(), tenant.PlatformID), origin)
 	pool, redisClient := startPool(t), startRedis(t)
 	require.NoError(t, EnqueueOutbox(ctx, pool, testStream, map[string]string{"file_id": "f1"}))
 	relay := &OutboxRelay{Pool: pool, Redis: redisClient, BatchSize: 10, PollInterval: time.Millisecond, Log: quietLog}

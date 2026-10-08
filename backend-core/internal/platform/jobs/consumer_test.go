@@ -113,7 +113,7 @@ func TestConsumer_RestoresRequestIDAndLogsWithoutPayload(t *testing.T) {
 		StreamFieldPayload: "private-document", StreamFieldRequestID: origin, StreamFieldOutboxID: outboxID,
 	}}).Err())
 	require.NoError(t, c.PollOnce(ctx, func(ctx context.Context, m Message) error {
-		require.Equal(t, origin, logging.RequestIDFromContext(ctx))
+		require.Equal(t, origin, requestid.FromContext(ctx))
 		require.Equal(t, origin, m.RequestID)
 		return errors.New("private-document in handler failure")
 	}))
@@ -141,8 +141,8 @@ func TestConsumer_ReplacesMalformedRequestID(t *testing.T) {
 	}
 	var seen []string
 	require.NoError(t, c.PollOnce(ctx, func(ctx context.Context, m Message) error {
-		seen = append(seen, logging.RequestIDFromContext(ctx))
-		require.Equal(t, logging.RequestIDFromContext(ctx), m.RequestID)
+		seen = append(seen, requestid.FromContext(ctx))
+		require.Equal(t, requestid.FromContext(ctx), m.RequestID)
 		return nil
 	}))
 	require.Len(t, seen, 2)

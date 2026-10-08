@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
@@ -48,7 +47,7 @@ func EnqueueOutbox(ctx context.Context, q Execer, stream string, payload any) er
 
 // originRequestID gives work that does not start from a request (a schedule, a startup task) its own job id.
 func originRequestID(ctx context.Context) string {
-	if id := logging.RequestIDFromContext(ctx); requestid.IsValid(id) {
+	if id := requestid.FromContext(ctx); requestid.IsValid(id) {
 		return id
 	}
 	return requestid.NewJob()

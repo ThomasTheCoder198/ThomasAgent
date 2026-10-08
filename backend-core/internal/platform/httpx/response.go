@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 )
 
 const (
@@ -64,7 +64,7 @@ func withErrorLogger(ctx context.Context, l ErrorLogger) context.Context {
 }
 
 func WriteSuccess(w http.ResponseWriter, r *http.Request, status int, data any) {
-	writeJSON(w, status, successResponse{Data: data, Meta: ResponseMeta{RequestID: logging.RequestIDFromContext(r.Context())}})
+	writeJSON(w, status, successResponse{Data: data, Meta: ResponseMeta{RequestID: requestid.FromContext(r.Context())}})
 }
 
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
@@ -78,7 +78,7 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	body := ErrorDetail{
 		Code:      string(appErr.Code),
 		Message:   appErr.LocalizedMessage(errors.LangFromHeader(r.Header.Get(headerAcceptLanguage))),
-		RequestID: logging.RequestIDFromContext(r.Context()),
+		RequestID: requestid.FromContext(r.Context()),
 	}
 	if status < http.StatusInternalServerError {
 		body.Details = appErr.Details

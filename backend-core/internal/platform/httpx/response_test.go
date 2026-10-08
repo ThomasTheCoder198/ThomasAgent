@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 )
 
@@ -110,7 +109,7 @@ func TestRecoverPanics_ReturnsInternalResponse(t *testing.T) {
 }
 
 func TestWriteError_ServerErrorSanitizesOverridesAndCarriesRequestID(t *testing.T) {
-	ctx := logging.ContextWithRequestID(context.Background(), testRequestID)
+	ctx := requestid.NewContext(context.Background(), testRequestID)
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
 	req.Header.Set("Accept-Language", "en")
 	rec := httptest.NewRecorder()

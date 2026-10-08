@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/metrics"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 )
@@ -45,7 +44,7 @@ func (t instrumentedTransport) RoundTrip(req *http.Request) (*http.Response, err
 		}
 	}
 	if t.propagateRequestID && t.target == TargetRagx {
-		if id := logging.RequestIDFromContext(req.Context()); requestid.IsValid(id) {
+		if id := requestid.FromContext(req.Context()); requestid.IsValid(id) {
 			req.Header.Set(requestid.Header, id)
 		}
 	}

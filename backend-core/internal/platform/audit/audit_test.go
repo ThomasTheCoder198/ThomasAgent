@@ -4,11 +4,11 @@ import (
 	"context"
 	"testing"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 
 	"github.com/stretchr/testify/require"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
-	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
 )
@@ -25,7 +25,7 @@ func TestRecordStoresEvent(t *testing.T) {
 func TestRecordStoresRequestIDAndPlatformScope(t *testing.T) {
 	pool := pgtest.Start(t)
 	const origin = "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21"
-	ctx := logging.ContextWithRequestID(tenant.WithID(context.Background(), tenant.PlatformID), origin)
+	ctx := requestid.NewContext(tenant.WithID(context.Background(), tenant.PlatformID), origin)
 	require.NoError(t, Record(ctx, pool, Event{Actor: "owner", Action: "auth.login", TargetType: "user", TargetID: "u1", Metadata: map[string]any{"kind": "login"}}))
 	var storedRequestID, tenant, kind string
 	require.NoError(t, pool.QueryRow(ctx, "SELECT request_id, tenant_id, metadata->>'kind' FROM audit_events").Scan(&storedRequestID, &tenant, &kind))

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 )
 
 func testLogger(t *testing.T, w io.Writer, level, service string, otelHandler slog.Handler) *slog.Logger {
@@ -116,7 +117,7 @@ func TestNewLogger_RedactsSecretKeysAndValues(t *testing.T) {
 func TestNewLogger_AddsServiceAndRequestID(t *testing.T) {
 	var buf bytes.Buffer
 	l := testLogger(t, &buf, "info", "thomas-core", nil)
-	l.InfoContext(ContextWithRequestID(context.Background(), "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21"), "hello")
+	l.InfoContext(requestid.NewContext(context.Background(), "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21"), "hello")
 	m := lastLine(t, &buf)
 	require.Equal(t, "thomas-core", m["service"])
 	require.Equal(t, "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21", m["request_id"])

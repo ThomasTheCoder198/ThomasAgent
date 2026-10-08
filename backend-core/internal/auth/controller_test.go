@@ -50,7 +50,7 @@ func newServer(t *testing.T, maxAttempts int) (http.Handler, *clock) {
 	svc, c := newTestService(t)
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	r := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
-	mountAuthForTest(r, ControllerParams{Service: svc, Limiter: NewLimiter(startRedis(t), maxAttempts, time.Minute)})
+	mountAuthForTest(r, ControllerParams{Service: svc, Limiter: newTestLimiter(startRedis(t), maxAttempts)})
 	pr := r.Group("", RequireSession(svc))
 	pr.POST("/api/v1/things", wrapAuthHTTP(func(w http.ResponseWriter, req *http.Request) {
 		httpx.WriteSuccess(w, req, http.StatusCreated, map[string]bool{"ok": true})
@@ -133,7 +133,7 @@ func TestLoginSetsCookies(t *testing.T) {
 func TestExpiredSessionIsRejectedOverHTTP(t *testing.T) {
 	service, _ := newTestService(t)
 	h := httpx.NewRouter(nil)
-	mountAuthForTest(h, ControllerParams{Service: service, Limiter: NewLimiter(startRedis(t), 10, time.Minute)})
+	mountAuthForTest(h, ControllerParams{Service: service, Limiter: newTestLimiter(startRedis(t), 10)})
 	rec := login(t, h, ownerEmail, ownerPassword)
 	_, err := service.db.Exec(t.Context(), `UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1`, hashSessionToken(cookie(rec, SessionCookie).Value))
 	require.NoError(t, err)

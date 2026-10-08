@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -16,18 +15,26 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 )
 
-const loginLimiterKeyPrefix = "thomas:auth:login:"
 const (
+	loginLimiterKeyPrefix   = "thomas:auth:login:"
 	limiterEmailSuffix      = ":email"
 	limiterIPSuffix         = ":ip:"
-	retryAfterSecondsDetail = "retryAfterSeconds"
-	limiterResultLength     = 3
-	limiterTTLIndex         = 1
-	limiterTripIndex        = 2
-	limiterEmailKeyIndex    = 2
 	limiterIPKeyPrefix      = loginLimiterKeyPrefix + "ip:"
+	retryAfterSecondsDetail = "retryAfterSeconds"
 )
 
+// Positions in the script's reply and in its KEYS (1-based in Lua).
+const (
+	scriptResultLength   = 3
+	scriptBlockedIndex   = 0
+	scriptTTLIndex       = 1
+	scriptTrippedIndex   = 2
+	scriptEmailKeyNumber = 2
+)
+
+// incrementWithTTL bumps every counter atomically, repairs a counter that lost its TTL, and
+// reports whether any counter is over its limit, the longest remaining TTL among the blocked
+// ones, and whether this attempt is the first one over the email limit.
 const incrementWithTTL = `
 local blocked = 0
 local remaining = 0
@@ -52,86 +59,82 @@ end
 return {blocked, remaining, email_tripped}
 `
 
+// LoginLimiter keeps three Redis budgets per login attempt: email+IP, email alone, and IP alone.
+// Emails are stored only as keyed HMACs.
 type LoginLimiter struct {
-	rdb      *redis.Client
-	max      int
-	window   time.Duration
-	script   *redis.Script
-	emailMax int
-	ipMax    int
-	hmacKey  []byte
-	initErr  error
+	redisClient          *redis.Client
+	script               *redis.Script
+	emailAndIPMax        int
+	emailMax             int
+	ipMax                int
+	window               time.Duration
+	identityKey          []byte
+	configurationInvalid bool
 }
 
-func NewLimiter(rdb *redis.Client, max int, window time.Duration) *LoginLimiter {
-	key := make([]byte, sessionTokenBytes)
-	_, err := rand.Read(key)
-	lim := NewLoginLimiter(rdb, config.AuthConfig{LoginMaxAttempts: max, LoginEmailMaxAttempts: max, LoginIPMaxAttempts: config.DefaultLoginIPMaxAttempts, LoginWindow: window}, key)
-	if err != nil {
-		lim.initErr = errors.ErrInternalError.WithCause(err)
-	}
-	return lim
-}
-
-func NewLoginLimiter(rdb *redis.Client, cfg config.AuthConfig, key []byte) *LoginLimiter {
-	lim := &LoginLimiter{rdb: rdb, max: cfg.LoginMaxAttempts, emailMax: cfg.LoginEmailMaxAttempts, ipMax: cfg.LoginIPMaxAttempts, window: cfg.LoginWindow, script: redis.NewScript(incrementWithTTL), hmacKey: append([]byte(nil), key...)}
-	if len(key) < config.MinimumServiceTokenLength || lim.max < 1 || lim.emailMax < 1 || lim.ipMax < 1 || lim.window <= 0 {
-		lim.initErr = errors.ErrInternalError
-	}
-	return lim
-}
-
-func (l *LoginLimiter) Allow(ctx context.Context, key string) error {
-	_, err := l.checkKeys(ctx, []string{loginLimiterKeyPrefix + key}, 0, l.max)
-	return err
-}
-
+// LoginLimitDecision tells the controller whether this attempt is the first over the email budget,
+// which is the only failed-login event worth an audit row.
 type LoginLimitDecision struct{ EmailTripped bool }
 
-func (l *LoginLimiter) Check(ctx context.Context, email, ip string) (LoginLimitDecision, error) {
-	identity := l.Identity(email)
-	return l.checkKeys(ctx, []string{loginLimiterKeyPrefix + identity + limiterIPSuffix + ip, loginLimiterKeyPrefix + identity + limiterEmailSuffix, limiterIPKeyPrefix + ip}, limiterEmailKeyIndex, l.max, l.emailMax, l.ipMax)
+type loginLimitKeys struct{ emailAndIP, email, ip string }
+
+func NewLoginLimiter(redisClient *redis.Client, authConfig config.AuthConfig, identityKey []byte) *LoginLimiter {
+	limiter := &LoginLimiter{
+		redisClient:   redisClient,
+		script:        redis.NewScript(incrementWithTTL),
+		emailAndIPMax: authConfig.LoginMaxAttempts,
+		emailMax:      authConfig.LoginEmailMaxAttempts,
+		ipMax:         authConfig.LoginIPMaxAttempts,
+		window:        authConfig.LoginWindow,
+		identityKey:   append([]byte(nil), identityKey...),
+	}
+	limiter.configurationInvalid = len(identityKey) < config.MinimumServiceTokenLength ||
+		limiter.emailAndIPMax < 1 || limiter.emailMax < 1 || limiter.ipMax < 1 || limiter.window <= 0
+	return limiter
 }
 
+// Identity is the keyed HMAC of the normalized email; it is safe to log.
 func (l *LoginLimiter) Identity(email string) string {
-	mac := hmac.New(sha256.New, l.hmacKey)
+	mac := hmac.New(sha256.New, l.identityKey)
 	_, _ = mac.Write([]byte(NormalizeEmail(email)))
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func (l *LoginLimiter) checkKeys(ctx context.Context, keys []string, emailKeyIndex int, limits ...int) (LoginLimitDecision, error) {
-	if l.initErr != nil {
-		return LoginLimitDecision{}, l.initErr
+func (l *LoginLimiter) keysFor(email, ip string) loginLimitKeys {
+	identity := l.Identity(email)
+	return loginLimitKeys{
+		emailAndIP: loginLimiterKeyPrefix + identity + limiterIPSuffix + ip,
+		email:      loginLimiterKeyPrefix + identity + limiterEmailSuffix,
+		ip:         limiterIPKeyPrefix + ip,
 	}
-	args := []any{max(l.window.Milliseconds(), 1), emailKeyIndex}
-	for _, limit := range limits {
-		args = append(args, limit)
+}
+
+// Check counts one attempt and returns RATE_LIMITED, with retryAfterSeconds, when any budget is spent.
+func (l *LoginLimiter) Check(ctx context.Context, email, ip string) (LoginLimitDecision, error) {
+	if l.configurationInvalid {
+		return LoginLimitDecision{}, errors.ErrInternalError
 	}
-	result, err := l.script.Run(ctx, l.rdb, keys, args...).Int64Slice()
+	keys := l.keysFor(email, ip)
+	reply, err := l.script.Run(ctx, l.redisClient, []string{keys.emailAndIP, keys.email, keys.ip},
+		max(l.window.Milliseconds(), 1), scriptEmailKeyNumber, l.emailAndIPMax, l.emailMax, l.ipMax).Int64Slice()
 	if err != nil {
 		return LoginLimitDecision{}, errors.ErrInternalError.WithCause(fmt.Errorf("login limiter increment: %w", err))
 	}
-	if len(result) != limiterResultLength {
+	if len(reply) != scriptResultLength {
 		return LoginLimitDecision{}, errors.ErrInternalError
 	}
-	decision := LoginLimitDecision{EmailTripped: result[limiterTripIndex] == 1}
-	if result[0] == 1 {
-		remaining := max(int64(math.Ceil(float64(result[limiterTTLIndex])/float64(time.Second/time.Millisecond))), 1)
-		return decision, errors.ErrRateLimited.WithDetails(map[string]any{retryAfterSecondsDetail: remaining})
+	decision := LoginLimitDecision{EmailTripped: reply[scriptTrippedIndex] == 1}
+	if reply[scriptBlockedIndex] == 1 {
+		retryAfterSeconds := max(int64(math.Ceil(float64(reply[scriptTTLIndex])/float64(time.Second/time.Millisecond))), 1)
+		return decision, errors.ErrRateLimited.WithDetails(map[string]any{retryAfterSecondsDetail: retryAfterSeconds})
 	}
 	return decision, nil
 }
 
-func (l *LoginLimiter) Reset(ctx context.Context, key string) error {
-	if err := l.rdb.Del(ctx, loginLimiterKeyPrefix+key).Err(); err != nil {
-		return errors.ErrInternalError.WithCause(fmt.Errorf("login limiter reset: %w", err))
-	}
-	return nil
-}
-
+// ResetLogin clears the email budgets after a successful login; the IP budget stays until it expires.
 func (l *LoginLimiter) ResetLogin(ctx context.Context, email, ip string) error {
-	identity := l.Identity(email)
-	if err := l.rdb.Del(ctx, loginLimiterKeyPrefix+identity+limiterIPSuffix+ip, loginLimiterKeyPrefix+identity+limiterEmailSuffix).Err(); err != nil {
+	keys := l.keysFor(email, ip)
+	if err := l.redisClient.Del(ctx, keys.emailAndIP, keys.email).Err(); err != nil {
 		return errors.ErrInternalError.WithCause(err)
 	}
 	return nil

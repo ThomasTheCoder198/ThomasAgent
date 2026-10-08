@@ -117,7 +117,7 @@ func TestHTTP_RealLoginSessionAndCSRF(t *testing.T) {
 	authCfg := config.AuthConfig{OwnerEmail: "owner@example.com", OwnerPassword: "strong-test-password", SessionTTL: time.Hour, MinPasswordLength: 12}
 	authSvc := auth.NewService(auth.NewRepository(svc.pool), svc.pool, authCfg, time.Now)
 	require.NoError(t, authSvc.EnsureOwner(platformContext(t.Context())))
-	authController := auth.NewController(auth.ControllerParams{Service: authSvc, Limiter: auth.NewLimiter(startRedis(t), 10, time.Minute)})
+	authController := auth.NewController(auth.ControllerParams{Service: authSvc, Limiter: auth.NewLoginLimiter(startRedis(t), config.AuthConfig{LoginMaxAttempts: 10, LoginEmailMaxAttempts: 10, LoginIPMaxAttempts: config.DefaultLoginIPMaxAttempts, LoginWindow: time.Minute}, []byte("llm-test-login-limiter-identity-key"))})
 	router.POST("/api/v1/auth/login", authController.HandleLogin)
 	router.POST("/api/v1/auth/logout", auth.RequireSession(authSvc), authController.HandleLogout)
 	router.GET("/api/v1/auth/me", auth.RequireSession(authSvc), authController.HandleMe)

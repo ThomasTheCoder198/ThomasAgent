@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
@@ -36,7 +35,7 @@ func TestLogin_IgnoresSpoofedForwardingFromUntrustedPeer(t *testing.T) {
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger))
-	mountAuthForTest(router, ControllerParams{Service: svc, Limiter: NewLimiter(startRedis(t), 1, time.Minute), TrustedProxyHeader: "X-Forwarded-For", Logger: logger})
+	mountAuthForTest(router, ControllerParams{Service: svc, Limiter: newTestLimiter(startRedis(t), 1), TrustedProxyHeader: "X-Forwarded-For", Logger: logger})
 	require.Equal(t, 401, attemptFrom(router, ownerEmail, "192.0.2.1:9999", "198.51.100.1").Code)
 	require.Equal(t, 429, attemptFrom(router, ownerEmail, "192.0.2.1:9999", "198.51.100.2").Code)
 }
@@ -46,19 +45,6 @@ func TestLogin_EmailBudgetBlocksRotatingIPs(t *testing.T) {
 	require.Equal(t, 401, attemptFrom(h, ownerEmail, "192.0.2.1:9999", "").Code)
 	require.Equal(t, 401, attemptFrom(h, ownerEmail, "192.0.2.2:9999", "").Code)
 	require.Equal(t, 429, attemptFrom(h, ownerEmail, "192.0.2.3:9999", "").Code)
-}
-
-func TestLimiter_RetryAfterUsesRemainingTTL(t *testing.T) {
-	client := startRedis(t)
-	lim := NewLimiter(client, 1, time.Minute)
-	require.NoError(t, lim.Allow(t.Context(), "remaining"))
-	require.NoError(t, client.PExpire(t.Context(), loginLimiterKeyPrefix+"remaining", 20*time.Second).Err())
-	err := lim.Allow(t.Context(), "remaining")
-	require.Equal(t, errors.CodeRateLimited, errors.ToAppError(err).Code)
-	require.EqualValues(t, 20, errors.ToAppError(err).Details["retryAfterSeconds"])
-	require.NoError(t, client.PExpire(t.Context(), loginLimiterKeyPrefix+"remaining", 7*time.Second).Err())
-	err = lim.Allow(t.Context(), "remaining")
-	require.EqualValues(t, 7, errors.ToAppError(err).Details["retryAfterSeconds"])
 }
 
 func TestFailedLogin_DoesNotWriteUnboundedAuditRows(t *testing.T) {

@@ -43,7 +43,7 @@ func newAuthenticatedStream(t *testing.T, handler http.HandlerFunc) (*http.Respo
 	logs := &authLogBuffer{}
 	logger := slog.New(slog.NewJSONHandler(logs, nil))
 	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger), httpx.LogAccess(logger))
-	mountAuthForTest(router, ControllerParams{Service: svc, Limiter: NewLimiter(startRedis(t), 10, time.Minute)})
+	mountAuthForTest(router, ControllerParams{Service: svc, Limiter: newTestLimiter(startRedis(t), 10)})
 	router.Group("", RequireSession(svc)).POST("/stream", wrapAuthHTTP(handler))
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)

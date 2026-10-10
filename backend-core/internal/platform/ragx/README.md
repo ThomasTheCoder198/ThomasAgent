@@ -6,6 +6,7 @@ The only way core calls ragx: the generated client (`client_gen.go`, oapi-codege
 ## Entry points
 - `NewRagxCaller(cfg, signer, recorder, log)` builds the caller; `TokenSigner` is satisfied by `apptoken.Signer`.
 - `Caller.ProvisionOrg` is the typed call, bounded by `CORE_RAGX_REQUEST_TIMEOUT`.
+- Header names and the Idempotency-Key format come from `httpx`, not local copies.
 - `Caller.Forward(ctx, ForwardRequest)` is the generic data plane behind the app proxy: it uses the route's deadline and caps the response at `CORE_RAGX_MAX_RESPONSE_BYTES`. It is never retried.
 - The generated model `Org` is used as it is.
 

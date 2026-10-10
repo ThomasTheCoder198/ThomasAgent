@@ -48,6 +48,7 @@ Positive catalog/sync behavior is covered by LLM provider integration tests.
 The `Organizations` folder runs after the model roles, with `POST /api/v1/orgs` first (it saves `orgId`). Each run creates one
 `API test <timestamp>` organization; organizations cannot be deleted yet. In `TestAPI_GeneratedPostmanCollection` ragx is
 unreachable (`CORE_RAGX_URL=http://127.0.0.1:1`), so the organization ends `failed`; against a dev stack with ragx up it ends `ready`.
+The `Apps` folder documents the generic ragx proxy (`/api/v1/orgs/{orgId}/apps/ragx/{path}`) but `run.mjs` does not run it: the proxy is pinned by Go integration tests (`backend-core/tests/integration/appproxy_http_test.go`), not by Newman.
 Keep credentials out of committed environments and generated artifacts. See the parent README for environment overrides.
 
 ## Common failures

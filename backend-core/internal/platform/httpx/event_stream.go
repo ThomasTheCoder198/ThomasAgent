@@ -60,7 +60,7 @@ func newEventStream(w http.ResponseWriter, r *http.Request, heartbeat, writeTime
 		return nil, errors.ErrInternalError.WithCause(errors.ErrEventWriteTimeout)
 	}
 	header := w.Header()
-	header.Set(headerContentType, contentTypeEventStream)
+	header.Set(HeaderContentType, contentTypeEventStream)
 	header.Set(HeaderCacheControl, cacheControlNoTransform)
 	header.Set(headerProxyBuffering, proxyBufferingOff)
 	controller := http.NewResponseController(w)

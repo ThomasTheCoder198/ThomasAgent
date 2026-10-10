@@ -7,6 +7,7 @@ const FOLDER_ORDER = [
   "LLM models",
   "LLM model roles",
   "Organizations",
+  "Apps",
   "Lifecycle",
   "Logout",
 ];

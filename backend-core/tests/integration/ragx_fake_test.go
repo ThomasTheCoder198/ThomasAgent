@@ -163,6 +163,31 @@ func ragxError(status int, code string) http.HandlerFunc {
 	}
 }
 
+// ragxJSON answers every call with a JSON body.
+func ragxJSON(status int, body string) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = io.WriteString(w, body)
+	}
+}
+
+// ragxStatus answers every call with a status and no body.
+func ragxStatus(status int) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }
+}
+
+// slowly waits before answering, and gives up as soon as the caller does, so a timed-out test leaves nothing running.
+func slowly(delay time.Duration, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(delay):
+			next(w, r)
+		case <-r.Context().Done():
+		}
+	}
+}
+
 func writeJSONBody(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

@@ -18,6 +18,7 @@ tags:
   - name: LLM models
   - name: LLM model roles
   - name: Organizations
+  - name: Apps
 security:
   - sessionCookie: []
     csrfHeader: []
@@ -408,11 +409,123 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/orgs/{orgId}/apps/ragx/{path}:
+    parameters:
+      - { name: orgId, in: path, required: true, schema: { type: string, format: uuid }, example: "{{orgId}}" }
+      - name: path
+        in: path
+        required: true
+        description: Ragx path below /v1 (may contain "/"); ^[A-Za-z0-9._~/-]+$, no "..", no "//", no trailing "/".
+        schema: { type: string }
+        example: knowledge-bases
+    get:
+      tags: [Apps]
+      operationId: proxyRagxGet
+      summary: Read from the ragx app through the proxy
+      description: >-
+        Generic proxy to ragx's /v1 API (spec ragx-custom-app §14.2). Core does not know ragx's routes: it signs a
+        60-second App token for the org in the path (scope kb:read for GET/HEAD, kb:write otherwise) and forwards the
+        body, Content-Type, Idempotency-Key, Accept-Language and X-Request-Id only. Ragx 2xx and catalog 4xx come back
+        verbatim; a route that needs another scope is 404; ragx 401, 5xx, timeouts and oversized bodies are 503.
+      responses:
+        "200": { $ref: "#/components/responses/AppProxyResponse" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+    head:
+      tags: [Apps]
+      operationId: proxyRagxHead
+      summary: Read headers from the ragx app through the proxy
+      responses:
+        "200": { description: Headers of the app's response }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Apps]
+      operationId: proxyRagxPost
+      summary: Create in the ragx app through the proxy
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/AppProxyResponse" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [Apps]
+      operationId: proxyRagxPut
+      summary: Replace in the ragx app through the proxy
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/AppProxyResponse" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Apps]
+      operationId: proxyRagxPatch
+      summary: Update in the ragx app through the proxy
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/AppProxyResponse" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Apps]
+      operationId: proxyRagxDelete
+      summary: Delete from the ragx app through the proxy
+      responses:
+        "200": { $ref: "#/components/responses/AppProxyResponse" }
+        "204": { description: No content }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     sessionCookie: { type: apiKey, in: cookie, name: thomas_session }
     csrfHeader: { type: apiKey, in: header, name: X-CSRF-Token }
   responses:
+    AppProxyResponse:
+      description: The app's own response, verbatim (2xx, or a 4xx catalog error)
+      content:
+        application/json:
+          schema: {}
     HealthStatus:
       description: Health result.
       content:

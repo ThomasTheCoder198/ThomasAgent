@@ -15,7 +15,6 @@ import (
 const (
 	accessLogMessage         = "http request"
 	unmatchedRoute           = "unmatched"
-	headerIdempotencyKey     = "Idempotency-Key"
 	fieldMethod              = "method"
 	fieldRoute               = "route"
 	fieldStatus              = "status"
@@ -27,7 +26,12 @@ const (
 )
 
 var validIdempotencyKey = regexp.MustCompile(`^[A-Za-z0-9_-]{8,128}$`)
-var ginRouteParam = regexp.MustCompile(`:([A-Za-z][A-Za-z0-9_]*)`)
+
+// ValidIdempotencyKey is the one definition of a well-formed Idempotency-Key (spec §14.2), shared by the access log
+// and the app proxy.
+func ValidIdempotencyKey(key string) bool { return validIdempotencyKey.MatchString(key) }
+
+var ginRouteParam = regexp.MustCompile(`[:*]([A-Za-z][A-Za-z0-9_]*)`)
 
 type requestIDOrigin int
 
@@ -84,8 +88,8 @@ func accessAttrs(c *gin.Context, status int, elapsed time.Duration) []slog.Attr 
 	case requestIDReplaced:
 		attrs = append(attrs, slog.String(fieldRequestIDSource, requestIDSourceGenerated), slog.Bool(fieldClientIDRejected, true))
 	}
-	if key := r.Header.Get(headerIdempotencyKey); key != "" {
-		if validIdempotencyKey.MatchString(key) {
+	if key := r.Header.Get(HeaderIdempotencyKey); key != "" {
+		if ValidIdempotencyKey(key) {
 			attrs = append(attrs, slog.String(fieldIdempotencyKey, key))
 		} else {
 			attrs = append(attrs, slog.Bool(fieldIdempotencyRejected, true))
@@ -103,7 +107,7 @@ func RoutePattern(c *gin.Context) string {
 	return ContractRoute(pattern)
 }
 
-// ContractRoute rewrites a gin pattern (":orgId") into the contract's brace syntax ("{orgId}").
+// ContractRoute rewrites a gin pattern (":orgId", catch-all "*path") into the contract's brace syntax ("{orgId}", "{path}").
 func ContractRoute(pattern string) string {
 	return ginRouteParam.ReplaceAllString(pattern, "{$1}")
 }

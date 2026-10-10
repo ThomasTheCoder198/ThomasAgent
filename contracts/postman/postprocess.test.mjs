@@ -226,3 +226,25 @@ test("runs the create-organization request first and expects the synchronous pro
   assert.match(script(folder.item[0]), /orgId/);
   assert.match(script(folder.item[2]), /expected status.*200/);
 });
+
+test("orders the Apps folder right after Organizations, with no expected statuses", () => {
+  const request = (name, method, path) => ({
+    name,
+    request: { method, url: { host: ["{{baseUrl}}"], path } },
+  });
+  const input = structuredClone(raw);
+  input.item.push(
+    {
+      name: "Apps",
+      item: [
+        request("proxy get", "GET", ["api", "v1", "orgs", ":orgId", "apps", "ragx", ":path"]),
+      ],
+    },
+    { name: "Organizations", item: [request("create", "POST", ["api", "v1", "orgs"])] },
+  );
+  const output = postprocess(input);
+  const names = output.item.map((folder) => folder.name);
+  assert.equal(names.indexOf("Apps"), names.indexOf("Organizations") + 1);
+  const apps = output.item.find((folder) => folder.name === "Apps");
+  assert.ok(!JSON.stringify(apps).includes("expected status"));
+});

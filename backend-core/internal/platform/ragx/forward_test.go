@@ -138,7 +138,7 @@ func TestForward_LogsOneLineWithMethodRouteAndJTI(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, strings.Count(logs.String(), `"msg":"ragx call"`))
 	// The route is logged in the contract's brace spelling, like the access log.
-	for _, want := range []string{`"method":"GET"`, `"route":"/api/v1/orgs/{orgId}/apps/ragx/*path"`, `"jti":"jti-test"`, `"status":200`,
+	for _, want := range []string{`"method":"GET"`, `"route":"/api/v1/orgs/{orgId}/apps/ragx/{path}"`, `"jti":"jti-test"`, `"status":200`,
 		`"duration_ms":`, `"request_id":"` + testRequestID + `"`, `"outcome":"success"`} {
 		require.Contains(t, logs.String(), want)
 	}

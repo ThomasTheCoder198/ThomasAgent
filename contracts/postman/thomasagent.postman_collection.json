@@ -1061,6 +1061,414 @@
       ]
     },
     {
+      "name": "Apps",
+      "description": "",
+      "item": [
+        {
+          "name": "Read from the ragx app through the proxy",
+          "request": {
+            "name": "Read from the ragx app through the proxy",
+            "description": {
+              "content": "Generic proxy to ragx's /v1 API (spec ragx-custom-app §14.2). Core does not know ragx's routes: it signs a 60-second App token for the org in the path (scope kb:read for GET/HEAD, kb:write otherwise) and forwards the body, Content-Type, Idempotency-Key, Accept-Language and X-Request-Id only. Ragx 2xx and catalog 4xx come back verbatim; a route that needs another scope is 404; ragx 401, 5xx, timeouts and oversized bodies are 503.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                ":orgId",
+                "apps",
+                "ragx",
+                ":path"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "type": "any",
+                  "value": "{{orgId}}",
+                  "key": "orgId",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                },
+                {
+                  "type": "any",
+                  "value": "knowledge-bases",
+                  "key": "path",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) Ragx path below /v1 (may contain \"/\"); ^[A-Za-z0-9._~/-]+$, no \"..\", no \"//\", no trailing \"/\".",
+                    "type": "text/plain"
+                  }
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {},
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
+        },
+        {
+          "name": "Read headers from the ragx app through the proxy",
+          "request": {
+            "name": "Read headers from the ragx app through the proxy",
+            "description": {},
+            "url": {
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                ":orgId",
+                "apps",
+                "ragx",
+                ":path"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "type": "any",
+                  "value": "{{orgId}}",
+                  "key": "orgId",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                },
+                {
+                  "type": "any",
+                  "value": "knowledge-bases",
+                  "key": "path",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) Ragx path below /v1 (may contain \"/\"); ^[A-Za-z0-9._~/-]+$, no \"..\", no \"//\", no trailing \"/\".",
+                    "type": "text/plain"
+                  }
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "HEAD",
+            "body": {},
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
+        },
+        {
+          "name": "Create in the ragx app through the proxy",
+          "request": {
+            "name": "Create in the ragx app through the proxy",
+            "description": {},
+            "url": {
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                ":orgId",
+                "apps",
+                "ragx",
+                ":path"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "type": "any",
+                  "value": "{{orgId}}",
+                  "key": "orgId",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                },
+                {
+                  "type": "any",
+                  "value": "knowledge-bases",
+                  "key": "path",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) Ragx path below /v1 (may contain \"/\"); ^[A-Za-z0-9._~/-]+$, no \"..\", no \"//\", no trailing \"/\".",
+                    "type": "text/plain"
+                  }
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
+        },
+        {
+          "name": "Replace in the ragx app through the proxy",
+          "request": {
+            "name": "Replace in the ragx app through the proxy",
+            "description": {},
+            "url": {
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                ":orgId",
+                "apps",
+                "ragx",
+                ":path"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "type": "any",
+                  "value": "{{orgId}}",
+                  "key": "orgId",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                },
+                {
+                  "type": "any",
+                  "value": "knowledge-bases",
+                  "key": "path",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) Ragx path below /v1 (may contain \"/\"); ^[A-Za-z0-9._~/-]+$, no \"..\", no \"//\", no trailing \"/\".",
+                    "type": "text/plain"
+                  }
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "PUT",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
+        },
+        {
+          "name": "Update in the ragx app through the proxy",
+          "request": {
+            "name": "Update in the ragx app through the proxy",
+            "description": {},
+            "url": {
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                ":orgId",
+                "apps",
+                "ragx",
+                ":path"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "type": "any",
+                  "value": "{{orgId}}",
+                  "key": "orgId",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                },
+                {
+                  "type": "any",
+                  "value": "knowledge-bases",
+                  "key": "path",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) Ragx path below /v1 (may contain \"/\"); ^[A-Za-z0-9._~/-]+$, no \"..\", no \"//\", no trailing \"/\".",
+                    "type": "text/plain"
+                  }
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
+        },
+        {
+          "name": "Delete from the ragx app through the proxy",
+          "request": {
+            "name": "Delete from the ragx app through the proxy",
+            "description": {},
+            "url": {
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                ":orgId",
+                "apps",
+                "ragx",
+                ":path"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "type": "any",
+                  "value": "{{orgId}}",
+                  "key": "orgId",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                },
+                {
+                  "type": "any",
+                  "value": "knowledge-bases",
+                  "key": "path",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) Ragx path below /v1 (may contain \"/\"); ^[A-Za-z0-9._~/-]+$, no \"..\", no \"//\", no trailing \"/\".",
+                    "type": "text/plain"
+                  }
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "DELETE",
+            "body": {},
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
+        }
+      ]
+    },
+    {
       "name": "Lifecycle",
       "item": [
         {

@@ -26,7 +26,7 @@ mixing it with HTTP, migration or worker logic.
 | `outbox_relay.go` | `runOutboxRelay` starts the worker that publishes committed outbox events to Redis Streams.                                                                         |
 | `healthcheck.go`  | `checkHTTPHealth` checks the local HTTP liveness endpoint for Docker.                                                                                               |
 
-Organization routes (`GET`/`POST /api/v1/orgs`, `GET`/`PATCH /api/v1/orgs/{orgId}`, `POST /api/v1/orgs/{orgId}/provision`) sit in the session group of `routes.go`. `middlewares.organizations` carries the `OrganizationLookup` that `RequireOrg` uses on org-scoped routes. The organization service takes its attempts from `CORE_RAGX_PROVISION_ATTEMPTS`, not `CORE_RETRY_MAX_ATTEMPTS`.
+Organization routes (`GET`/`POST /api/v1/orgs`, `GET`/`PATCH /api/v1/orgs/{orgId}`, `POST /api/v1/orgs/{orgId}/provision`) sit in the session group of `routes.go`. `middlewares.organizations` carries the `OrganizationLookup` that `RequireOrg` uses on org-scoped routes. The app proxy route `/api/v1/orgs/:orgId/apps/ragx/*path` (`appProxyRoute`, the six methods from `appmodel.ForwardedMethods()`) sits behind `LimitRequestDuration` → `RequireSession` (CSRF) → `RequireOrg`, in that order. The organization service takes its attempts from `CORE_RAGX_PROVISION_ATTEMPTS`, not `CORE_RETRY_MAX_ATTEMPTS`.
 
 The CLI dispatches `serve` through `runProcess` ? `executeCommand` ? `serveHTTP`. Compose and the Dockerfile both invoke `core serve`. The same compiled `core` executable serves three roles in Compose: `migrate`
 exits after preparing the database, `serve` runs the API, and `outbox-relay` runs the

@@ -22,7 +22,7 @@ Routes: `GET`/`POST /api/v1/orgs`, `GET`/`PATCH /api/v1/orgs/{orgId}`, `POST /ap
 ## Dependencies
 
 - Uses: `platform/ragx` (`Caller.ProvisionOrg`), `platform/retry`, `platform/audit`, `platform/postgres`, `platform/tenant`, `platform/httpx`, named catalog errors.
-- Used by: `cmd/core` (routes and the composition root); later the app proxy through `RequireOrg`.
+- Used by: `cmd/core` (routes and the composition root); the app proxy (`internal/appproxy`) through `RequireOrg`.
 
 ## Run & test
 

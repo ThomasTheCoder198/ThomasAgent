@@ -14,7 +14,7 @@ const fieldBody = "body"
 
 // The decoder error is kept only as the cause (never serialized), so request content cannot reach a response.
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any, maxBytes int64) error {
-	mediaType, _, err := mime.ParseMediaType(r.Header.Get(headerContentType))
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get(HeaderContentType))
 	if err != nil || mediaType != mediaTypeJSON {
 		return errors.ErrUnsupportedMediaType
 	}

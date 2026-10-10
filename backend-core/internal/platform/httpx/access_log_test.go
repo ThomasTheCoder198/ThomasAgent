@@ -106,3 +106,9 @@ func TestLogAccess_RecordsOnlyWellFormedIdempotencyKeys(t *testing.T) {
 	require.NotContains(t, entry, "idempotency_key")
 	require.Equal(t, true, entry["idempotency_key_rejected"])
 }
+
+func TestContractRoute_RewritesParamsAndCatchAlls(t *testing.T) {
+	require.Equal(t, "/api/v1/orgs/{orgId}/apps/ragx/{path}", ContractRoute("/api/v1/orgs/:orgId/apps/ragx/*path"))
+	require.Equal(t, "/api/v1/providers/{providerId}/test", ContractRoute("/api/v1/providers/:providerId/test"))
+	require.Equal(t, "/healthz", ContractRoute("/healthz"))
+}

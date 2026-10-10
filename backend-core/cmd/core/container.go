@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	appcontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/appproxy/controller"
+	appservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/appproxy/service"
 	authcontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/controller"
 	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
 	authrepository "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
@@ -91,6 +93,7 @@ type ServiceContainer struct {
 	RoleService      llmservice.RoleService
 
 	OrganizationService orgservice.OrganizationService
+	AppProxyService     appservice.AppProxyService
 }
 
 // initServiceContainer also bootstraps the owner account, so startup fails before serving if it cannot.
@@ -113,6 +116,7 @@ func (rt *coreRuntime) initServiceContainer(ctx context.Context, pool *pgxpool.P
 		RoleService:      llmservice.NewRoleService(pool, repositories.LLMModelRepo, repositories.RoleRepo),
 
 		OrganizationService: organizationService,
+		AppProxyService:     appservice.NewAppProxyService(clients.Ragx),
 	}, nil
 }
 
@@ -123,6 +127,7 @@ type ControllerContainer struct {
 	RoleController     *llmcontroller.RoleController
 
 	OrganizationController *orgcontroller.OrganizationController
+	AppProxyController     *appcontroller.AppProxyController
 }
 
 func (rt *coreRuntime) initControllerContainer(services ServiceContainer, redisClient *redis.Client) (ControllerContainer, error) {
@@ -145,5 +150,6 @@ func (rt *coreRuntime) initControllerContainer(services ServiceContainer, redisC
 		RoleController:     llmcontroller.NewRoleController(services.RoleService, maxBodyBytes),
 
 		OrganizationController: orgcontroller.NewOrganizationController(services.OrganizationService, maxBodyBytes),
+		AppProxyController:     appcontroller.NewAppProxyController(services.AppProxyService, maxBodyBytes),
 	}, nil
 }

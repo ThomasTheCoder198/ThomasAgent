@@ -1,11 +1,12 @@
 # Integration tests
 
 ## Purpose
-HTTP tests that cross layers and domains: real login, session, CSRF, rate limiting, event streams, the provider API and organization provisioning.
+HTTP tests that cross layers and domains: real login, session, CSRF, rate limiting, event streams, the provider API organization provisioning and the app proxy.
 
 ## Entry points
 - `auth_*_test.go`: auth flows
 - `llmprovider_*_test.go`: provider routes with a real login
+- `appproxy_http_test.go`: the generic ragx app proxy (scope, paths, headers, error table, session and CSRF) against the same fake
 - `organization_http_test.go`: organization routes against a fake ragx; `ragx_fake_test.go` is that fake (it verifies every App token with the shared vector key from `contracts/app-token.json`, like ragx, and is reused by the proxy tests)
 
 ## Dependencies

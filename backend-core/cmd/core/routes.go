@@ -5,11 +5,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	appmodel "github.com/thomasthecoder198/thomastheragx/backend-core/internal/appproxy/model"
 	authmiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/middleware"
 	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
 	orgmiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/organization/middleware"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 )
+
+// appProxyRoute is the generic app data plane (spec §14.2); M3a adds other apps beside "ragx".
+const appProxyRoute = "/api/v1/orgs/:orgId/apps/ragx/*path"
 
 type middlewares struct {
 	authService    authservice.AuthService
@@ -44,4 +48,10 @@ func registerRoutes(engine *gin.Engine, c ControllerContainer, mw middlewares) {
 	session.GET("/api/v1/orgs/:orgId", c.OrganizationController.HandleGetOrganization)
 	session.PATCH("/api/v1/orgs/:orgId", c.OrganizationController.HandleUpdateOrganization)
 	session.POST("/api/v1/orgs/:orgId/provision", c.OrganizationController.HandleProvisionOrganization)
+
+	// Session (with CSRF) first, then RequireOrg: an unknown or unready org never reaches the proxy.
+	orgScoped := session.Group("", orgmiddleware.RequireOrg(mw.organizations))
+	for _, method := range appmodel.ForwardedMethods() {
+		orgScoped.Handle(method, appProxyRoute, c.AppProxyController.HandleForward)
+	}
 }

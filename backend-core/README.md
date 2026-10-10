@@ -9,6 +9,7 @@ Go API and agent runtime for ThomasAgent.
 - `/api/v1/auth/login`, `/logout`, `/me`: owner sessions, cookie policy and CSRF.
 - `/api/v1/providers`, `/models`, `/model-roles`: vaulted provider keys, model catalog and role assignments.
 - `/api/v1/orgs`, `/orgs/{orgId}`, `/orgs/{orgId}/provision`: organizations, provisioned into ragx synchronously (see `internal/organization`).
+- `/api/v1/orgs/{orgId}/apps/ragx/{path}`: generic proxy to ragx's `/v1` API for GET, HEAD, POST, PUT, PATCH and DELETE (see `internal/appproxy`).
 
 ## Dependencies
 - Uses platform config, `internal/errors`, httpx, logging, telemetry and requestid; see each README in `internal/platform/*`.

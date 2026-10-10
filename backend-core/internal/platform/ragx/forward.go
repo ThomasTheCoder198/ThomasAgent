@@ -14,12 +14,6 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
 )
 
-const (
-	headerContentType    = "Content-Type"
-	headerIdempotencyKey = "Idempotency-Key"
-	headerAcceptLanguage = "Accept-Language"
-)
-
 // ForwardRequest is everything the app proxy may send to ragx; anything not here (cookies, the browser's
 // Authorization, unknown headers) cannot reach ragx. Path is already validated and has no leading slash.
 type ForwardRequest struct {
@@ -54,9 +48,9 @@ func (c *Caller) Forward(ctx context.Context, in ForwardRequest) (ForwardRespons
 	if err != nil {
 		return ForwardResponse{}, errors.ErrInternalError.WithCause(fmt.Errorf("build ragx request: %w", err))
 	}
-	setIfPresent(req.Header, headerContentType, in.ContentType)
-	setIfPresent(req.Header, headerIdempotencyKey, in.IdempotencyKey)
-	setIfPresent(req.Header, headerAcceptLanguage, in.AcceptLanguage)
+	setIfPresent(req.Header, httpx.HeaderContentType, in.ContentType)
+	setIfPresent(req.Header, httpx.HeaderIdempotencyKey, in.IdempotencyKey)
+	setIfPresent(req.Header, httpx.HeaderAcceptLanguage, in.AcceptLanguage)
 	for _, edit := range cl.editors {
 		if err := edit(cl.ctx, req); err != nil {
 			return ForwardResponse{}, errors.ErrInternalError.WithCause(err)
@@ -98,7 +92,7 @@ func (c *Caller) readForward(res *http.Response, err error) (ForwardResponse, er
 	if len(body) == 0 {
 		body = nil // an empty body is no body: 204 and HEAD answers stay nil for the caller
 	}
-	return ForwardResponse{Status: res.StatusCode, ContentType: res.Header.Get(headerContentType), Body: body}, nil
+	return ForwardResponse{Status: res.StatusCode, ContentType: res.Header.Get(httpx.HeaderContentType), Body: body}, nil
 }
 
 // classifyForward is spec §14.2's table. A 403 means the route needs a scope the UI never gets (org:provision,

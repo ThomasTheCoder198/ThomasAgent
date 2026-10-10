@@ -12,10 +12,8 @@ import (
 )
 
 const (
-	headerContentType    = "Content-Type"
-	mediaTypeJSON        = "application/json"
-	contentTypeJSON      = mediaTypeJSON + "; charset=utf-8"
-	headerAcceptLanguage = "Accept-Language"
+	mediaTypeJSON   = "application/json"
+	contentTypeJSON = mediaTypeJSON + "; charset=utf-8"
 )
 
 type ResponseMeta struct {
@@ -77,7 +75,7 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	status := appErr.HTTPStatus()
 	body := ErrorDetail{
 		Code:      string(appErr.Code),
-		Message:   appErr.LocalizedMessage(errors.LangFromHeader(r.Header.Get(headerAcceptLanguage))),
+		Message:   appErr.LocalizedMessage(errors.LangFromHeader(r.Header.Get(HeaderAcceptLanguage))),
 		RequestID: requestid.FromContext(r.Context()),
 	}
 	if status < http.StatusInternalServerError {
@@ -85,7 +83,7 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	} else {
 		internal := errors.ToAppError(errors.ErrInternalError)
 		body.Code = string(internal.Code)
-		body.Message = internal.LocalizedMessage(errors.LangFromHeader(r.Header.Get(headerAcceptLanguage)))
+		body.Message = internal.LocalizedMessage(errors.LangFromHeader(r.Header.Get(HeaderAcceptLanguage)))
 		logBoundaryError(r, appErr)
 	}
 	writeJSON(w, status, errorResponse{Error: body})
@@ -98,7 +96,7 @@ func logBoundaryError(r *http.Request, appErr *errors.AppError) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set(headerContentType, contentTypeJSON)
+	w.Header().Set(HeaderContentType, contentTypeJSON)
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }

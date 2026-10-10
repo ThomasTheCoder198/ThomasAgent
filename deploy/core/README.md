@@ -38,3 +38,16 @@ Provider, login, Argon, HTTP, retry, stream and relay tuning lives in `config.ya
 - Startup fails when secrets or owner bootstrap credentials are missing or invalid.
 - An empty custom `CORE_DATABASE_URL`/`CORE_REDIS_URL` in `.env` uses Compose's service URL; a host-run core needs reachable URLs in its environment.
 - An unavailable log backend leaves stdout logs available; check Docker's daemon log rotation settings for long-running deployments.
+
+## Startup order and the App signing key
+
+`core serve` refuses to start without an App signing key, so the core stack mounts one:
+
+1. `task ragx:dev-key` writes `deploy/ragx/dev-app-signing-key.pem` and prints `RAG_CORE_PUBLIC_KEYS`.
+2. Put the printed `RAG_CORE_PUBLIC_KEYS` in `deploy/ragx/.env`.
+3. `task up:ragx`, then `task ragx:seed-dev`, then `task up`.
+
+If the key file is missing, Docker mounts a directory in its place and core exits with `ErrAppSigningKeyInvalid`.
+On Linux the distroless `nonroot` user (uid 65532) must be able to read the dev key: run
+`chmod 0644 deploy/ragx/dev-app-signing-key.pem` (dev only; never relax a production key).
+`CORE_RAGX_URL` defaults to `http://host.docker.internal:8090`; `CORE_APP_SIGNING_KEY_HOST_FILE` overrides the mounted file.

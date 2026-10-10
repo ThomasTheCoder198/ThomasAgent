@@ -69,20 +69,33 @@ func NewAppTokenSigner(key ed25519.PrivateKey, cfg config.AppConfig, now func() 
 	return &Signer{key: key, cfg: cfg, now: now, newJTI: newJTI}
 }
 
+// Issued is one signed token and its jti; the jti is logged, the token never is.
+type Issued struct {
+	Token string
+	ID    string
+}
+
 func (s *Signer) Sign(c Claims) (string, error) {
+	issued, err := s.Issue(c)
+	return issued.Token, err
+}
+
+// Issue signs c and returns the jti it put in the token, so the caller can log the call without the token.
+func (s *Signer) Issue(c Claims) (Issued, error) {
 	if c.OrgID == "" || c.OrgID == tenant.PlatformID || c.Scope == "" || !requestid.IsValid(c.RequestID) {
-		return "", errors.ErrInternalError.WithCause(errors.ErrAppTokenClaimsInvalid)
+		return Issued{}, errors.ErrInternalError.WithCause(errors.ErrAppTokenClaimsInvalid)
 	}
 	issued := s.now().Unix()
+	jti := s.newJTI()
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, payload{
 		Iss: s.cfg.TokenIssuer, Aud: s.cfg.TokenAudience, Oid: c.OrgID, Kb: c.KnowledgeBaseID, Scp: string(c.Scope),
-		Rid: c.RequestID, Jti: s.newJTI(), Iat: issued, Exp: issued + int64(s.cfg.TokenTTL/time.Second),
+		Rid: c.RequestID, Jti: jti, Iat: issued, Exp: issued + int64(s.cfg.TokenTTL/time.Second),
 	})
 	token.Header[headerType] = TokenType
 	token.Header[headerKeyID] = s.cfg.SigningKeyID
 	signed, err := token.SignedString(s.key)
 	if err != nil {
-		return "", errors.ErrInternalError.WithCause(fmt.Errorf("sign app token: %w", err))
+		return Issued{}, errors.ErrInternalError.WithCause(fmt.Errorf("sign app token: %w", err))
 	}
-	return signed, nil
+	return Issued{Token: signed, ID: jti}, nil
 }

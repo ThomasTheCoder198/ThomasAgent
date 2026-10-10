@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apptoken"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/metrics"
@@ -35,6 +36,7 @@ func TestAPI_GeneratedPostmanCollection(t *testing.T) {
 	t.Setenv("CORE_AUTH_OWNER_PASSWORD", "fixture-password-collection")
 	t.Setenv("CORE_SERVICE_TOKEN", "fixture-api-service-token-with-at-least-32-characters")
 	t.Setenv("CORE_AUTH_LOGIN_LIMITER_KEY", "fixture-api-login-limiter-key-with-at-least-32-characters")
+	t.Setenv("CORE_RAGX_URL", "http://127.0.0.1:1")
 	cfg, err := config.Load()
 	require.NoError(t, err)
 	app := &coreRuntime{
@@ -47,7 +49,9 @@ func TestAPI_GeneratedPostmanCollection(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, redisClient.Close()) })
 	cipher, err := vault.NewCipher(cfg.Vault.KeyID, cfg.Vault.MasterKey)
 	require.NoError(t, err)
-	clients, err := app.initClientContainer()
+	signingKey, err := apptoken.LoadSigningKey(cfg.App, os.ReadFile)
+	require.NoError(t, err)
+	clients, err := app.initClientContainer(signingKey)
 	require.NoError(t, err)
 	services, err := app.initServiceContainer(t.Context(), pool, cipher, clients, app.initRepositoryContainer(pool))
 	require.NoError(t, err)

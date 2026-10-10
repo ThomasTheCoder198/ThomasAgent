@@ -28,9 +28,9 @@ See the [shared naming glossary](../../../../docs/glossary.md) for terms used ac
 
 Metric buckets must be nonempty, finite, positive and strictly ascending. The metrics constructor receives the configured slices directly, keeping config independent of the Prometheus registry.
 
-`AppConfig` (`CORE_APP_*`) configures the App token core signs for ragx: key id, issuer, audience and TTL, with defaults in `config.yaml`. The TTL must be a whole number of seconds from `MinAppTokenTTL` (1 s) to `MaxAppTokenTTL` (60 s, spec §3.1); the signer writes `exp` in whole seconds, so a fraction would be truncated. The signing key is `CORE_APP_SIGNING_KEY` (PKCS#8 PEM value) or `CORE_APP_SIGNING_KEY_FILE` (a mounted file), never both. It is not required here: `apptoken.LoadSigningKey` checks it when `serve` or `worker` start, so `migrate` and `outbox-relay` run without it.
+`AppConfig` (`CORE_APP_*`) configures the App token core signs for ragx: key id, issuer, audience and TTL, with defaults in `config.yaml`. The TTL must be a whole number of seconds from `MinAppTokenTTL` (1 s) to `MaxAppTokenTTL` (60 s, spec §3.1); the signer writes `exp` in whole seconds, so a fraction would be truncated. The signing key is `CORE_APP_SIGNING_KEY` (PKCS#8 PEM value) or `CORE_APP_SIGNING_KEY_FILE` (a mounted file), never both. It is not required here: `apptoken.LoadSigningKey` checks it when `serve` starts, so `migrate` and `outbox-relay` run without it.
 
-`RagxConfig` (`CORE_RAGX_*`) configures `internal/platform/ragx`: the base URL, connect, request (JSON calls), response-header and transfer (streamed bodies) timeouts, the upload size limit (ragx's 100 MiB file plus 64 KiB multipart overhead, `contracts/kb-upload.json`) and the cap on a ragx error body that core reads. Defaults are in `config.yaml`. `IdleConnTimeout` is not set on the ragx transport (ruling F22).
+`RagxConfig` (`CORE_RAGX_*`) configures `internal/platform/ragx`: the base URL, the connect, request (typed calls) and response-header timeouts, the cap on a ragx error body (`MAX_ERROR_BODY_BYTES`), the cap on a forwarded response (`MAX_RESPONSE_BYTES`) and `PROVISION_ATTEMPTS`. The forward uses the HTTP route's deadline. Budget rule: `PROVISION_ATTEMPTS × REQUEST_TIMEOUT + (attempts − 1) × CORE_RETRY_MAX_DELAY` must stay below `CORE_HTTP_REQUEST_TIMEOUT`, or startup fails. Defaults are in `config.yaml`. `IdleConnTimeout` is not set on the ragx transport (ruling F22).
 
 Log levels are validated through `logging.ParseLevel`, the same parser used to construct loggers; unknown names fail startup.
 
@@ -41,7 +41,7 @@ The logger's field contract is defined in the [logging README](../logging/README
 - Missing or empty database/Redis URL → set both required variables.
 - Invalid duration or integer → use Go duration syntax or an integer.
 - `CORE_APP_TOKEN_TTL` below 1s, above 60s or not a whole number of seconds, or both signing key variables set → startup fails; fix the value.
-- `CORE_RAGX_URL` not an absolute http(s) URL, or a non-positive `CORE_RAGX_*` timeout or byte limit → startup fails; fix the value.
+- `CORE_RAGX_URL` not an absolute http(s) URL, or a non-positive `CORE_RAGX_*` timeout, byte limit or attempt count, or a provisioning budget at or above the HTTP request timeout → startup fails; fix the value.
 - Unknown log level → choose debug, info, warn, or error.
 - Retry maximum delay below base delay → increase CORE_RETRY_MAX_DELAY.
 

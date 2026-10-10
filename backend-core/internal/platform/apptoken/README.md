@@ -4,7 +4,7 @@
 Signs the per-call App token core sends to ragx (spec §3): EdDSA, `typ thomas-app+jwt`, 60 s. It does not call ragx; `internal/platform/ragx` does.
 
 ## Entry points
-- `NewAppTokenSigner` and `Signer.Sign`: build one token per call.
+- `NewAppTokenSigner`, `Signer.Issue` and `Signer.Sign`: build one token per call. `Issue` also returns the `jti` (`Issued{Token, ID}`) so callers can log the call without the token.
 - `LoadSigningKey`: reads the PKCS#8 PEM key from `CORE_APP_SIGNING_KEY` or `CORE_APP_SIGNING_KEY_FILE`.
 - `ScopeOrgProvision`, `ScopeKBRead`, `ScopeKBWrite`: one scope per call.
 

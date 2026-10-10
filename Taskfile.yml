@@ -97,6 +97,8 @@ tasks:
     dir: backend-core
     env:
       CORE_ENV_FILE: ../deploy/core/.env
+      # serve needs the App signing key; host runs read the dev key `task ragx:dev-key` writes.
+      CORE_APP_SIGNING_KEY_FILE: ../deploy/ragx/dev-app-signing-key.pem
     cmds: [go run ./cmd/core serve]
   api-test:
     desc: Run the Postman collection against the running core API

@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
@@ -16,7 +18,9 @@ import (
 	llmcontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/controller"
 	llmrepository "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/repository"
 	llmservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/service"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apptoken"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/ragx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/retry"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/vault"
@@ -29,9 +33,10 @@ const providerCatalogBreaker = "provider-catalog"
 
 type ClientContainer struct {
 	ModelCatalog *llmclient.HTTPModelCatalog
+	Ragx         *ragx.Caller
 }
 
-func (rt *coreRuntime) initClientContainer() (ClientContainer, error) {
+func (rt *coreRuntime) initClientContainer(signingKey ed25519.PrivateKey) (ClientContainer, error) {
 	httpClient, err := outbound.NewClient(rt.cfg.ProviderHTTPTimeout, rt.cfg.ProviderPrivateAllowlist)
 	if err != nil {
 		return ClientContainer{}, fmt.Errorf("provider HTTP configuration: %w", err)
@@ -39,7 +44,16 @@ func (rt *coreRuntime) initClientContainer() (ClientContainer, error) {
 	breaker := retry.NewBreaker(providerCatalogBreaker, rt.cfg.ProviderBreaker)
 	modelCatalog := llmclient.NewHTTPModelCatalogWithClient(retry.NewPolicy(rt.cfg.Retry), httpClient, rt.cfg.ProviderMaxResponseBytes, breaker, rt.log, rt.cfg.ProviderMaxBreakers)
 	modelCatalog.Metrics = rt.metrics
-	return ClientContainer{ModelCatalog: modelCatalog}, nil
+	var recorder outbound.Recorder
+	if rt.metrics != nil { // a nil *Metrics inside the interface would panic on the first call
+		recorder = rt.metrics
+	}
+	signer := apptoken.NewAppTokenSigner(signingKey, rt.cfg.App, time.Now, uuid.NewString)
+	ragxCaller, err := ragx.NewRagxCaller(rt.cfg.Ragx, signer, recorder, rt.log)
+	if err != nil {
+		return ClientContainer{}, fmt.Errorf("ragx client: %w", err)
+	}
+	return ClientContainer{ModelCatalog: modelCatalog, Ragx: ragxCaller}, nil
 }
 
 type RepositoryContainer struct {

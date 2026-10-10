@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/netip"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apptoken"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/redisx"
@@ -28,6 +30,10 @@ func (rt *coreRuntime) serveHTTP(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("CORE_VAULT_MASTER_KEY: %w", err)
 	}
+	signingKey, err := apptoken.LoadSigningKey(rt.cfg.App, os.ReadFile)
+	if err != nil {
+		return fmt.Errorf("CORE_APP_SIGNING_KEY: %w", err)
+	}
 	pool, err := rt.openPostgres(ctx)
 	if err != nil {
 		return err
@@ -38,7 +44,7 @@ func (rt *coreRuntime) serveHTTP(ctx context.Context) error {
 		return err
 	}
 	defer func() { _ = redisClient.Close() }()
-	clients, err := rt.initClientContainer()
+	clients, err := rt.initClientContainer(signingKey)
 	if err != nil {
 		return err
 	}

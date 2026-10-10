@@ -4,7 +4,7 @@
 Go API and agent runtime for ThomasAgent.
 
 ## Entry points
-- `cmd/core`: `serve|migrate|outbox-relay` command family. Implements serve, migrate, outbox-relay, and healthcheck.
+- `cmd/core`: `serve|migrate|outbox-relay` command family. Implements serve, migrate, outbox-relay, and healthcheck. `serve` needs the App signing key.
 - GET `/healthz`: liveness. GET `/readyz`: injected dependency checks.
 - `/api/v1/auth/login`, `/logout`, `/me`: owner sessions, cookie policy and CSRF.
 - `/api/v1/providers`, `/models`, `/model-roles`: vaulted provider keys, model catalog and role assignments.
@@ -28,6 +28,7 @@ are split under `cmd/core`.
 cd backend-core
 # Set CORE_DATABASE_URL and CORE_REDIS_URL to reachable services.
 go run ./cmd/core migrate up
+# serve also needs CORE_APP_SIGNING_KEY_FILE, e.g. ../deploy/ragx/dev-app-signing-key.pem (create it with `task ragx:dev-key`).
 go run ./cmd/core serve
 go run ./cmd/core outbox-relay
 go run ./cmd/core healthcheck
@@ -53,7 +54,7 @@ M0.2 users, sessions, secrets, providers, models and roles are scoped to the
 derive `tenant_id` from trusted context. Owner bootstrap is idempotent.
 
 `CORE_VAULT_MASTER_KEY` is required and must decode to 32 bytes; `serve` validates
-it before opening dependencies or listening. Keep the key stable. All config-loading
+it before opening dependencies or listening. Keep the key stable. `serve` also requires `CORE_APP_SIGNING_KEY` or `CORE_APP_SIGNING_KEY_FILE` (never both) and checks it before opening dependencies; `task core:serve` points at `deploy/ragx/dev-app-signing-key.pem`. All config-loading
 commands also require `CORE_SERVICE_TOKEN` and a different `CORE_AUTH_LOGIN_LIMITER_KEY`, each of at least 32 characters; `change-me*` values are rejected outside dev. `CORE_SERVICE_TOKEN` is currently unused (reserved; its `/internal` role was removed in M1.2) but config validation still requires it. Set `CORE_AUTH_OWNER_EMAIL` and
 `CORE_AUTH_OWNER_PASSWORD` (at least 12 characters) to bootstrap the owner.
 Session/cookie/login settings are documented in [config](internal/platform/config/README.md).

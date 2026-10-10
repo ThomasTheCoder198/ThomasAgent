@@ -3,7 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -178,9 +181,13 @@ func TestServe_ListeningLogUsesSharedFields(t *testing.T) {
 	a := &coreRuntime{
 		cfg: config.Config{
 			DatabaseURL: databaseURL, RedisURL: redisURL, HTTPAddr: "127.0.0.1:0", ShutdownTimeout: time.Second,
-			Vault:        config.VaultConfig{KeyID: "v1", MasterKey: testVaultMasterKey},
-			Auth:         config.AuthConfig{OwnerEmail: "owner@example.com", OwnerPassword: "correct horse battery", SessionTTL: time.Hour, LoginMaxAttempts: 10, LoginWindow: time.Minute, MinPasswordLength: 12},
-			HTTP:         config.HTTPConfig{MaxBodyBytes: 1 << 10, RequestTimeout: time.Second},
+			Vault: config.VaultConfig{KeyID: "v1", MasterKey: testVaultMasterKey},
+			Auth:  config.AuthConfig{OwnerEmail: "owner@example.com", OwnerPassword: "correct horse battery", SessionTTL: time.Hour, LoginMaxAttempts: 10, LoginWindow: time.Minute, MinPasswordLength: 12},
+			HTTP:  config.HTTPConfig{MaxBodyBytes: 1 << 10, RequestTimeout: time.Second},
+			App: config.AppConfig{SigningKey: testSigningKeyPEM(t), SigningKeyID: "test-1", TokenIssuer: "thomas-core",
+				TokenAudience: "ragx", TokenTTL: time.Minute},
+			Ragx: config.RagxConfig{URL: "http://127.0.0.1:1", ConnectTimeout: time.Second, RequestTimeout: time.Second,
+				ResponseHeaderTimeout: time.Second, MaxErrorBodyBytes: 1 << 10, MaxResponseBytes: 1 << 10, ProvisionAttempts: 1},
 			ServiceToken: "test-service-token-with-at-least-32-characters", ProviderHTTPTimeout: time.Second,
 			ProviderMaxResponseBytes: config.DefaultProviderMaxResponseBytes,
 			ProviderBreaker:          config.BreakerConfig{FailureThreshold: 5, OpenTimeout: time.Second, HalfOpenMaxCalls: 1},
@@ -226,4 +233,15 @@ func setIdentityEnv(t *testing.T) {
 	t.Setenv("CORE_VAULT_MASTER_KEY", testVaultMasterKey)
 	t.Setenv("CORE_SERVICE_TOKEN", "test-service-token-with-at-least-32-characters")
 	t.Setenv("CORE_AUTH_LOGIN_LIMITER_KEY", "test-login-limiter-key-with-at-least-32-characters")
+	t.Setenv("CORE_APP_SIGNING_KEY", testSigningKeyPEM(t))
+}
+
+// testSigningKeyPEM is a throwaway PKCS#8 Ed25519 key; serve refuses to start without one.
+func testSigningKeyPEM(t *testing.T) string {
+	t.Helper()
+	_, key, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
 }

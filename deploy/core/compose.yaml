@@ -46,6 +46,13 @@ services:
       CORE_DATABASE_URL: ${CORE_DATABASE_URL:-postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable}
       CORE_REDIS_URL: ${CORE_REDIS_URL:-redis://redis:6379/0}
       CORE_LOGS_OTLP_ENDPOINT: ${CORE_LOGS_OTLP_ENDPOINT-http://victorialogs:9428/insert/opentelemetry/v1/logs}
+      # ragx is a separate stack (a separate server in production); in dev it publishes 8090 on the host.
+      CORE_RAGX_URL: ${CORE_RAGX_URL:-http://host.docker.internal:8090}
+      CORE_APP_SIGNING_KEY_FILE: /run/secrets/app-signing-key.pem
+    volumes:
+      # Dev mounts the key `task ragx:dev-key` writes; production mounts core's own key here.
+      - ${CORE_APP_SIGNING_KEY_HOST_FILE:-../ragx/dev-app-signing-key.pem}:/run/secrets/app-signing-key.pem:ro
+    extra_hosts: ["host.docker.internal:host-gateway"]
     ports: ["8080:8080"]
     healthcheck:
       test: ["CMD", "/usr/local/bin/core", "healthcheck"]

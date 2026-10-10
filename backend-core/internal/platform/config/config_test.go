@@ -277,8 +277,8 @@ func TestLoad_RagxDefaults(t *testing.T) {
 	cfg, err := Load()
 	require.NoError(t, err)
 	require.Equal(t, "http://localhost:8090", cfg.Ragx.URL)
-	require.Equal(t, 15*time.Minute, cfg.Ragx.TransferTimeout)
-	require.EqualValues(t, 104923136, cfg.Ragx.UploadMaxBytes)
+	require.Equal(t, 1, cfg.Ragx.ProvisionAttempts)
+	require.EqualValues(t, 1048576, cfg.Ragx.MaxResponseBytes)
 	t.Setenv("CORE_RAGX_URL", "ftp://ragx")
 	_, err = Load()
 	require.ErrorContains(t, err, "CORE_RAGX_URL")
@@ -303,8 +303,8 @@ func TestLoad_AppTokenTTLMustBeWholeSecondsWithinBounds(t *testing.T) {
 func TestLoad_RejectsInvalidRagxSettings(t *testing.T) {
 	for name, value := range map[string]string{
 		"CORE_RAGX_URL": "ragx:8090", "CORE_RAGX_CONNECT_TIMEOUT": "0s", "CORE_RAGX_REQUEST_TIMEOUT": "0s",
-		"CORE_RAGX_RESPONSE_HEADER_TIMEOUT": "0s", "CORE_RAGX_TRANSFER_TIMEOUT": "0s",
-		"CORE_RAGX_UPLOAD_MAX_BYTES": "0", "CORE_RAGX_MAX_ERROR_BODY_BYTES": "0",
+		"CORE_RAGX_RESPONSE_HEADER_TIMEOUT": "0s",
+		"CORE_RAGX_PROVISION_ATTEMPTS":      "0", "CORE_RAGX_MAX_RESPONSE_BYTES": "0", "CORE_RAGX_MAX_ERROR_BODY_BYTES": "0",
 	} {
 		t.Run(name, func(t *testing.T) {
 			setRequired(t)
@@ -313,4 +313,25 @@ func TestLoad_RejectsInvalidRagxSettings(t *testing.T) {
 			require.ErrorContains(t, err, "CORE_RAGX_")
 		})
 	}
+}
+
+func TestLoad_ProvisionBudgetMustFitTheRequestTimeout(t *testing.T) {
+	for name, env := range map[string]map[string]string{
+		"two attempts of 15s plus a 10s backoff": {"CORE_RAGX_PROVISION_ATTEMPTS": "2"},
+		"one attempt as long as the route":       {"CORE_RAGX_REQUEST_TIMEOUT": "30s"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			setRequired(t)
+			for key, value := range env {
+				t.Setenv(key, value)
+			}
+			_, err := Load()
+			require.ErrorContains(t, err, "CORE_RAGX_PROVISION_ATTEMPTS")
+		})
+	}
+	setRequired(t)
+	t.Setenv("CORE_RAGX_PROVISION_ATTEMPTS", "2")
+	t.Setenv("CORE_RAGX_REQUEST_TIMEOUT", "5s")
+	_, err := Load()
+	require.NoError(t, err, "2 × 5s + 10s backoff fits the 30s route")
 }

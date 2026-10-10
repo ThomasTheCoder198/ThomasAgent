@@ -134,16 +134,16 @@ func (c AppConfig) validate() []error {
 	return errs
 }
 
-// RagxConfig is how core reaches ragx. Only the connect and response-header phases have deadlines here; streamed
-// bodies are bounded by the caller's context (TransferTimeout).
+// RagxConfig is how core reaches ragx. Typed calls are bounded by RequestTimeout; the app proxy's forward uses the
+// HTTP route's deadline and caps the response body at MaxResponseBytes.
 type RagxConfig struct {
 	URL                   string        `env:"URL"`
 	ConnectTimeout        time.Duration `env:"CONNECT_TIMEOUT"`
 	RequestTimeout        time.Duration `env:"REQUEST_TIMEOUT"`
 	ResponseHeaderTimeout time.Duration `env:"RESPONSE_HEADER_TIMEOUT"`
-	TransferTimeout       time.Duration `env:"TRANSFER_TIMEOUT"`
-	UploadMaxBytes        int64         `env:"UPLOAD_MAX_BYTES"`
 	MaxErrorBodyBytes     int64         `env:"MAX_ERROR_BODY_BYTES"`
+	MaxResponseBytes      int64         `env:"MAX_RESPONSE_BYTES"`
+	ProvisionAttempts     int           `env:"PROVISION_ATTEMPTS"`
 }
 
 func (c RagxConfig) validate() []error {
@@ -157,13 +157,27 @@ func (c RagxConfig) validate() []error {
 
 func (c RagxConfig) validateLimits() []error {
 	var errs []error
-	if c.ConnectTimeout <= 0 || c.RequestTimeout <= 0 || c.ResponseHeaderTimeout <= 0 || c.TransferTimeout <= 0 {
+	if c.ConnectTimeout <= 0 || c.RequestTimeout <= 0 || c.ResponseHeaderTimeout <= 0 {
 		errs = append(errs, errors.New("CORE_RAGX_*_TIMEOUT values must be > 0"))
 	}
-	if c.UploadMaxBytes < 1 || c.MaxErrorBodyBytes < 1 {
-		errs = append(errs, errors.New("CORE_RAGX_UPLOAD_MAX_BYTES and CORE_RAGX_MAX_ERROR_BODY_BYTES must be >= 1"))
+	if c.MaxErrorBodyBytes < 1 || c.MaxResponseBytes < 1 || c.ProvisionAttempts < 1 {
+		errs = append(errs, errors.New("CORE_RAGX_MAX_ERROR_BODY_BYTES, CORE_RAGX_MAX_RESPONSE_BYTES and CORE_RAGX_PROVISION_ATTEMPTS must be >= 1"))
 	}
 	return errs
+}
+
+// validateProvisionBudget keeps synchronous provisioning inside one HTTP request (spec §14.4): every attempt may
+// take the full ragx timeout, and every retry may wait the full backoff.
+func (c Config) validateProvisionBudget() []error {
+	attempts := time.Duration(c.Ragx.ProvisionAttempts)
+	if attempts < 1 {
+		return nil // validateLimits reports it
+	}
+	budget := attempts*c.Ragx.RequestTimeout + (attempts-1)*c.Retry.MaxDelay
+	if budget >= c.HTTP.RequestTimeout {
+		return []error{errors.New("CORE_RAGX_PROVISION_ATTEMPTS × CORE_RAGX_REQUEST_TIMEOUT plus CORE_RETRY_MAX_DELAY backoff must stay below CORE_HTTP_REQUEST_TIMEOUT")}
+	}
+	return nil
 }
 
 type VaultConfig struct {
@@ -391,6 +405,7 @@ func (c Config) validate() error {
 	errs = append(errs, c.Auth.validate()...)
 	errs = append(errs, c.App.validate()...)
 	errs = append(errs, c.Ragx.validate()...)
+	errs = append(errs, c.validateProvisionBudget()...)
 	errs = append(errs, c.validateServiceToken()...)
 	errs = append(errs, c.validateLoginLimiterKey()...)
 	errs = append(errs, c.validateProvider()...)

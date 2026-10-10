@@ -4,13 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apptoken"
@@ -31,48 +29,31 @@ const (
 	fieldOutcome     = "outcome"
 	fieldErrorCode   = "error_code"
 	fieldRagxTraceID = "ragx_trace_id"
+	fieldMethod      = "method"
+	fieldRoute       = "route"
+	fieldJTI         = "jti"
 
 	opProvisionOrg = "provision_org"
-	opListKBs      = "list_knowledge_bases"
-	opCreateKB     = "create_knowledge_base"
-	opGetKB        = "get_knowledge_base"
-	opRenameKB     = "rename_knowledge_base"
-	opDeleteKB     = "delete_knowledge_base"
-	opListFiles    = "list_files"
-	opUploadFile   = "upload_file"
-	opDeleteFile   = "delete_file"
-	opRetryFile    = "retry_file"
-	opRawFile      = "download_file"
-	opPreviewFile  = "get_file_preview"
+	opForward      = "app_proxy"
+	apiPrefix      = "v1"
 )
 
+// TokenSigner is satisfied by *apptoken.Signer.
 type TokenSigner interface {
-	Sign(apptoken.Claims) (string, error)
+	Issue(apptoken.Claims) (apptoken.Issued, error)
 }
 
 type Caller struct {
 	api    *Client
+	http   *http.Client
+	base   *url.URL
 	signer TokenSigner
 	log    *slog.Logger
 	cfg    config.RagxConfig
 }
 
-type FilePage struct {
-	Files  []KbFile
-	Cursor *string
-	Limit  int
-}
-
-type Upload struct {
-	KnowledgeBaseID uuid.UUID
-	ContentType     string
-	ContentLength   int64
-	Body            io.Reader
-	IdempotencyKey  string
-}
-
 // NewRagxCaller does not use outbound.NewClient: ragx is a configured first-party service on a private address, and
-// that client's whole-request timeout would cut streamed uploads and downloads. Deadlines come from the context.
+// that client's whole-request timeout would cut the app proxy's forwards. Deadlines come from the context.
 func NewRagxCaller(cfg config.RagxConfig, signer TokenSigner, recorder outbound.Recorder, log *slog.Logger) (*Caller, error) {
 	base := &http.Transport{
 		Proxy:                 nil,
@@ -87,7 +68,11 @@ func NewRagxCaller(cfg config.RagxConfig, signer TokenSigner, recorder outbound.
 	if err != nil {
 		return nil, fmt.Errorf("ragx client: %w", err)
 	}
-	return &Caller{api: api, signer: signer, log: log, cfg: cfg}, nil
+	baseURL, err := url.Parse(cfg.URL)
+	if err != nil {
+		return nil, fmt.Errorf("ragx url: %w", err)
+	}
+	return &Caller{api: api, http: client, base: baseURL, signer: signer, log: log, cfg: cfg}, nil
 }
 
 type call struct {
@@ -95,6 +80,9 @@ type call struct {
 	cancel    context.CancelFunc
 	editors   []RequestEditorFn
 	operation string
+	method    string
+	route     string
+	jti       string
 	start     time.Time
 }
 
@@ -107,7 +95,7 @@ func (c *Caller) begin(ctx context.Context, operation string, scope apptoken.Sco
 	if !requestid.IsValid(requestid.FromContext(ctx)) {
 		ctx = requestid.NewContext(ctx, requestid.NewJob())
 	}
-	token, err := c.signer.Sign(apptoken.Claims{OrgID: orgID, Scope: scope, RequestID: requestid.FromContext(ctx)})
+	issued, err := c.signer.Issue(apptoken.Claims{OrgID: orgID, Scope: scope, RequestID: requestid.FromContext(ctx)})
 	if err != nil {
 		return call{}, err
 	}
@@ -116,10 +104,10 @@ func (c *Caller) begin(ctx context.Context, operation string, scope apptoken.Sco
 		ctx, cancel = context.WithTimeout(ctx, c.cfg.RequestTimeout)
 	}
 	authorize := func(_ context.Context, req *http.Request) error {
-		req.Header.Set(httpx.HeaderAuthorization, httpx.AuthSchemeBearer+" "+token)
+		req.Header.Set(httpx.HeaderAuthorization, httpx.AuthSchemeBearer+" "+issued.Token)
 		return nil
 	}
-	return call{ctx: ctx, cancel: cancel, editors: []RequestEditorFn{authorize}, operation: operation, start: time.Now()}, nil
+	return call{ctx: ctx, cancel: cancel, editors: []RequestEditorFn{authorize}, operation: operation, jti: issued.ID, start: time.Now()}, nil
 }
 
 // check maps the round trip to a catalog error and writes the one outbound log line. On success the body stays open.
@@ -146,6 +134,10 @@ func (c *Caller) logCall(cl call, status int, traceID string, failure error) {
 	attrs := []slog.Attr{
 		slog.String(fieldTarget, outbound.TargetRagx), slog.String(fieldOperation, cl.operation),
 		slog.Int(fieldStatus, status), slog.Int64(logging.FieldDurationMS, time.Since(cl.start).Milliseconds()),
+		slog.String(fieldJTI, cl.jti),
+	}
+	if cl.method != "" {
+		attrs = append(attrs, slog.String(fieldMethod, cl.method), slog.String(fieldRoute, cl.route))
 	}
 	if outbound.IsRagxTraceID(traceID) {
 		attrs = append(attrs, slog.String(fieldRagxTraceID, traceID))
@@ -196,19 +188,6 @@ func doData[T any](c *Caller, ctx context.Context, operation string, scope appto
 	return body.Data, err
 }
 
-func (c *Caller) doEmpty(ctx context.Context, operation string, scope apptoken.Scope, send sendFunc) error {
-	cl, err := c.begin(ctx, operation, scope, true)
-	if err != nil {
-		return err
-	}
-	defer cl.cancel()
-	res, err := send(cl.ctx, cl.editors)
-	if err := c.check(cl, res, err); err != nil {
-		return err
-	}
-	return res.Body.Close()
-}
-
 func (c *Caller) ProvisionOrg(ctx context.Context, name string, externalParsing bool) (Org, error) {
 	orgID, err := tenant.ID(ctx)
 	if err != nil {
@@ -217,116 +196,4 @@ func (c *Caller) ProvisionOrg(ctx context.Context, name string, externalParsing 
 	return doData[Org](c, ctx, opProvisionOrg, apptoken.ScopeOrgProvision, func(ctx context.Context, editors []RequestEditorFn) (*http.Response, error) {
 		return c.api.ProvisionOrg(ctx, orgID, &ProvisionOrgParams{}, ProvisionOrgJSONRequestBody{Name: name, ExternalParsing: externalParsing}, editors...)
 	})
-}
-
-func (c *Caller) ListKnowledgeBases(ctx context.Context) ([]KnowledgeBase, error) {
-	return doData[[]KnowledgeBase](c, ctx, opListKBs, apptoken.ScopeKBRead, func(ctx context.Context, editors []RequestEditorFn) (*http.Response, error) {
-		return c.api.ListKnowledgeBases(ctx, &ListKnowledgeBasesParams{}, editors...)
-	})
-}
-
-func (c *Caller) CreateKnowledgeBase(ctx context.Context, name string) (KnowledgeBase, error) {
-	return doData[KnowledgeBase](c, ctx, opCreateKB, apptoken.ScopeKBWrite, func(ctx context.Context, editors []RequestEditorFn) (*http.Response, error) {
-		return c.api.CreateKnowledgeBase(ctx, &CreateKnowledgeBaseParams{}, CreateKnowledgeBaseJSONRequestBody{Name: name}, editors...)
-	})
-}
-
-func (c *Caller) GetKnowledgeBase(ctx context.Context, kbID uuid.UUID) (KnowledgeBase, error) {
-	return doData[KnowledgeBase](c, ctx, opGetKB, apptoken.ScopeKBRead, func(ctx context.Context, editors []RequestEditorFn) (*http.Response, error) {
-		return c.api.GetKnowledgeBase(ctx, kbID, &GetKnowledgeBaseParams{}, editors...)
-	})
-}
-
-func (c *Caller) RenameKnowledgeBase(ctx context.Context, kbID uuid.UUID, name string) (KnowledgeBase, error) {
-	return doData[KnowledgeBase](c, ctx, opRenameKB, apptoken.ScopeKBWrite, func(ctx context.Context, editors []RequestEditorFn) (*http.Response, error) {
-		return c.api.RenameKnowledgeBase(ctx, kbID, &RenameKnowledgeBaseParams{}, RenameKnowledgeBaseJSONRequestBody{Name: name}, editors...)
-	})
-}
-
-func (c *Caller) DeleteKnowledgeBase(ctx context.Context, kbID uuid.UUID) error {
-	return c.doEmpty(ctx, opDeleteKB, apptoken.ScopeKBWrite, func(ctx context.Context, editors []RequestEditorFn) (*http.Response, error) {
-		return c.api.DeleteKnowledgeBase(ctx, kbID, &DeleteKnowledgeBaseParams{}, editors...)
-	})
-}
-
-type filePageBody struct {
-	Data []KbFile `json:"data"`
-	Meta struct {
-		Page struct {
-			Cursor *string `json:"cursor"`
-			Limit  int     `json:"limit"`
-		} `json:"page"`
-	} `json:"meta"`
-}
-
-func (c *Caller) ListFiles(ctx context.Context, kbID uuid.UUID, cursor *string, limit *int) (FilePage, error) {
-	body, err := doJSON[filePageBody](c, ctx, opListFiles, apptoken.ScopeKBRead, func(ctx context.Context, editors []RequestEditorFn) (*http.Response, error) {
-		return c.api.ListFiles(ctx, kbID, &ListFilesParams{Cursor: cursor, Limit: limit}, editors...)
-	})
-	if err != nil {
-		return FilePage{}, err
-	}
-	return FilePage{Files: body.Data, Cursor: body.Meta.Page.Cursor, Limit: body.Meta.Page.Limit}, nil
-}
-
-// UploadFile streams the caller's body. ragx requires Content-Length, so the editor restores the length that
-// http.NewRequest cannot see through an io.Reader; a body shorter than the length fails the request.
-func (c *Caller) UploadFile(ctx context.Context, in Upload) (KbFile, bool, error) {
-	cl, err := c.begin(ctx, opUploadFile, apptoken.ScopeKBWrite, false)
-	if err != nil {
-		return KbFile{}, false, err
-	}
-	params := &UploadFileParams{}
-	if in.IdempotencyKey != "" {
-		params.IdempotencyKey = &in.IdempotencyKey
-	}
-	withLength := func(_ context.Context, req *http.Request) error {
-		req.ContentLength = in.ContentLength
-		return nil
-	}
-	created := false
-	body, err := readJSON[dataBody[KbFile]](c, cl, func(ctx context.Context, editors []RequestEditorFn) (*http.Response, error) {
-		res, err := c.api.UploadFileWithBody(ctx, in.KnowledgeBaseID, params, in.ContentType, in.Body, append(editors, withLength)...)
-		created = err == nil && res.StatusCode == http.StatusCreated
-		return res, err
-	})
-	return body.Data, created, err
-}
-
-func (c *Caller) DeleteFile(ctx context.Context, kbID, fileID uuid.UUID) error {
-	return c.doEmpty(ctx, opDeleteFile, apptoken.ScopeKBWrite, func(ctx context.Context, editors []RequestEditorFn) (*http.Response, error) {
-		return c.api.DeleteFile(ctx, kbID, fileID, &DeleteFileParams{}, editors...)
-	})
-}
-
-func (c *Caller) RetryFile(ctx context.Context, kbID, fileID uuid.UUID) (KbFile, error) {
-	return doData[KbFile](c, ctx, opRetryFile, apptoken.ScopeKBWrite, func(ctx context.Context, editors []RequestEditorFn) (*http.Response, error) {
-		return c.api.RetryFile(ctx, kbID, fileID, &RetryFileParams{}, editors...)
-	})
-}
-
-// OpenFileRaw and OpenFilePreview return the open response; the caller copies and closes the body. Their deadline
-// is the HTTP route's transfer timeout, not RequestTimeout.
-func (c *Caller) OpenFileRaw(ctx context.Context, kbID, fileID uuid.UUID) (*http.Response, error) {
-	cl, err := c.begin(ctx, opRawFile, apptoken.ScopeKBRead, false)
-	if err != nil {
-		return nil, err
-	}
-	res, err := c.api.DownloadFile(cl.ctx, kbID, fileID, &DownloadFileParams{}, cl.editors...)
-	if err := c.check(cl, res, err); err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
-func (c *Caller) OpenFilePreview(ctx context.Context, kbID, fileID uuid.UUID) (*http.Response, error) {
-	cl, err := c.begin(ctx, opPreviewFile, apptoken.ScopeKBRead, false)
-	if err != nil {
-		return nil, err
-	}
-	res, err := c.api.GetFilePreview(cl.ctx, kbID, fileID, &GetFilePreviewParams{}, cl.editors...)
-	if err := c.check(cl, res, err); err != nil {
-		return nil, err
-	}
-	return res, nil
 }

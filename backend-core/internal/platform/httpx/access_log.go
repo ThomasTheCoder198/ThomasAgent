@@ -100,5 +100,10 @@ func RoutePattern(c *gin.Context) string {
 	if pattern == "" {
 		return unmatchedRoute
 	}
+	return ContractRoute(pattern)
+}
+
+// ContractRoute rewrites a gin pattern (":orgId") into the contract's brace syntax ("{orgId}").
+func ContractRoute(pattern string) string {
 	return ginRouteParam.ReplaceAllString(pattern, "{$1}")
 }

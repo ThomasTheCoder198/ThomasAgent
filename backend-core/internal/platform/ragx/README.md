@@ -5,12 +5,13 @@ The only way core calls ragx: the generated client (`client_gen.go`, oapi-codege
 
 ## Entry points
 - `NewRagxCaller(cfg, signer, recorder, log)` builds the caller; `TokenSigner` is satisfied by `apptoken.Signer`.
-- `Caller` methods: `ProvisionOrg`, `ListKnowledgeBases`, `CreateKnowledgeBase`, `GetKnowledgeBase`, `RenameKnowledgeBase`, `DeleteKnowledgeBase`, `ListFiles`, `UploadFile`, `DeleteFile`, `RetryFile`, `OpenFileRaw`, `OpenFilePreview`.
-- `FilePage` and `Upload` are the paged-list result and the streamed upload input. The generated models (`Org`, `KnowledgeBase`, `KbFile`) are used as they are.
+- `Caller.ProvisionOrg` is the typed call, bounded by `CORE_RAGX_REQUEST_TIMEOUT`.
+- `Caller.Forward(ctx, ForwardRequest)` is the generic data plane behind the app proxy: it uses the route's deadline and caps the response at `CORE_RAGX_MAX_RESPONSE_BYTES`. It is never retried.
+- The generated model `Org` is used as it is.
 
 ## Dependencies
 - Uses: `apptoken`, `outbound.Instrument` (`outbound_*` metrics with `target="ragx"`), `config.RagxConfig`, `requestid`, `tenant`, the shared error catalog.
-- Used by: organization/job and knowledgebase/service.
+- Used by: `organization/service`, `appproxy/service`.
 
 ## Run & test
 ```bash
@@ -23,10 +24,11 @@ go test ./internal/platform/ragx/... -count=1
 - `oid` is `tenant.ID(ctx)`; a context without a trusted tenant fails with `ErrMissingTenant` before any request.
 - `rid` equals the `X-Request-Id` sent: both come from one context value, and a context without a valid id gets a `job_` id first.
 - ragx 4xx catalog codes pass through with their details, provided the code's catalog status matches the response status.
-- 5xx, timeouts, unreachable ragx, 401/403 (a rejected App token or scope is core misconfiguration) and unknown codes or statuses become `RAGX_UNAVAILABLE`.
+- Typed calls: 5xx, timeouts, unreachable ragx, 401/403 (a rejected App token or scope is core misconfiguration) and unknown codes or statuses become `RAGX_UNAVAILABLE`.
+- `Forward`: 2xx and catalog 4xx pass through verbatim; 401 becomes `RAGX_UNAVAILABLE`; 403 becomes `NOT_FOUND` (the route needs a scope the UI never gets); everything else, including a body over the cap, becomes `RAGX_UNAVAILABLE`.
+- The log line carries `jti` always, and `method` and `route` (contract brace spelling) for `Forward`; never the token or a body.
 - Error bodies are read up to `CORE_RAGX_MAX_ERROR_BODY_BYTES`.
-- JSON calls get `CORE_RAGX_REQUEST_TIMEOUT`; uploads and `OpenFile*` use the caller's context, which the HTTP route bounds with the transfer timeout. The caller of `OpenFileRaw` and `OpenFilePreview` closes the body.
-- Uploads stream with the caller's `Content-Length` (ragx rejects chunked bodies).
+- Typed calls get `CORE_RAGX_REQUEST_TIMEOUT`; `Forward` uses the caller's context, which the HTTP route bounds.
 - Redirects are never followed, and no ambient proxy is used.
 - Never use `ClientWithResponses`: it buffers whole bodies.
 - Generated names: `OrgId` is a string and `KbId`/`FileId` are UUIDs. The OpenAPI response components are `KbFileResponse` and `KnowledgeBaseResponse`, because `oapi-codegen.yaml` sets `resolve-type-name-collisions`.

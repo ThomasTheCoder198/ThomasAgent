@@ -108,3 +108,18 @@ func TestSign_RejectsMissingOrgScopeOrRequestID(t *testing.T) {
 	_, err = signer.Sign(valid)
 	require.NoError(t, err)
 }
+
+func TestIssue_ReturnsTheTokenAndTheJTIItSigned(t *testing.T) {
+	_, key, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+	signer := NewAppTokenSigner(key, config.AppConfig{SigningKeyID: "k", TokenIssuer: "i", TokenAudience: "a", TokenTTL: time.Minute},
+		time.Now, func() string { return "jti-issued" })
+	claims := Claims{OrgID: "org-a", Scope: ScopeKBRead, RequestID: "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21"}
+	issued, err := signer.Issue(claims)
+	require.NoError(t, err)
+	require.Equal(t, "jti-issued", issued.ID)
+	require.Equal(t, "jti-issued", claimString(decodeSegment(t, strings.Split(issued.Token, ".")[1]), "jti"))
+	token, err := signer.Sign(claims)
+	require.NoError(t, err)
+	require.Len(t, strings.Split(token, "."), 3)
+}

@@ -2,6 +2,7 @@ package outbound
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -13,6 +14,11 @@ const (
 	TargetRagx        = "ragx"
 	HeaderRagxTraceID = "X-Ragx-Trace-Id"
 )
+
+// A ragx trace id comes from a response header; only the OpenTelemetry hex form reaches logs.
+var ragxTraceID = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
+func IsRagxTraceID(id string) bool { return ragxTraceID.MatchString(id) }
 
 // Recorder is the part of the metrics registry the transport needs.
 type Recorder interface {

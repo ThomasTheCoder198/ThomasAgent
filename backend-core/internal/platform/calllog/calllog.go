@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -12,6 +11,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/metrics"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
 )
 
 const (
@@ -42,9 +42,6 @@ const (
 	fieldOutcome         = "outcome"
 	fieldRagxTraceID     = "ragx_trace_id"
 )
-
-// A ragx trace id comes from a response header; only the OpenTelemetry hex form reaches the logs.
-var validTraceID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
 // LLMRecorder is the part of the metrics registry this package needs.
 type LLMRecorder interface {
@@ -124,7 +121,7 @@ func (l *Logger) Tool(ctx context.Context, call ToolCall) {
 	if call.ErrorCode != "" {
 		attrs = append(attrs, slog.String(fieldErrorCode, call.ErrorCode))
 	}
-	if validTraceID.MatchString(call.RagxTraceID) {
+	if outbound.IsRagxTraceID(call.RagxTraceID) {
 		attrs = append(attrs, slog.String(fieldRagxTraceID, call.RagxTraceID))
 	}
 	level := slog.LevelInfo

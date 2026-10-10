@@ -111,7 +111,11 @@ type AppConfig struct {
 }
 
 // MaxAppTokenTTL is the spec's upper bound (§3.1); ragx rejects longer tokens.
-const MaxAppTokenTTL = 60 * time.Second
+const (
+	MaxAppTokenTTL = 60 * time.Second
+	// MinAppTokenTTL is one second because exp is written in whole seconds.
+	MinAppTokenTTL = time.Second
+)
 
 // The key itself is checked when serve or worker start, so migrate and outbox-relay run without it.
 func (c AppConfig) validate() []error {
@@ -122,8 +126,42 @@ func (c AppConfig) validate() []error {
 	if c.SigningKeyID == "" || c.TokenIssuer == "" || c.TokenAudience == "" {
 		errs = append(errs, errors.New("CORE_APP_SIGNING_KEY_ID, CORE_APP_TOKEN_ISSUER and CORE_APP_TOKEN_AUDIENCE must be set"))
 	}
-	if c.TokenTTL <= 0 || c.TokenTTL > MaxAppTokenTTL {
-		errs = append(errs, errors.New("CORE_APP_TOKEN_TTL must be > 0 and <= 60s"))
+	// The signer writes exp in whole seconds, so a fraction would be silently truncated.
+	if c.TokenTTL < MinAppTokenTTL || c.TokenTTL > MaxAppTokenTTL || c.TokenTTL%time.Second != 0 {
+		errs = append(errs, fmt.Errorf("CORE_APP_TOKEN_TTL must be a whole number of seconds, >= %ds and <= %ds",
+			int(MinAppTokenTTL/time.Second), int(MaxAppTokenTTL/time.Second)))
+	}
+	return errs
+}
+
+// RagxConfig is how core reaches ragx. Only the connect and response-header phases have deadlines here; streamed
+// bodies are bounded by the caller's context (TransferTimeout).
+type RagxConfig struct {
+	URL                   string        `env:"URL"`
+	ConnectTimeout        time.Duration `env:"CONNECT_TIMEOUT"`
+	RequestTimeout        time.Duration `env:"REQUEST_TIMEOUT"`
+	ResponseHeaderTimeout time.Duration `env:"RESPONSE_HEADER_TIMEOUT"`
+	TransferTimeout       time.Duration `env:"TRANSFER_TIMEOUT"`
+	UploadMaxBytes        int64         `env:"UPLOAD_MAX_BYTES"`
+	MaxErrorBodyBytes     int64         `env:"MAX_ERROR_BODY_BYTES"`
+}
+
+func (c RagxConfig) validate() []error {
+	var errs []error
+	parsed, err := url.Parse(c.URL)
+	if err != nil || (parsed.Scheme != schemeHTTP && parsed.Scheme != schemeHTTPS) || parsed.Host == "" {
+		errs = append(errs, errors.New("CORE_RAGX_URL must be an absolute http(s) URL"))
+	}
+	return append(errs, c.validateLimits()...)
+}
+
+func (c RagxConfig) validateLimits() []error {
+	var errs []error
+	if c.ConnectTimeout <= 0 || c.RequestTimeout <= 0 || c.ResponseHeaderTimeout <= 0 || c.TransferTimeout <= 0 {
+		errs = append(errs, errors.New("CORE_RAGX_*_TIMEOUT values must be > 0"))
+	}
+	if c.UploadMaxBytes < 1 || c.MaxErrorBodyBytes < 1 {
+		errs = append(errs, errors.New("CORE_RAGX_UPLOAD_MAX_BYTES and CORE_RAGX_MAX_ERROR_BODY_BYTES must be >= 1"))
 	}
 	return errs
 }
@@ -234,6 +272,7 @@ type Config struct {
 	ServiceToken             string            `env:"SERVICE_TOKEN,required,notEmpty"`
 	Vault                    VaultConfig       `envPrefix:"VAULT_"`
 	App                      AppConfig         `envPrefix:"APP_"`
+	Ragx                     RagxConfig        `envPrefix:"RAGX_"`
 	HTTP                     HTTPConfig        `envPrefix:"HTTP_"`
 	Metrics                  MetricsConfig     `envPrefix:"METRICS_"`
 	LLMLog                   LLMLogConfig      `envPrefix:"LLM_LOG_"`
@@ -351,6 +390,7 @@ func (c Config) validate() error {
 	}
 	errs = append(errs, c.Auth.validate()...)
 	errs = append(errs, c.App.validate()...)
+	errs = append(errs, c.Ragx.validate()...)
 	errs = append(errs, c.validateServiceToken()...)
 	errs = append(errs, c.validateLoginLimiterKey()...)
 	errs = append(errs, c.validateProvider()...)

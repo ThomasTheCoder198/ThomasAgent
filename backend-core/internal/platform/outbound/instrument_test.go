@@ -125,3 +125,10 @@ func TestInstrument_StripsEveryHeaderCaseForExternalProviders(t *testing.T) {
 		})
 	}
 }
+
+func TestIsRagxTraceID(t *testing.T) {
+	require.True(t, IsRagxTraceID("0af7651916cd43dd8448eb211c80319c"))
+	for _, bad := range []string{"", "0AF7651916CD43DD8448EB211C80319C", "0af7651916cd43dd8448eb211c80319", "0af7651916cd43dd8448eb211c80319cc", "0af7651916cd43dd8448eb211c80319c\n", "forged\nline"} {
+		require.False(t, IsRagxTraceID(bad), bad)
+	}
+}

@@ -10,7 +10,7 @@ Signs the per-call App token core sends to ragx (spec §3): EdDSA, `typ thomas-a
 
 ## Dependencies
 - Uses: `golang-jwt/jwt/v5`, `config.AppConfig`, `requestid`, `tenant`.
-- Used by: `internal/platform/ragx` (Task 4).
+- Used by: `internal/platform/ragx`, whose `Caller` signs one token per call to ragx.
 
 ## Run & test
 ```bash

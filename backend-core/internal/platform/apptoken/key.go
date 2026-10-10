@@ -22,7 +22,8 @@ func LoadSigningKey(cfg config.AppConfig, readFile func(string) ([]byte, error))
 	case cfg.SigningKeyFile != "":
 		raw, err := readFile(cfg.SigningKeyFile)
 		if err != nil {
-			return nil, fmt.Errorf("%w: cannot read %s", errors.ErrAppSigningKeyInvalid, cfg.SigningKeyFile)
+			// The read error names the path and the OS reason, never the file's content.
+			return nil, fmt.Errorf("%w: cannot read %s: %w", errors.ErrAppSigningKeyInvalid, cfg.SigningKeyFile, err)
 		}
 		return parseSigningKey(raw)
 	default:

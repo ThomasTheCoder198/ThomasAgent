@@ -16,6 +16,8 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 )
 
+var errUnreadable = stderrors.New("no such file")
+
 func pkcs8PEM(t *testing.T, key any) string {
 	t.Helper()
 	der, err := x509.MarshalPKCS8PrivateKey(key)
@@ -41,7 +43,7 @@ func TestLoadSigningKey_ReadsPKCS8FromValueOrFile(t *testing.T) {
 func TestLoadSigningKey_RejectsMissingAmbiguousOrWrongKeys(t *testing.T) {
 	ecKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	unreadable := func(string) ([]byte, error) { return nil, stderrors.New("no such file") }
+	unreadable := func(string) ([]byte, error) { return nil, errUnreadable }
 	_, err = LoadSigningKey(config.AppConfig{}, nil)
 	require.ErrorIs(t, err, errors.ErrAppSigningKeyMissing)
 	_, err = LoadSigningKey(config.AppConfig{SigningKey: "x", SigningKeyFile: "y"}, nil)
@@ -52,5 +54,7 @@ func TestLoadSigningKey_RejectsMissingAmbiguousOrWrongKeys(t *testing.T) {
 	require.ErrorIs(t, err, errors.ErrAppSigningKeyInvalid)
 	_, err = LoadSigningKey(config.AppConfig{SigningKeyFile: "missing.pem"}, unreadable)
 	require.ErrorIs(t, err, errors.ErrAppSigningKeyInvalid)
+	require.ErrorIs(t, err, errUnreadable, "the read error stays in the chain")
+	require.ErrorContains(t, err, "missing.pem")
 	require.NotContains(t, err.Error(), "PRIVATE KEY")
 }

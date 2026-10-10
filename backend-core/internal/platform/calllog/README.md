@@ -10,7 +10,7 @@ metrics. It does not call models or tools; M1 (ragx tools), M2 (agent loop) and 
 - `Tool(ctx, ToolCall)` — after every tool call; pass the `X-Ragx-Trace-Id` response header as `RagxTraceID`.
 
 ## Dependencies
-- Uses: slog (through `logging.NewLogger`), `internal/platform/metrics`, `internal/platform/config`.
+- Uses: slog (through `logging.NewLogger`), `internal/platform/metrics`, `internal/platform/config`, `internal/platform/outbound` (`IsRagxTraceID`).
 - Used by: future model and tool callers.
 
 ## Run & test
@@ -23,7 +23,7 @@ go test ./internal/platform/calllog -count=1
 Metadata is always logged; prompt/response/tool content only when `CORE_LLM_LOG_CONTENT=true`, each field redacted with the shared logger's policy before being cut to
 `CORE_LLM_LOG_CONTENT_MAX_BYTES` on a UTF-8 boundary (`truncated=true`). The shared logger also redacts secrets and adds
 `request_id`. Levels: success info, retry warn, failure error (tool failures warn). `llm_usage` in Postgres stays
-the source of truth for cost. A ragx trace id is logged only in its 32-hex form; Grafana links it to Phoenix.
+the source of truth for cost. A ragx trace id is logged only in its 32-hex form (`outbound.IsRagxTraceID`, the same check `internal/platform/ragx` uses); Grafana links it to Phoenix.
 
 Complete JSON content is decoded with number precision retained, recursively redacted using the shared key/value policy, then serialized and truncated. Plain text uses the shared value policy. This applies to prompt, response, tool arguments and tool results when content logging is enabled.
 

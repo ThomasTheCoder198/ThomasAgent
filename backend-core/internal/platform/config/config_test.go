@@ -271,3 +271,46 @@ func TestLoad_AppTokenDefaultsAndLimits(t *testing.T) {
 	_, err = Load()
 	require.ErrorContains(t, err, "CORE_APP_SIGNING_KEY")
 }
+
+func TestLoad_RagxDefaults(t *testing.T) {
+	setRequired(t)
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, "http://localhost:8090", cfg.Ragx.URL)
+	require.Equal(t, 15*time.Minute, cfg.Ragx.TransferTimeout)
+	require.EqualValues(t, 104923136, cfg.Ragx.UploadMaxBytes)
+	t.Setenv("CORE_RAGX_URL", "ftp://ragx")
+	_, err = Load()
+	require.ErrorContains(t, err, "CORE_RAGX_URL")
+}
+
+func TestLoad_AppTokenTTLMustBeWholeSecondsWithinBounds(t *testing.T) {
+	for _, ttl := range []string{"0s", "500ms", "1500ms", "61s", "-1s"} {
+		t.Run(ttl, func(t *testing.T) {
+			setRequired(t)
+			t.Setenv("CORE_APP_TOKEN_TTL", ttl)
+			_, err := Load()
+			require.ErrorContains(t, err, "CORE_APP_TOKEN_TTL")
+			require.ErrorContains(t, err, "<= 60s")
+		})
+	}
+	setRequired(t)
+	t.Setenv("CORE_APP_TOKEN_TTL", "1s")
+	_, err := Load()
+	require.NoError(t, err)
+}
+
+func TestLoad_RejectsInvalidRagxSettings(t *testing.T) {
+	for name, value := range map[string]string{
+		"CORE_RAGX_URL": "ragx:8090", "CORE_RAGX_CONNECT_TIMEOUT": "0s", "CORE_RAGX_REQUEST_TIMEOUT": "0s",
+		"CORE_RAGX_RESPONSE_HEADER_TIMEOUT": "0s", "CORE_RAGX_TRANSFER_TIMEOUT": "0s",
+		"CORE_RAGX_UPLOAD_MAX_BYTES": "0", "CORE_RAGX_MAX_ERROR_BODY_BYTES": "0",
+	} {
+		t.Run(name, func(t *testing.T) {
+			setRequired(t)
+			t.Setenv(name, value)
+			_, err := Load()
+			require.ErrorContains(t, err, "CORE_RAGX_")
+		})
+	}
+}

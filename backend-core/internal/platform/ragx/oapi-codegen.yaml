@@ -1,0 +1,8 @@
+# Generated from contracts/openapi/ragx.v1.yaml by `task gen`; never edit client_gen.go by hand.
+package: ragx
+output: client_gen.go
+generate:
+  client: true
+  models: true
+output-options:
+  resolve-type-name-collisions: true

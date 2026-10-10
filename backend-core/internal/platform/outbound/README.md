@@ -7,9 +7,10 @@ Creates the provider HTTP client with destination validation and DNS pinning. LL
 ## Entry points
 
 - `NewClient(timeout, privateAllowlist)` returns a guarded `*http.Client`.
-- `Instrument(next, target, recorder, propagateRequestID)` wraps a transport to record `outbound_*` metrics; the ragx transport (`TargetRagx`) enables request-id propagation. M1 builds the ragx client with it.
+- `Instrument(next, target, recorder, propagateRequestID)` wraps a transport to record `outbound_*` metrics; the ragx transport (`TargetRagx`) enables request-id propagation. `internal/platform/ragx` builds core's ragx client with it (not with `NewClient`: that client's whole-request timeout would cut streamed uploads and downloads).
 
 `Instrument` clones requests, removes every case spelling of supplied `X-Request-Id` headers, and adds a validated context ID only when propagation is enabled for the `ragx` target. HTTP 4xx/5xx responses and transport failures are recorded as errors.
+- `IsRagxTraceID(id)` is the one check for the OpenTelemetry 32-hex trace id read from the `X-Ragx-Trace-Id` response header; `calllog` and `ragx` log it only when it passes.
 - `IsSupportedScheme` shares the named HTTP/HTTPS scheme policy with LLM provider service validation.
 - `ValidatePrivateAllowlist` validates exact `hostname:port` configuration without reading environment variables.
 

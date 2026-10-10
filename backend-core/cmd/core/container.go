@@ -18,7 +18,11 @@ import (
 	llmcontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/controller"
 	llmrepository "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/repository"
 	llmservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/service"
+	orgcontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/organization/controller"
+	orgrepository "github.com/thomasthecoder198/thomastheragx/backend-core/internal/organization/repository"
+	orgservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/organization/service"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apptoken"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/ragx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/retry"
@@ -62,6 +66,8 @@ type RepositoryContainer struct {
 	ProviderRepo llmrepository.ProviderRepo
 	LLMModelRepo llmrepository.LLMModelRepo
 	RoleRepo     llmrepository.RoleRepo
+
+	OrganizationRepo orgrepository.OrganizationRepo
 }
 
 func (rt *coreRuntime) initRepositoryContainer(pool *pgxpool.Pool) RepositoryContainer {
@@ -72,6 +78,8 @@ func (rt *coreRuntime) initRepositoryContainer(pool *pgxpool.Pool) RepositoryCon
 		ProviderRepo: providerRepo,
 		LLMModelRepo: llmrepository.NewLLMModelRepo(providerRepo),
 		RoleRepo:     llmrepository.NewRoleRepo(),
+
+		OrganizationRepo: orgrepository.NewOrganizationRepo(),
 	}
 }
 
@@ -81,6 +89,8 @@ type ServiceContainer struct {
 	LLMModelService  llmservice.LLMModelService
 	ModelSyncService llmservice.ModelSyncService
 	RoleService      llmservice.RoleService
+
+	OrganizationService orgservice.OrganizationService
 }
 
 // initServiceContainer also bootstraps the owner account, so startup fails before serving if it cannot.
@@ -90,12 +100,19 @@ func (rt *coreRuntime) initServiceContainer(ctx context.Context, pool *pgxpool.P
 		return ServiceContainer{}, err
 	}
 	providerService := llmservice.NewProviderService(pool, vault.NewStore(cipher), repositories.ProviderRepo, clients.ModelCatalog)
+	// CORE_RAGX_PROVISION_ATTEMPTS, not cfg.Retry.MaxAttempts: the config checks this budget against the request timeout.
+	provisionPolicy := retry.NewPolicy(config.RetryConfig{
+		MaxAttempts: rt.cfg.Ragx.ProvisionAttempts, BaseDelay: rt.cfg.Retry.BaseDelay, MaxDelay: rt.cfg.Retry.MaxDelay,
+	})
+	organizationService := orgservice.NewOrganizationService(pool, repositories.OrganizationRepo, clients.Ragx, provisionPolicy, uuid.NewString)
 	return ServiceContainer{
 		AuthService:      authService,
 		ProviderService:  providerService,
 		LLMModelService:  llmservice.NewLLMModelService(pool, repositories.LLMModelRepo),
 		ModelSyncService: llmservice.NewModelSyncService(pool, providerService, repositories.LLMModelRepo, clients.ModelCatalog, rt.cfg.ProviderMaxRemoteModels),
 		RoleService:      llmservice.NewRoleService(pool, repositories.LLMModelRepo, repositories.RoleRepo),
+
+		OrganizationService: organizationService,
 	}, nil
 }
 
@@ -104,6 +121,8 @@ type ControllerContainer struct {
 	ProviderController *llmcontroller.ProviderController
 	LLMModelController *llmcontroller.LLMModelController
 	RoleController     *llmcontroller.RoleController
+
+	OrganizationController *orgcontroller.OrganizationController
 }
 
 func (rt *coreRuntime) initControllerContainer(services ServiceContainer, redisClient *redis.Client) (ControllerContainer, error) {
@@ -124,5 +143,7 @@ func (rt *coreRuntime) initControllerContainer(services ServiceContainer, redisC
 		ProviderController: llmcontroller.NewProviderController(services.ProviderService, services.ModelSyncService, maxBodyBytes),
 		LLMModelController: llmcontroller.NewLLMModelController(services.LLMModelService, maxBodyBytes),
 		RoleController:     llmcontroller.NewRoleController(services.RoleService, maxBodyBytes),
+
+		OrganizationController: orgcontroller.NewOrganizationController(services.OrganizationService, maxBodyBytes),
 	}, nil
 }

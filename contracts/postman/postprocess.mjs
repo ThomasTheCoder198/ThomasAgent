@@ -6,6 +6,7 @@ const FOLDER_ORDER = [
   "LLM providers",
   "LLM models",
   "LLM model roles",
+  "Organizations",
   "Lifecycle",
   "Logout",
 ];
@@ -19,6 +20,7 @@ const DELETE_ROUTES = [
 const SAVE_ID_BY_ROUTE = {
   "POST /api/v1/providers": "providerId",
   "POST /api/v1/models": "modelId",
+  "POST /api/v1/orgs": "orgId",
 };
 const EXPECTED_STATUS_BY_ROUTE = {
   "GET /healthz": 200,
@@ -37,7 +39,14 @@ const EXPECTED_STATUS_BY_ROUTE = {
   "DELETE /api/v1/models/{modelId}": 409,
   "GET /api/v1/model-roles": 200,
   "PUT /api/v1/model-roles/{role}": 200,
+  "GET /api/v1/orgs": 200,
+  "POST /api/v1/orgs": 201,
+  "GET /api/v1/orgs/{orgId}": 200,
+  "PATCH /api/v1/orgs/{orgId}": 200,
+  "POST /api/v1/orgs/{orgId}/provision": 200,
 };
+const ORGANIZATIONS_FOLDER = "Organizations";
+const CREATE_ORGANIZATION_ROUTE = "POST /api/v1/orgs";
 const JSON_INDENT = 2;
 
 const csrfPreRequest = [
@@ -133,10 +142,25 @@ function orderLifecycle(collection) {
   if (logout.length) collection.item.push({ name: "Logout", item: logout });
 }
 
+// The other organization requests read {{orgId}}, which only the create request saves.
+function orderFolderFirst(collection, folderName, route) {
+  const folder = collection.item.find((item) => item.name === folderName);
+  if (!folder?.item) return;
+  folder.item.sort(
+    (left, right) =>
+      Number(routeOf(right) === route) - Number(routeOf(left) === route),
+  );
+}
+
 export function postprocess(collection) {
   stripIds(collection);
   // Auth must remain live until role assignment and the in-use deletion guards have run.
   orderLifecycle(collection);
+  orderFolderFirst(
+    collection,
+    ORGANIZATIONS_FOLDER,
+    CREATE_ORGANIZATION_ROUTE,
+  );
   collection.item.sort(
     (a, b) => FOLDER_ORDER.indexOf(a.name) - FOLDER_ORDER.indexOf(b.name),
   );
@@ -169,7 +193,10 @@ export function postprocess(collection) {
     if (tests.length) req.event = [script("test", tests)];
   });
   const keep = (collection.variable ?? []).filter(
-    (v) => !["baseUrl", "csrfToken", "providerId", "modelId"].includes(v.key),
+    (v) =>
+      !["baseUrl", "csrfToken", "providerId", "modelId", "orgId"].includes(
+        v.key,
+      ),
   );
   collection.variable = [
     ...keep,
@@ -177,6 +204,7 @@ export function postprocess(collection) {
     { key: "csrfToken", value: "" },
     { key: "providerId", value: "" },
     { key: "modelId", value: "" },
+    { key: "orgId", value: "" },
   ];
   return collection;
 }

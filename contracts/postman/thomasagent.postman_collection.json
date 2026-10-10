@@ -757,6 +757,310 @@
       ]
     },
     {
+      "name": "Organizations",
+      "description": "",
+      "item": [
+        {
+          "name": "create Organization",
+          "request": {
+            "name": "create Organization",
+            "description": {
+              "content": "Creates the organization, then provisions it in ragx synchronously. Always 201 once the row exists; ragxStatus is ready, or failed with ragxErrorCode when ragx refused or was unreachable.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "v1",
+                "orgs"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"API test {{$timestamp}}\",\n  \"externalParsing\": true\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('expected status', () => pm.expect(pm.response.code).to.equal(201));",
+                  "if (pm.response.code === 201) pm.collectionVariables.set('orgId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
+        },
+        {
+          "name": "list Organizations",
+          "request": {
+            "name": "list Organizations",
+            "description": {},
+            "url": {
+              "path": [
+                "api",
+                "v1",
+                "orgs"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {},
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('expected status', () => pm.expect(pm.response.code).to.equal(200));"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
+        },
+        {
+          "name": "get Organization",
+          "request": {
+            "name": "get Organization",
+            "description": {},
+            "url": {
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                ":orgId"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "type": "any",
+                  "value": "{{orgId}}",
+                  "key": "orgId",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {},
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('expected status', () => pm.expect(pm.response.code).to.equal(200));"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
+        },
+        {
+          "name": "update Organization",
+          "request": {
+            "name": "update Organization",
+            "description": {
+              "content": "Saves the change. A ready org is synced to ragx at once; if that fails it stays ready with settingsSynced false and ragxErrorCode set. Other states only save the row; provision sends it later.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                ":orgId"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "type": "any",
+                  "value": "{{orgId}}",
+                  "key": "orgId",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"externalParsing\": false\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('expected status', () => pm.expect(pm.response.code).to.equal(200));"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
+        },
+        {
+          "name": "provision Organization",
+          "request": {
+            "name": "provision Organization",
+            "description": {
+              "content": "Provisions (or re-syncs) the org in ragx synchronously from pending, failed or ready; answers its real state.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                ":orgId",
+                "provision"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "type": "any",
+                  "value": "{{orgId}}",
+                  "key": "orgId",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {},
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('expected status', () => pm.expect(pm.response.code).to.equal(200));"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
+        }
+      ]
+    },
+    {
       "name": "Lifecycle",
       "item": [
         {
@@ -978,6 +1282,10 @@
     },
     {
       "key": "modelId",
+      "value": ""
+    },
+    {
+      "key": "orgId",
       "value": ""
     }
   ],

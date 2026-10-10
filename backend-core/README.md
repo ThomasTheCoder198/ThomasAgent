@@ -8,6 +8,7 @@ Go API and agent runtime for ThomasAgent.
 - GET `/healthz`: liveness. GET `/readyz`: injected dependency checks.
 - `/api/v1/auth/login`, `/logout`, `/me`: owner sessions, cookie policy and CSRF.
 - `/api/v1/providers`, `/models`, `/model-roles`: vaulted provider keys, model catalog and role assignments.
+- `/api/v1/orgs`, `/orgs/{orgId}`, `/orgs/{orgId}/provision`: organizations, provisioned into ragx synchronously (see `internal/organization`).
 
 ## Dependencies
 - Uses platform config, `internal/errors`, httpx, logging, telemetry and requestid; see each README in `internal/platform/*`.

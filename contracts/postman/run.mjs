@@ -3,7 +3,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import newman from "newman";
 
 const DEFAULT_BASE_URL = "http://localhost:8080";
-const PUBLIC_FOLDERS = ["Health", "Auth", "LLM providers", "LLM models", "LLM model roles"];
+const PUBLIC_FOLDERS = [
+  "Health",
+  "Auth",
+  "LLM providers",
+  "LLM models",
+  "LLM model roles",
+  "Organizations",
+];
 const FINAL_FOLDERS = ["Lifecycle", "Logout"];
 const FAILED_EXIT_CODE = 1;
 

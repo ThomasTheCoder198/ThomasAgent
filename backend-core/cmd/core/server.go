@@ -64,6 +64,7 @@ func (rt *coreRuntime) serveHTTP(ctx context.Context) error {
 		cookieSecure:   rt.cfg.Auth.CookieSecure,
 		health:         rt.readinessChecks(pool, redisClient),
 		requestTimeout: rt.cfg.HTTP.RequestTimeout,
+		organizations:  services.OrganizationService,
 	})
 	go rt.purgeExpiredSessions(ctx, services.AuthService)
 	go rt.serveMetrics(ctx)

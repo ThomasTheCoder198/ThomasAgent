@@ -7,6 +7,7 @@ import (
 
 	authmiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/middleware"
 	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
+	orgmiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/organization/middleware"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 )
 
@@ -15,6 +16,8 @@ type middlewares struct {
 	cookieSecure   bool
 	health         map[string]httpx.ReadinessDependency
 	requestTimeout time.Duration
+	// organizations is kept for RequireOrg, which the app proxy route adds behind the session group.
+	organizations orgmiddleware.OrganizationLookup
 }
 
 func registerRoutes(engine *gin.Engine, c ControllerContainer, mw middlewares) {
@@ -36,4 +39,9 @@ func registerRoutes(engine *gin.Engine, c ControllerContainer, mw middlewares) {
 	session.DELETE("/api/v1/models/:modelId", c.LLMModelController.HandleDeleteModel)
 	session.GET("/api/v1/model-roles", c.RoleController.HandleListRoles)
 	session.PUT("/api/v1/model-roles/:role", c.RoleController.HandleAssignRole)
+	session.GET("/api/v1/orgs", c.OrganizationController.HandleListOrganizations)
+	session.POST("/api/v1/orgs", c.OrganizationController.HandleCreateOrganization)
+	session.GET("/api/v1/orgs/:orgId", c.OrganizationController.HandleGetOrganization)
+	session.PATCH("/api/v1/orgs/:orgId", c.OrganizationController.HandleUpdateOrganization)
+	session.POST("/api/v1/orgs/:orgId/provision", c.OrganizationController.HandleProvisionOrganization)
 }

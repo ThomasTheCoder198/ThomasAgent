@@ -13,3 +13,9 @@ func TestFieldError_NamesFieldAndCodeOnly(t *testing.T) {
 		"fields": []map[string]string{{"field": "apiKey", "code": "INVALID"}},
 	}, err.Details)
 }
+
+func TestFieldConflict_NamesFieldAndTakenCode(t *testing.T) {
+	err := FieldConflict("name")
+	require.Equal(t, CodeConflict, err.Code)
+	require.Equal(t, []map[string]string{{"field": "name", "code": FieldCodeTaken}}, err.Details["fields"])
+}

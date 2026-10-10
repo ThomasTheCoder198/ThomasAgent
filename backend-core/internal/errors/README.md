@@ -6,7 +6,7 @@ Codes, HTTP statuses, retryability and VI/EN messages come from `contracts/error
 HTTP serialization and boundary logging belong to `platform/httpx` and callers.
 
 ## Entry points
-- `FieldError`, `FieldCodeRequired` and `FieldCodeInvalid` supply validation field details without submitted values.
+- `FieldError`, `FieldCodeRequired` and `FieldCodeInvalid` supply validation field details without submitted values. `FieldConflict` and `FieldCodeTaken` report a unique value that already exists (`CONFLICT` with the same details shape).
 - Generated `errors.go`: `ErrNotFound`, other named errors, `Code` constants and `LookupDefinition`.
 - `internal_causes.go`: internal causes for vault, tenant, App-token signing and HTTP stream/decoder operations. These are not public HTTP codes; a boundary normalizes them to a catalog error.
 - Identity/LLM provider definitions include authentication, provider/model lookup, capability, synchronization, and conflict errors. `INTERNAL_TOKEN_INVALID` is registered but currently unused (the `/internal` service-token route was removed in M1.2).

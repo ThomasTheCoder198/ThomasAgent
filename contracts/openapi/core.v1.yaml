@@ -17,6 +17,7 @@ tags:
   - name: LLM providers
   - name: LLM models
   - name: LLM model roles
+  - name: Organizations
 security:
   - sessionCookie: []
     csrfHeader: []
@@ -339,6 +340,74 @@ paths:
         "422": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/orgs:
+    get:
+      tags: [Organizations]
+      operationId: listOrganizations
+      responses:
+        "200": { $ref: "#/components/responses/OrganizationList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [Organizations]
+      operationId: createOrganization
+      description: >-
+        Creates the organization, then provisions it in ragx synchronously. Always 201 once the row exists;
+        ragxStatus is ready, or failed with ragxErrorCode when ragx refused or was unreachable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrganizationCreate" }
+            example: { name: "API test {{$timestamp}}", externalParsing: true }
+      responses:
+        "201": { $ref: "#/components/responses/Organization" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+  /api/v1/orgs/{orgId}:
+    parameters:
+      - { name: orgId, in: path, required: true, schema: { type: string, format: uuid }, example: "{{orgId}}" }
+    get:
+      tags: [Organizations]
+      operationId: getOrganization
+      responses:
+        "200": { $ref: "#/components/responses/Organization" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Organizations]
+      operationId: updateOrganization
+      description: >-
+        Saves the change. A ready org is synced to ragx at once; if that fails it stays ready with settingsSynced
+        false and ragxErrorCode set. Other states only save the row; provision sends it later.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrganizationUpdate" }
+            example: { externalParsing: false }
+      responses:
+        "200": { $ref: "#/components/responses/Organization" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+  /api/v1/orgs/{orgId}/provision:
+    parameters:
+      - { name: orgId, in: path, required: true, schema: { type: string, format: uuid }, example: "{{orgId}}" }
+    post:
+      tags: [Organizations]
+      operationId: provisionOrganization
+      description: Provisions (or re-syncs) the org in ragx synchronously from pending, failed or ready; answers its real state.
+      responses:
+        "200": { $ref: "#/components/responses/Organization" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     sessionCookie: { type: apiKey, in: cookie, name: thomas_session }
@@ -460,6 +529,36 @@ components:
                         {
                           type: array,
                           items: { $ref: "#/components/schemas/Model" },
+                        },
+                    },
+                }
+    Organization:
+      description: One organization.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/SuccessResponse" }
+              - {
+                  type: object,
+                  properties:
+                    { data: { $ref: "#/components/schemas/Organization" } },
+                }
+    OrganizationList:
+      description: Organizations, ordered by name.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/SuccessResponse" }
+              - {
+                  type: object,
+                  properties:
+                    {
+                      data:
+                        {
+                          type: array,
+                          items: { $ref: "#/components/schemas/Organization" },
                         },
                     },
                 }
@@ -607,3 +706,30 @@ components:
     SyncResult:
       type: object
       properties: { added: { type: integer }, updated: { type: integer }, skipped: { type: integer } }
+    OrganizationCreate:
+      type: object
+      additionalProperties: false
+      required: [name, externalParsing]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        externalParsing: { type: boolean }
+    OrganizationUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        externalParsing: { type: boolean }
+    Organization:
+      type: object
+      required: [id, name, externalParsing, ragxStatus, ragxErrorCode, settingsSynced, defaultKnowledgeBaseId, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        externalParsing: { type: boolean }
+        ragxStatus: { type: string, enum: [pending, ready, failed] }
+        ragxErrorCode: { type: [string, "null"], description: Catalog code of the last failed ragx sync }
+        settingsSynced: { type: boolean, description: False until ragx has the latest name and externalParsing }
+        defaultKnowledgeBaseId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }

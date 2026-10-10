@@ -24,6 +24,12 @@ test("runner passes environment credentials to Newman without command-line argum
   assert.deepEqual(options.folder.slice(-2), ["Lifecycle", "Logout"]);
 });
 
+test("runner includes the Organizations folder before the final folders", () => {
+  const { folder } = buildRunOptions(fixtureEnvironment);
+  assert.ok(folder.includes("Organizations"));
+  assert.ok(folder.indexOf("Organizations") < folder.indexOf("Lifecycle"));
+});
+
 test("runner has no Internal folder and no service token variable even when one is set", () => {
   const options = buildRunOptions({
     ...fixtureEnvironment,

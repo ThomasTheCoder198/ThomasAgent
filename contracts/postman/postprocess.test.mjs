@@ -89,7 +89,7 @@ test("is deterministic: random generator ids are removed", () => {
 test("declares collection variables", () => {
   const out = postprocess(structuredClone(raw));
   const names = out.variable.map((v) => v.key);
-  for (const key of ["baseUrl", "csrfToken", "providerId", "modelId"])
+  for (const key of ["baseUrl", "csrfToken", "providerId", "modelId", "orgId"])
     assert.ok(names.includes(key), key);
 });
 
@@ -199,4 +199,30 @@ test("uses the cookie jar for every request: no collection or request auth heade
   );
   assert.ok(!output.item.some((folder) => folder.name === "Internal"));
   assert.ok(!JSON.stringify(output).includes("serviceToken"));
+});
+
+test("runs the create-organization request first and expects the synchronous provisioning statuses", () => {
+  const request = (name, method, path) => ({
+    name,
+    request: { method, url: { host: ["{{baseUrl}}"], path } },
+  });
+  const input = structuredClone(raw);
+  input.item.push({
+    name: "Organizations",
+    item: [
+      request("list", "GET", ["api", "v1", "orgs"]),
+      request("provision", "POST", ["api", "v1", "orgs", ":orgId", "provision"]),
+      request("create", "POST", ["api", "v1", "orgs"]),
+    ],
+  });
+  const output = postprocess(input);
+  const folder = output.item.find((item) => item.name === "Organizations");
+  assert.deepEqual(
+    folder.item.map((item) => item.name),
+    ["create", "list", "provision"],
+  );
+  const script = (item) => item.event[0].script.exec.join("\n");
+  assert.match(script(folder.item[0]), /expected status.*201/);
+  assert.match(script(folder.item[0]), /orgId/);
+  assert.match(script(folder.item[2]), /expected status.*200/);
 });

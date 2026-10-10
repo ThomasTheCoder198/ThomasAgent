@@ -175,15 +175,7 @@ func TestProviderHTTP_KeyNeverLeaks(t *testing.T) {
 	require.NotContains(t, logs.String(), providerSecretKey)
 }
 
-func TestProviderHTTP_InternalResolveRequiresServiceToken(t *testing.T) {
-	var logs bytes.Buffer
-	router, _ := newProviderRouter(t, &logs)
-	response := send(router, http.MethodGet, "/internal/models/resolve?role=chat.fast", "", map[string]string{"Authorization": "Bearer wrong"})
-	require.Equal(t, http.StatusUnauthorized, response.Code)
-	require.Equal(t, "INTERNAL_TOKEN_INVALID", errCode(t, response))
-}
-
-func TestProviderHTTP_RoleAssignmentAndResolve(t *testing.T) {
+func TestProviderHTTP_RoleAssignmentChecksCapabilities(t *testing.T) {
 	var logs bytes.Buffer
 	router, fixture := newProviderRouter(t, &logs)
 	provider := seedProvider(t, fixture)
@@ -193,8 +185,5 @@ func TestProviderHTTP_RoleAssignmentAndResolve(t *testing.T) {
 	require.Equal(t, http.StatusUnprocessableEntity, missingTools.Code)
 	assigned := send(router, http.MethodPut, "/api/v1/model-roles/chat.fast", `{"modelId":"`+llmModel.ID.String()+`"}`, nil)
 	require.Equal(t, http.StatusOK, assigned.Code)
-	resolved := send(router, http.MethodGet, "/internal/models/resolve?role=chat.fast", "", map[string]string{"Authorization": "bEaReR " + serviceToken})
-	require.Equal(t, "no-store", resolved.Header().Get("Cache-Control"))
-	require.Equal(t, http.StatusOK, resolved.Code)
-	require.Contains(t, resolved.Body.String(), providerSecretKey, "only the internal endpoint returns the key")
+	require.NotContains(t, assigned.Body.String(), providerSecretKey)
 }

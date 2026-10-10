@@ -6,7 +6,7 @@ Single source for error codes and shared schemas used by the Go core, Python RAG
 
 ## Entry points
 - `errors.yaml` — authoritative error codes, HTTP statuses, retryability, and VI/EN messages.
-  Includes authentication, internal service-token, and LLM provider catalog errors.
+  Includes authentication and LLM provider catalog errors (`INTERNAL_TOKEN_INVALID` stays registered but is unused since M1.2).
 - `request-id.json` — the `X-Request-Id` header, its pattern and prefixes, with valid/invalid examples. There is no
   generator: Go (`backend-core/internal/platform/requestid`), Python (`ragx/.../platform/request_id.py`) and
   TypeScript (`frontend/lib/api/request-id.ts`) copy the values and each has a test that reads this file.
@@ -51,7 +51,7 @@ Missing, malformed or other content types return catalog `UNSUPPORTED_MEDIA_TYPE
 Unknown fields and malformed JSON return `VALIDATION_FAILED` (400). The stricter body
 decoding is a breaking change for callers that previously sent other media types or extra fields.
 API tests require a running core and owner credentials. Export `CORE_AUTH_OWNER_EMAIL` and `CORE_AUTH_OWNER_PASSWORD` to use a disposable test server, or fall back to the local compose environment. `CORE_API_TEST_BASE_URL` overrides the default `http://localhost:8080`.
-The API test assigns `chat.fast` and verifies that deleting its model/provider returns conflict; use a disposable development database. Supplying `CORE_SERVICE_TOKEN` includes internal resolution. The programmatic runner passes credentials through environment values and prints only assertion counts and failed check names.
+The API test assigns `chat.fast` and verifies that deleting its model/provider returns conflict; use a disposable development database. The programmatic runner passes credentials through environment values and prints only assertion counts and failed check names.
 Never edit generated files. Add an error code to `errors.yaml` first, then run `task gen`.
 Catalog version is 1; codes use UPPER_SNAKE and must be unique. HTTP statuses are 400–599 and both localized messages are required.
 The parser sorts entries by code so generated output is deterministic. Renderers emit UTF-8 with LF line endings.

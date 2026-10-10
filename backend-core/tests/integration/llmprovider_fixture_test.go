@@ -15,7 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	authmiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/middleware"
 	llmcontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/controller"
 	llmmodel "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/model"
 	llmrepository "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/repository"
@@ -30,7 +29,6 @@ import (
 
 const (
 	providerSecretKey = "sk-or-v1-supersecret"
-	serviceToken      = "svc-token"
 	testMaxBodyBytes  = 64 << 10
 )
 
@@ -54,7 +52,6 @@ type llmServices struct {
 	models    llmservice.LLMModelService
 	modelSync llmservice.ModelSyncService
 	roles     llmservice.RoleService
-	resolve   llmservice.ResolveService
 }
 
 type llmFixture struct {
@@ -81,7 +78,6 @@ func newLLMFixture(t *testing.T) *llmFixture {
 			models:    llmservice.NewLLMModelService(pool, llmModelRepo),
 			modelSync: llmservice.NewModelSyncService(pool, providerService, llmModelRepo, catalog, config.DefaultProviderMaxRemoteModels),
 			roles:     llmservice.NewRoleService(pool, llmModelRepo, roleRepo),
-			resolve:   llmservice.NewResolveService(pool, providerService, llmModelRepo, roleRepo),
 		},
 		pool:    pool,
 		catalog: catalog,
@@ -106,7 +102,7 @@ func mountProvidersForTest(routes gin.IRoutes, services llmServices, maxBodyByte
 	routes.PUT("/api/v1/model-roles/:role", roles.HandleAssignRole)
 }
 
-// newProviderRouter serves the provider routes in the platform tenant without a session, plus the internal resolve route.
+// newProviderRouter serves the provider routes in the platform tenant without a session.
 func newProviderRouter(t *testing.T, logs *bytes.Buffer) (*gin.Engine, *llmFixture) {
 	t.Helper()
 	fixture := newLLMFixture(t)
@@ -118,7 +114,6 @@ func newProviderRouter(t *testing.T, logs *bytes.Buffer) (*gin.Engine, *llmFixtu
 		ctx.Next()
 	})
 	mountProvidersForTest(router, fixture.llmServices, testMaxBodyBytes)
-	router.GET("/internal/models/resolve", authmiddleware.RequireServiceToken(serviceToken), llmcontroller.NewResolveController(fixture.resolve).HandleResolve)
 	return router, fixture
 }
 

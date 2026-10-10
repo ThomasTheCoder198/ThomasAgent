@@ -96,14 +96,14 @@ test("declares collection variables", () => {
 test("keeps required query examples while disabling optional generated filters", () => {
   const input = structuredClone(raw);
   input.item.push({
-    name: "Internal",
+    name: "LLM models",
     item: [
       {
-        name: "resolve",
+        name: "list models",
         request: {
           method: "GET",
           url: {
-            path: ["internal", "models", "resolve"],
+            path: ["api", "v1", "models"],
             query: [
               {
                 key: "role",
@@ -122,8 +122,8 @@ test("keeps required query examples while disabling optional generated filters",
     ],
   });
   const output = postprocess(input);
-  const query = output.item.find((folder) => folder.name === "Internal").item[0]
-    .request.url.query;
+  const query = output.item.find((folder) => folder.name === "LLM models")
+    .item[0].request.url.query;
   assert.equal(query[0].value, "chat.fast");
   assert.equal(query[0].disabled, false);
   assert.equal(query[1].value, "");
@@ -187,21 +187,9 @@ test("asserts successful login and create status instead of accepting unauthoriz
   assert.match(create.event[0].script.exec.join("\n"), /expected status.*201/);
 });
 
-test("uses the cookie jar publicly and an explicit service token internally", () => {
+test("uses the cookie jar for every request: no collection or request auth header", () => {
   const input = structuredClone(raw);
   input.auth = { type: "apikey", apikey: [{ key: "in", value: "header" }] };
-  input.item.push({
-    name: "Internal",
-    item: [
-      {
-        name: "resolve",
-        request: {
-          method: "GET",
-          url: { path: ["internal", "models", "resolve"] },
-        },
-      },
-    ],
-  });
   const output = postprocess(input);
   assert.deepEqual(output.auth, { type: "noauth" });
   assert.deepEqual(
@@ -209,12 +197,6 @@ test("uses the cookie jar publicly and an explicit service token internally", ()
       .auth,
     { type: "noauth" },
   );
-  assert.deepEqual(
-    output.item.find((folder) => folder.name === "Internal").item[0].request
-      .auth,
-    {
-      type: "bearer",
-      bearer: [{ key: "token", value: "{{serviceToken}}", type: "string" }],
-    },
-  );
+  assert.ok(!output.item.some((folder) => folder.name === "Internal"));
+  assert.ok(!JSON.stringify(output).includes("serviceToken"));
 });

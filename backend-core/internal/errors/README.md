@@ -9,7 +9,7 @@ HTTP serialization and boundary logging belong to `platform/httpx` and callers.
 - `FieldError`, `FieldCodeRequired` and `FieldCodeInvalid` supply validation field details without submitted values.
 - Generated `errors.go`: `ErrNotFound`, other named errors, `Code` constants and `LookupDefinition`.
 - `internal_causes.go`: internal causes for vault, tenant, App-token signing and HTTP stream/decoder operations. These are not public HTTP codes; a boundary normalizes them to a catalog error.
-- Identity/LLM provider definitions include authentication, service-token validation, provider/model lookup, capability, synchronization, and conflict errors.
+- Identity/LLM provider definitions include authentication, provider/model lookup, capability, synchronization, and conflict errors. `INTERNAL_TOKEN_INVALID` is registered but currently unused (the `/internal` service-token route was removed in M1.2).
 - `ErrorDefinition`: explicit `HTTPStatus`, `Retryable`, `MessageVI` and `MessageEN` metadata.
 - `ErrNotFound.WithCause(err)`, `.WithDetails(details)` and `.WithMessage(message)` construct fresh `*AppError` values.
 - `ToAppError` and `CodeOf`: find wrapped application errors and normalizes named errors; unknown causes become INTERNAL_ERROR.

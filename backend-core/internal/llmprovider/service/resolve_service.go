@@ -11,7 +11,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/repository"
 )
 
-// ResolveService turns a role into a callable model with its decrypted key, for internal callers only.
+// ResolveService resolves a role to its model and decrypted key; the M2 agent runtime uses it.
 type ResolveService interface {
 	Resolve(ctx context.Context, role model.Role) (model.ResolvedModel, error)
 }

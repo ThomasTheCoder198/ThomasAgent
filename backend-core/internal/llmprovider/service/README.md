@@ -7,7 +7,8 @@ Business rules and transactions: provider CRUD and key rotation, manual models, 
 - `ProviderService` (`provider_service.go`)
 - `LLMModelService` (`llm_model_service.go`)
 - `ModelSyncService` (`model_sync_service.go`)
-- `RoleService` (`role_service.go`), `ResolveService` (`resolve_service.go`)
+- `RoleService` (`role_service.go`)
+- `ResolveService` (`resolve_service.go`): role → model with its decrypted key, for the M2 agent runtime; no HTTP route
 - Audit action names (`audit_events.go`)
 
 ## Dependencies

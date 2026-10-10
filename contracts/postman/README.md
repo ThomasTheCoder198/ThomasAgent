@@ -45,7 +45,6 @@ Run the complete collection against an isolated backend: it assigns `chat.fast`.
 The example provider uses a denied loopback HTTP endpoint so connection/sync
 checks deterministically return 400 without calling a real external provider.
 Positive catalog/sync behavior is covered by LLM provider integration tests.
-Internal resolution retains its required role query and uses `serviceToken`; the runner includes it when `CORE_SERVICE_TOKEN` is supplied.
 Keep credentials out of committed environments and generated artifacts. See the parent README for environment overrides.
 
 ## Common failures

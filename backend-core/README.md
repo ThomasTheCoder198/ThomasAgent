@@ -8,7 +8,6 @@ Go API and agent runtime for ThomasAgent.
 - GET `/healthz`: liveness. GET `/readyz`: injected dependency checks.
 - `/api/v1/auth/login`, `/logout`, `/me`: owner sessions, cookie policy and CSRF.
 - `/api/v1/providers`, `/models`, `/model-roles`: vaulted provider keys, model catalog and role assignments.
-- GET `/internal/models/resolve`: service-token authentication; decrypted keys are internal-only.
 
 ## Dependencies
 - Uses platform config, `internal/errors`, httpx, logging, telemetry and requestid; see each README in `internal/platform/*`.
@@ -55,12 +54,12 @@ derive `tenant_id` from trusted context. Owner bootstrap is idempotent.
 
 `CORE_VAULT_MASTER_KEY` is required and must decode to 32 bytes; `serve` validates
 it before opening dependencies or listening. Keep the key stable. All config-loading
-commands also require `CORE_SERVICE_TOKEN` and a different `CORE_AUTH_LOGIN_LIMITER_KEY`, each of at least 32 characters; `change-me*` values are rejected outside dev. Set `CORE_AUTH_OWNER_EMAIL` and
+commands also require `CORE_SERVICE_TOKEN` and a different `CORE_AUTH_LOGIN_LIMITER_KEY`, each of at least 32 characters; `change-me*` values are rejected outside dev. `CORE_SERVICE_TOKEN` is currently unused (reserved; its `/internal` role was removed in M1.2) but config validation still requires it. Set `CORE_AUTH_OWNER_EMAIL` and
 `CORE_AUTH_OWNER_PASSWORD` (at least 12 characters) to bootstrap the owner.
 Session/cookie/login settings are documented in [config](internal/platform/config/README.md).
 
-Provider keys are write-only; public DTOs expose `hasApiKey`. Only service-token
-protected internal resolve returns a decrypted key. Provider catalog calls use
+Provider keys are write-only; public DTOs expose `hasApiKey`. No HTTP route returns a decrypted key;
+the M2 agent runtime reads it through `ResolveService`. Provider catalog calls use
 retry/backoff, circuit breaking and a guarded HTTP client. Public destinations
 require HTTPS. Configure `CORE_PROVIDER_PRIVATE_ALLOWLIST` with exact `host:port`
 entries for local providers; private endpoints and HTTP are denied by default.

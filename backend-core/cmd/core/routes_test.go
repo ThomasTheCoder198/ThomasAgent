@@ -48,7 +48,6 @@ func TestRoutesDocumentedInOpenAPI(t *testing.T) {
 		ProviderController: llmcontroller.NewProviderController(nil, nil, 1),
 		LLMModelController: llmcontroller.NewLLMModelController(nil, 1),
 		RoleController:     llmcontroller.NewRoleController(nil, 1),
-		ResolveController:  llmcontroller.NewResolveController(nil),
 	}, middlewares{requestTimeout: time.Second})
 	documented := documentedRoutes(t)
 	implemented := map[string]bool{}
@@ -79,7 +78,6 @@ func TestRoutes_NoProviderRedirectAndEnvelopedErrors(t *testing.T) {
 		ProviderController: llmcontroller.NewProviderController(nil, nil, 1),
 		LLMModelController: llmcontroller.NewLLMModelController(nil, 1),
 		RoleController:     llmcontroller.NewRoleController(nil, 1),
-		ResolveController:  llmcontroller.NewResolveController(nil),
 	}, middlewares{requestTimeout: time.Second})
 	for _, tc := range []struct{ method, path, code, body string }{
 		{http.MethodPost, "/api/v1/providers", "UNAUTHENTICATED", `"code":"UNAUTHENTICATED"`},

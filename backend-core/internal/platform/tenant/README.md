@@ -11,7 +11,7 @@ or model parameters and does not choose a tenant when context is absent.
 
 ## Dependencies
 - Uses: context and the shared error catalog.
-- Used by: auth, audit, vault, llm, startup bootstrap and internal routes.
+- Used by: auth, audit, vault, llm and startup bootstrap.
 
 ## Run & test
 ```bash
@@ -21,7 +21,7 @@ TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/auth ./internal/platform/va
 
 ## Conventions
 Business repositories must read `ID` before querying and return its error.
-Startup, unauthenticated platform login, and service-token routes explicitly set
+Startup and unauthenticated platform login explicitly set
 the platform scope. Session middleware derives scope from the trusted session
 row found by its token hash; request JSON never selects the tenant.
 

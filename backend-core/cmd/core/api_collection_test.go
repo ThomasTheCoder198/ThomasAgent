@@ -55,7 +55,7 @@ func TestAPI_GeneratedPostmanCollection(t *testing.T) {
 	require.NoError(t, err)
 	gin.SetMode(gin.ReleaseMode)
 	router := httpx.NewRouter(httpx.NewSlogErrorLogger(app.log))
-	registerRoutes(router, controllers, middlewares{authService: services.AuthService, cookieSecure: cfg.Auth.CookieSecure, serviceToken: cfg.ServiceToken, health: app.readinessChecks(pool, redisClient), requestTimeout: cfg.HTTP.RequestTimeout})
+	registerRoutes(router, controllers, middlewares{authService: services.AuthService, cookieSecure: cfg.Auth.CookieSecure, health: app.readinessChecks(pool, redisClient), requestTimeout: cfg.HTTP.RequestTimeout})
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 	runCollection(t, server.URL)

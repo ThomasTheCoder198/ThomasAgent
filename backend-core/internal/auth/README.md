@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Bootstraps the operator, verifies Argon2id passwords, issues hashed sessions, and serves cookie-based login, logout and current-user endpoints. It also authenticates internal callers by service token.
+Bootstraps the operator, verifies Argon2id passwords, issues hashed sessions, and serves cookie-based login, logout and current-user endpoints.
 M0.2 data belongs to the [Platform tenant](../../../docs/glossary.md) (`default`). Repository writes and reads require `tenant_id` from trusted server context through `tenant.ID`, which returns an error when scope is absent. Login and startup bootstrap explicitly establish platform scope; session middleware derives scope from the stored session row. Client and model parameters never select a tenant.
 
 ## Entry points
@@ -12,7 +12,7 @@ The domain follows the same layers as every core domain; a request flows `contro
 | Folder | Holds | Example |
 |---|---|---|
 | `controller/` | HTTP handlers only, plus the trusted-proxy client IP they pass to the limiter | `AuthController.HandleLogin`, `HandleLogout`, `HandleMe` |
-| `middleware/` | Gin middleware that guards other routes | `RequireSession`, `UserFromContext`, `RequireServiceToken` |
+| `middleware/` | Gin middleware that guards other routes | `RequireSession`, `UserFromContext` |
 | `dto/` | JSON request and response types | `LoginRequest`, `LoginResponse`, `MeResponse` |
 | `service/` | Business rules and transactions (`AuthService` interface + `AuthServiceImpl`), Argon2id hashing, token generation | `EnsureOwner`, `Login`, `Authenticate`, `Logout` |
 | `repository/` | SQL only (`UserRepo`, `SessionRepo`) | `FindSessionAcrossTenants`, `PurgeExpiredSessionsAcrossTenants` |
@@ -42,9 +42,9 @@ Passwords, raw session tokens and secrets must never enter logs, errors or audit
 
 The browser never sends a user or tenant id. It sends the opaque `thomas_session` cookie (HttpOnly) and, on unsafe methods, `X-CSRF-Token` copied from the readable `thomas_csrf` cookie. Core stores only the SHA-256 of the session token; the session row decides user and tenant. Both cookies use Path `/`, SameSite Lax and the constructor's Secure flag. Their absolute expiry matches the session. Unsafe methods require `X-CSRF-Token` equal to the authenticated session's token with constant-time comparison; GET, HEAD and OPTIONS are safe. Logout requires CSRF, deletes the session and clears both cookies. When a session cookie no longer matches a live session (expired, purged by the job, or logged out elsewhere), `RequireSession` also clears both cookies in its 401 response, so the frontend proxy, which only checks that `thomas_session` exists, sends the user to login instead of looping on 401s.
 
-The service token guards `/internal/*`: a `Bearer` token compared by SHA-256 digest in constant time. Success sets the platform tenant and `Cache-Control: no-store`; failure returns `INTERNAL_TOKEN_INVALID`.
+`CORE_SERVICE_TOKEN` is currently unused: its `/internal` role was removed in M1.2 (ragx never calls core). It stays reserved and required by config validation, and `INTERNAL_TOKEN_INVALID` stays in the catalog unused.
 
-The Redis limiter atomically increments expiring email/IP, email-global and IP-only counters, repairs lost TTL, and returns the longest blocked bucket's remaining TTL in `Retry-After`. The typed limits are `CORE_AUTH_LOGIN_MAX_ATTEMPTS` (10), `CORE_AUTH_LOGIN_EMAIL_MAX_ATTEMPTS` (20), and `CORE_AUTH_LOGIN_IP_MAX_ATTEMPTS` (100), each at least one. The IP-only budget blocks one address spraying different emails. Identities use keyed HMAC-SHA256 of normalized email, keyed by `CORE_AUTH_LOGIN_LIMITER_KEY` (never the service token). Successful login resets the email/IP and email-global counters; the aggregate IP budget remains until expiry. Redis/script failures reject the login with INTERNAL_ERROR before password validation. Rotation of the HMAC key resets email budgets.
+The Redis limiter atomically increments expiring email/IP, email-global and IP-only counters, repairs lost TTL, and returns the longest blocked bucket's remaining TTL in `Retry-After`. The typed limits are `CORE_AUTH_LOGIN_MAX_ATTEMPTS` (10), `CORE_AUTH_LOGIN_EMAIL_MAX_ATTEMPTS` (20), and `CORE_AUTH_LOGIN_IP_MAX_ATTEMPTS` (100), each at least one. The IP-only budget blocks one address spraying different emails. Identities use keyed HMAC-SHA256 of normalized email, keyed by `CORE_AUTH_LOGIN_LIMITER_KEY` (never `CORE_SERVICE_TOKEN`). Successful login resets the email/IP and email-global counters; the aggregate IP budget remains until expiry. Redis/script failures reject the login with INTERNAL_ERROR before password validation. Rotation of the HMAC key resets email budgets.
 
 The email-global bucket intentionally runs before password verification and still blocks a correct password once exhausted. Someone who knows the owner email can therefore lock that account out for the remaining window, including by rotating IPs. This retains brute-force protection across addresses; there is no successful-password exemption. The IP-only budget reduces spraying from a single address but cannot eliminate a distributed account lockout. Shared NAT addresses also share the IP budget; tune its higher default for trusted deployment traffic.
 

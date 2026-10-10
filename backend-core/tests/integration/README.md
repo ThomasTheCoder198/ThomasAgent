@@ -5,7 +5,7 @@ HTTP tests that cross layers and domains: real login, session, CSRF, rate limiti
 
 ## Entry points
 - `auth_*_test.go`: auth flows
-- `llmprovider_*_test.go`: provider routes with a real login and the internal resolve route
+- `llmprovider_*_test.go`: provider routes with a real login
 
 ## Dependencies
 - Uses: every domain, Docker Postgres and Redis

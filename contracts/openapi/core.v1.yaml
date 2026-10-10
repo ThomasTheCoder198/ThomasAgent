@@ -17,7 +17,6 @@ tags:
   - name: LLM providers
   - name: LLM models
   - name: LLM model roles
-  - name: Internal
 security:
   - sessionCookie: []
     csrfHeader: []
@@ -340,43 +339,10 @@ paths:
         "422": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
-  /internal/models/resolve:
-    get:
-      tags: [Internal]
-      operationId: resolveLLMModel
-      security: [{ serviceToken: [] }]
-      parameters:
-        - {
-            name: role,
-            in: query,
-            required: true,
-            schema: { $ref: "#/components/schemas/Role" },
-            example: chat.fast,
-          }
-      responses:
-        "200":
-          description: Resolved model including the decrypted API key (service-to-service only).
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - { $ref: "#/components/schemas/SuccessResponse" }
-                  - {
-                      type: object,
-                      properties:
-                        {
-                          data: { $ref: "#/components/schemas/ResolvedModel" },
-                        },
-                    }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "404": { $ref: "#/components/responses/Error" }
-        "400": { $ref: "#/components/responses/Error" }
-        "503": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     sessionCookie: { type: apiKey, in: cookie, name: thomas_session }
     csrfHeader: { type: apiKey, in: header, name: X-CSRF-Token }
-    serviceToken: { type: http, scheme: bearer }
   responses:
     HealthStatus:
       description: Health result.
@@ -641,15 +607,3 @@ components:
     SyncResult:
       type: object
       properties: { added: { type: integer }, updated: { type: integer }, skipped: { type: integer } }
-    ResolvedModel:
-      type: object
-      properties:
-        role: { $ref: "#/components/schemas/Role" }
-        fallbackFrom: { $ref: "#/components/schemas/Role" }
-        providerKind: { $ref: "#/components/schemas/ProviderKind" }
-        baseUrl: { type: string }
-        apiKey: { type: string }
-        modelRef: { type: string }
-        capabilities:
-          { type: array, items: { $ref: "#/components/schemas/Capability" } }
-        embeddingDims: { type: integer }

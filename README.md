@@ -16,6 +16,8 @@ task smoke     # health checks
 task web:dev   # run in a separate terminal; host frontend, WEB_CORE_URL defaults to http://localhost:8080
 ```
 
+`CORE_SERVICE_TOKEN` in `deploy/core/.env` is currently unused (reserved; its `/internal` role was removed in M1.2) but config validation still requires it.
+
 ## Development checks
 
 ```bash

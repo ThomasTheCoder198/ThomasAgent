@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Owns the platform LLM providers, their models, write-only vaulted provider keys, capability-checked role assignments and model resolution. Every operation requires a tenant from trusted context; absent context fails closed. The internal service-token boundary (`auth/middleware.RequireServiceToken`) selects platform tenant `default`. Public input never chooses a tenant.
+Owns the platform LLM providers, their models, write-only vaulted provider keys, capability-checked role assignments and model resolution. Every operation requires a tenant from trusted context; absent context fails closed. Public input never chooses a tenant.
 
 ## Entry points
 
@@ -22,7 +22,7 @@ The domain follows the same layers as every core domain; a request flows `contro
 ## Dependencies
 
 - Uses: `platform/vault`, `platform/audit`, `platform/postgres` (DBTX, `WithTransaction`), `platform/httpx`, `platform/retry`, `platform/outbound`, `platform/config`, named catalog errors.
-- Used by: the public `/api/v1/providers`, `/api/v1/models`, `/api/v1/model-roles` routes and the internal `/internal/models/resolve` route.
+- Used by: the public `/api/v1/providers`, `/api/v1/models`, `/api/v1/model-roles` routes. `ResolveService` has no HTTP route: the M2 agent runtime will call it inside core.
 
 ## Run & test
 
@@ -41,7 +41,7 @@ Each catalog attempt records `outbound_requests_total` and `outbound_request_dur
 
 API keys are write-only: absent/null preserves a key unless the base URL changes (then the stored key is deleted), empty removes it, and another value replaces it. Provider responses expose `hasApiKey` only. Provider updates lock the row so parallel updates cannot orphan secrets. Models in use cannot be deleted, including through provider cascade deletion. Mutations and audit records share one transaction (`postgres.WithTransaction`).
 
-The internal resolve response includes `role`, `providerKind`, `baseUrl`, `apiKey`, `modelRef`, `capabilities`, optional `embeddingDims` and `fallbackFrom`; provider keys appear only here, with `Cache-Control: no-store`.
+`ResolveService` returns the decrypted key; it is never exposed over HTTP (the old `/internal/models/resolve` route was removed because ragx no longer calls core).
 
 Kinds: openrouter, openai, anthropic, google, azure, ollama, openai_compatible, cohere, voyage, jina, typesafe. Capabilities: chat, tools, vision, reasoning, embedding, rerank, decision. Catalog sync supports OpenRouter only.
 

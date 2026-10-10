@@ -1,10 +1,10 @@
 # LLM provider DTO
 
 ## Purpose
-JSON request and response bodies of the provider, model, role and resolve endpoints and their conversions.
+JSON request and response bodies of the provider, model and role endpoints and their conversions.
 
 ## Entry points
-- `provider.go`, `llm_model.go`, `role.go`, `resolved_model.go`
+- `provider.go`, `llm_model.go`, `role.go`
 - `DeleteResponse` (`common.go`)
 
 ## Dependencies
@@ -18,4 +18,4 @@ go build ./internal/llmprovider/dto
 ```
 
 ## Conventions
-Request types are write-only for API keys; only `ResolvedModelResponse` (internal route) contains a key.
+Request types are write-only for API keys; no response contains a key.

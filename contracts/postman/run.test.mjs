@@ -24,15 +24,15 @@ test("runner passes environment credentials to Newman without command-line argum
   assert.deepEqual(options.folder.slice(-2), ["Lifecycle", "Logout"]);
 });
 
-test("runner includes internal resolution when a service token is supplied", () => {
+test("runner has no Internal folder and no service token variable even when one is set", () => {
   const options = buildRunOptions({
     ...fixtureEnvironment,
     CORE_SERVICE_TOKEN: "fixture service token",
   });
-  assert.ok(options.folder.includes("Internal"));
+  assert.ok(!options.folder.includes("Internal"));
   assert.equal(
-    options.envVar.find((variable) => variable.key === "serviceToken").value,
-    "fixture service token",
+    options.envVar.find((variable) => variable.key === "serviceToken"),
+    undefined,
   );
 });
 

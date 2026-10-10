@@ -13,7 +13,6 @@ import (
 type middlewares struct {
 	authService    authservice.AuthService
 	cookieSecure   bool
-	serviceToken   string
 	health         map[string]httpx.ReadinessDependency
 	requestTimeout time.Duration
 }
@@ -37,7 +36,4 @@ func registerRoutes(engine *gin.Engine, c ControllerContainer, mw middlewares) {
 	session.DELETE("/api/v1/models/:modelId", c.LLMModelController.HandleDeleteModel)
 	session.GET("/api/v1/model-roles", c.RoleController.HandleListRoles)
 	session.PUT("/api/v1/model-roles/:role", c.RoleController.HandleAssignRole)
-
-	internal := api.Group("/internal", authmiddleware.RequireServiceToken(mw.serviceToken))
-	internal.GET("/models/resolve", c.ResolveController.HandleResolve)
 }

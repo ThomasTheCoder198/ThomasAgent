@@ -18,7 +18,6 @@ export function buildRunOptions(environment) {
     throw new Error(
       "CORE_AUTH_OWNER_PASSWORD is required for the API collection.",
     );
-  const token = environment.CORE_SERVICE_TOKEN;
   return {
     collection: fileURLToPath(
       new URL("./thomasagent.postman_collection.json", import.meta.url),
@@ -33,13 +32,8 @@ export function buildRunOptions(environment) {
       },
       { key: "ownerEmail", value: email },
       { key: "ownerPassword", value: password },
-      ...(token ? [{ key: "serviceToken", value: token }] : []),
     ],
-    folder: [
-      ...PUBLIC_FOLDERS,
-      ...(token ? ["Internal"] : []),
-      ...FINAL_FOLDERS,
-    ],
+    folder: [...PUBLIC_FOLDERS, ...FINAL_FOLDERS],
     // A summary-only report keeps request/response secrets out of reporter output.
     reporters: [],
   };

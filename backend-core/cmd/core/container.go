@@ -67,7 +67,6 @@ type ServiceContainer struct {
 	LLMModelService  llmservice.LLMModelService
 	ModelSyncService llmservice.ModelSyncService
 	RoleService      llmservice.RoleService
-	ResolveService   llmservice.ResolveService
 }
 
 // initServiceContainer also bootstraps the owner account, so startup fails before serving if it cannot.
@@ -83,7 +82,6 @@ func (rt *coreRuntime) initServiceContainer(ctx context.Context, pool *pgxpool.P
 		LLMModelService:  llmservice.NewLLMModelService(pool, repositories.LLMModelRepo),
 		ModelSyncService: llmservice.NewModelSyncService(pool, providerService, repositories.LLMModelRepo, clients.ModelCatalog, rt.cfg.ProviderMaxRemoteModels),
 		RoleService:      llmservice.NewRoleService(pool, repositories.LLMModelRepo, repositories.RoleRepo),
-		ResolveService:   llmservice.NewResolveService(pool, providerService, repositories.LLMModelRepo, repositories.RoleRepo),
 	}, nil
 }
 
@@ -92,7 +90,6 @@ type ControllerContainer struct {
 	ProviderController *llmcontroller.ProviderController
 	LLMModelController *llmcontroller.LLMModelController
 	RoleController     *llmcontroller.RoleController
-	ResolveController  *llmcontroller.ResolveController
 }
 
 func (rt *coreRuntime) initControllerContainer(services ServiceContainer, redisClient *redis.Client) (ControllerContainer, error) {
@@ -113,6 +110,5 @@ func (rt *coreRuntime) initControllerContainer(services ServiceContainer, redisC
 		ProviderController: llmcontroller.NewProviderController(services.ProviderService, services.ModelSyncService, maxBodyBytes),
 		LLMModelController: llmcontroller.NewLLMModelController(services.LLMModelService, maxBodyBytes),
 		RoleController:     llmcontroller.NewRoleController(services.RoleService, maxBodyBytes),
-		ResolveController:  llmcontroller.NewResolveController(services.ResolveService),
 	}, nil
 }

@@ -56,7 +56,6 @@ func (rt *coreRuntime) serveHTTP(ctx context.Context) error {
 	registerRoutes(engine, controllers, middlewares{
 		authService:    services.AuthService,
 		cookieSecure:   rt.cfg.Auth.CookieSecure,
-		serviceToken:   rt.cfg.ServiceToken,
 		health:         rt.readinessChecks(pool, redisClient),
 		requestTimeout: rt.cfg.HTTP.RequestTimeout,
 	})

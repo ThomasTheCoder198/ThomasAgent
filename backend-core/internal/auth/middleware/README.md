@@ -1,11 +1,10 @@
 # Auth middleware
 
 ## Purpose
-Gin middleware that guards routes: browser sessions with CSRF, and internal callers by service token.
+Gin middleware that guards routes: browser sessions with CSRF.
 
 ## Entry points
 - `RequireSession`, `UserFromContext` (`session_middleware.go`)
-- `RequireServiceToken` (`service_token_middleware.go`)
 
 ## Dependencies
 - Uses: `auth/service`, `auth/util`, `platform/httpx`, `platform/tenant`
@@ -18,4 +17,4 @@ TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/auth/middleware -count=1
 ```
 
 ## Conventions
-A stale session cookie gets both cookies cleared in the 401. The service token sets the platform tenant.
+A stale session cookie gets both cookies cleared in the 401.

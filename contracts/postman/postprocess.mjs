@@ -6,7 +6,6 @@ const FOLDER_ORDER = [
   "LLM providers",
   "LLM models",
   "LLM model roles",
-  "Internal",
   "Lifecycle",
   "Logout",
 ];
@@ -38,7 +37,6 @@ const EXPECTED_STATUS_BY_ROUTE = {
   "DELETE /api/v1/models/{modelId}": 409,
   "GET /api/v1/model-roles": 200,
   "PUT /api/v1/model-roles/{role}": 200,
-  "GET /internal/models/resolve": 200,
 };
 const JSON_INDENT = 2;
 
@@ -150,12 +148,7 @@ export function postprocess(collection) {
   ];
   eachRequest(collection.item, (req) => {
     const route = routeOf(req);
-    req.request.auth = route.startsWith("GET /internal/")
-      ? {
-          type: "bearer",
-          bearer: [{ key: "token", value: "{{serviceToken}}", type: "string" }],
-        }
-      : { type: "noauth" };
+    req.request.auth = { type: "noauth" };
     const tests = [];
     const expectedStatus = EXPECTED_STATUS_BY_ROUTE[route];
     if (expectedStatus)

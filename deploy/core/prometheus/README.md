@@ -13,7 +13,7 @@ Scrapes core and outbox-relay `/metrics` on port 9464, using OpenMetrics with re
 ## Run & test
 ```bash
 task up
-curl -fsS http://127.0.0.1:9090/api/v1/targets
+curl -fsS "http://127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}/api/v1/targets"
 ```
 
 ## Conventions

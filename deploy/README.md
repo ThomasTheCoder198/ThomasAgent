@@ -31,7 +31,7 @@ Core sends OTLP logs directly to VictoriaLogs and exposes metrics on port 9464 i
 | Service | Host port |
 | --- | --- |
 | Core / Grafana | 8080 / 3001 |
-| Prometheus / VictoriaLogs | 127.0.0.1:9090 / 127.0.0.1:9428 |
+| Prometheus / VictoriaLogs | 127.0.0.1:9090 (`PROMETHEUS_HOST_PORT`) / 127.0.0.1:9428 |
 | Postgres / Redis | 5432 / 6379 (`REDIS_HOST_PORT`) |
 | Ragx API | 8090 |
 | Phoenix UI / OTLP HTTP | 6006 (`PHOENIX_HOST_PORT`) |
@@ -43,4 +43,4 @@ Every persistent service has a healthcheck except outbox-relay, which currently 
 ## Common failures
 - Logs missing: check `CORE_LOGS_OTLP_ENDPOINT` and VictoriaLogs health.
 - Prometheus target down: check core health and its configured metrics address.
-- Windows rejects ports 6379/6333: choose available `REDIS_HOST_PORT`/`QDRANT_HOST_PORT` values in the local environment files; container ports stay unchanged.
+- Windows rejects ports 6379/6333/9090 (reserved ranges: `netsh interface ipv4 show excludedportrange protocol=tcp`): choose available `REDIS_HOST_PORT`/`QDRANT_HOST_PORT`/`PROMETHEUS_HOST_PORT` values in the local environment files; container ports stay unchanged.

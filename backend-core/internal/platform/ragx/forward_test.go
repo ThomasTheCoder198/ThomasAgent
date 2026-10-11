@@ -81,6 +81,39 @@ func TestForward_ErrorTable(t *testing.T) {
 	}
 }
 
+// A HEAD answer never has a body, so its 4xx cannot be a catalog JSON error; the status itself is the answer.
+func TestForward_HeadClientErrorsPassThroughWithoutABody(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		method  string
+		status  int
+		want    error // nil: the bare status passes through
+		wantRes int
+	}{
+		{"HEAD 404 passes", http.MethodHead, 404, nil, 404},
+		{"HEAD 405 passes", http.MethodHead, 405, nil, 405},
+		{"HEAD 409 passes", http.MethodHead, 409, nil, 409},
+		{"HEAD 401 stays unavailable", http.MethodHead, 401, errors.ErrRagxUnavailable, 0},
+		{"HEAD 403 stays not found", http.MethodHead, 403, errors.ErrNotFound, 0},
+		{"HEAD 500 stays unavailable", http.MethodHead, 500, errors.ErrRagxUnavailable, 0},
+		{"GET 404 without body stays unavailable", http.MethodGet, 404, errors.ErrRagxUnavailable, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller, _, _, _ := newCaller(t, reply(tc.status, "", ""))
+			in := readRequest()
+			in.Method = tc.method
+			res, err := caller.Forward(orgContext(), in)
+			if tc.want != nil {
+				require.ErrorIs(t, err, tc.want)
+				require.Equal(t, ForwardResponse{}, res)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, ForwardResponse{Status: tc.wantRes}, res)
+		})
+	}
+}
+
 func TestForward_SendsOnlyWhatTheRequestCarries(t *testing.T) {
 	caller, requests, _, _ := newCaller(t, reply(200, "application/json", `{"data":{},"meta":{"requestId":"x"}}`))
 	body := []byte(`{"name":"Chính sách"}`)

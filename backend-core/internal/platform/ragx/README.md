@@ -26,7 +26,7 @@ go test ./internal/platform/ragx/... -count=1
 - `rid` equals the `X-Request-Id` sent: both come from one context value, and a context without a valid id gets a `job_` id first.
 - ragx 4xx catalog codes pass through with their details, provided the code's catalog status matches the response status.
 - Typed calls: 5xx, timeouts, unreachable ragx, 401/403 (a rejected App token or scope is core misconfiguration) and unknown codes or statuses become `RAGX_UNAVAILABLE`.
-- `Forward`: 2xx and catalog 4xx pass through verbatim; 401 becomes `RAGX_UNAVAILABLE`; 403 becomes `NOT_FOUND` (the route needs a scope the UI never gets); everything else, including a body over the cap, becomes `RAGX_UNAVAILABLE`.
+- `Forward`: 2xx and catalog 4xx pass through verbatim; 401 becomes `RAGX_UNAVAILABLE`; 403 becomes `NOT_FOUND` (the route needs a scope the UI never gets); a HEAD answer (which never has a body) with any other 4xx passes through as a bare status; everything else, including a body over the cap, becomes `RAGX_UNAVAILABLE`.
 - The log line carries `jti` always, and `method` and `route` (contract brace spelling) for `Forward`; never the token or a body.
 - Error bodies are read up to `CORE_RAGX_MAX_ERROR_BODY_BYTES`.
 - Typed calls get `CORE_RAGX_REQUEST_TIMEOUT`; `Forward` uses the caller's context, which the HTTP route bounds.

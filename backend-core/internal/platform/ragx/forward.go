@@ -57,7 +57,7 @@ func (c *Caller) Forward(ctx context.Context, in ForwardRequest) (ForwardRespons
 		}
 	}
 	res, err := c.http.Do(req) //nolint:bodyclose // readForward closes the body on every path
-	out, failure := c.readForward(res, err)
+	out, failure := c.readForward(in.Method, res, err)
 	status, traceID := 0, ""
 	if res != nil {
 		status, traceID = res.StatusCode, res.Header.Get(outbound.HeaderRagxTraceID)
@@ -74,7 +74,7 @@ func setIfPresent(header http.Header, name, value string) {
 
 // readForward buffers at most MaxResponseBytes+1 before anything is written to the browser, so an oversized body
 // can still become a clean 503.
-func (c *Caller) readForward(res *http.Response, err error) (ForwardResponse, error) {
+func (c *Caller) readForward(method string, res *http.Response, err error) (ForwardResponse, error) {
 	if err != nil {
 		return ForwardResponse{}, errors.ErrRagxUnavailable.WithCause(err)
 	}
@@ -86,6 +86,9 @@ func (c *Caller) readForward(res *http.Response, err error) (ForwardResponse, er
 	if int64(len(body)) > c.cfg.MaxResponseBytes {
 		return ForwardResponse{}, errors.ErrRagxUnavailable.WithCause(errors.ErrRagxResponseTooLarge)
 	}
+	if isBodylessClientError(method, res.StatusCode, body) {
+		return ForwardResponse{Status: res.StatusCode}, nil
+	}
 	if failure := classifyForward(res.StatusCode, body); failure != nil {
 		return ForwardResponse{}, failure
 	}
@@ -93,6 +96,14 @@ func (c *Caller) readForward(res *http.Response, err error) (ForwardResponse, er
 		body = nil // an empty body is no body: 204 and HEAD answers stay nil for the caller
 	}
 	return ForwardResponse{Status: res.StatusCode, ContentType: res.Header.Get(httpx.HeaderContentType), Body: body}, nil
+}
+
+// isBodylessClientError lets a HEAD 4xx through: HEAD answers never carry the catalog JSON that classifyForward
+// requires, so the status alone is the answer. 401 and 403 keep their own mapping.
+func isBodylessClientError(method string, status int, body []byte) bool {
+	return method == http.MethodHead && len(body) == 0 &&
+		status >= http.StatusBadRequest && status < http.StatusInternalServerError &&
+		status != http.StatusUnauthorized && status != http.StatusForbidden
 }
 
 // classifyForward is spec §14.2's table. A 403 means the route needs a scope the UI never gets (org:provision,

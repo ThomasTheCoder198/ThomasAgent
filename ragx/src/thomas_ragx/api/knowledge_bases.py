@@ -1,14 +1,15 @@
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Request, Response, status
+from fastapi import Request, Response, status
 
+from thomas_ragx.api.routing import api_router
 from thomas_ragx.api.services import KbServiceDep
 from thomas_ragx.auth.dependencies import KbReadCaller, KbWriteCaller
 from thomas_ragx.kb.dto import KnowledgeBaseResponse, KnowledgeBaseWrite, to_json
 from thomas_ragx.platform.http_response import request_id_of, success_body
 
-router = APIRouter(prefix="/v1/knowledge-bases")
+router = api_router("/v1/knowledge-bases")
 
 
 @router.get("")

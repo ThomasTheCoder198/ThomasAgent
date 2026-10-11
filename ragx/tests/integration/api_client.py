@@ -43,9 +43,15 @@ def _storage(minio_config: dict[str, Any] | None) -> ObjectStorage:
 async def api_client(
     pool: Pool, redis_url: str | None = None, minio_config: dict[str, Any] | None = None, **overrides: Any
 ) -> AsyncIterator[tuple[httpx.AsyncClient, FastAPI]]:
+    storage_settings: dict[str, Any] = {}
+    if minio_config is not None:
+        storage_settings = {
+            "minio_access_key": minio_config["access_key"],
+            "minio_secret_key": minio_config["secret_key"],
+            "s3_public_endpoint": f"http://{minio_config['endpoint']}",
+        }
     config = Config(
-        minio_access_key="a",
-        minio_secret_key="s",
+        **{"minio_access_key": "a", "minio_secret_key": "s", **storage_settings},
         otlp_endpoint="",
         core_public_keys=public_keys_config(),
         **overrides,
@@ -65,3 +71,47 @@ async def api_client(
             yield client, app
     finally:
         await resources.redis.aclose()
+
+
+async def presign(client: httpx.AsyncClient, org_id: str, kb_id: str, name: str, size: int) -> httpx.Response:
+    return await client.post(
+        f"/v1/knowledge-bases/{kb_id}/uploads",
+        json={"name": name, "sizeBytes": size},
+        headers=bearer(org_id, "kb:write"),
+    )
+
+
+async def post_to_storage(ticket: dict[str, Any], content: bytes, name: str) -> httpx.Response:
+    """What the browser does: a multipart POST straight to MinIO, policy fields first, the file last."""
+    async with httpx.AsyncClient() as storage:
+        return await storage.post(
+            ticket["upload"]["url"], data=ticket["upload"]["fields"], files={"file": (name, content)}
+        )
+
+
+async def confirm(
+    client: httpx.AsyncClient, org_id: str, kb_id: str, file_id: str, request_id: str | None = None
+) -> httpx.Response:
+    headers = bearer(org_id, "kb:write")
+    if request_id is not None:
+        headers = {
+            "Authorization": f"Bearer {mint(org_id, 'kb:write', rid=request_id)}",
+            "X-Request-Id": request_id,
+        }
+    return await client.post(f"/v1/knowledge-bases/{kb_id}/files/{file_id}/confirm", headers=headers)
+
+
+async def upload(
+    client: httpx.AsyncClient,
+    org_id: str,
+    kb_id: str,
+    name: str,
+    content: bytes,
+    request_id: str | None = None,
+) -> httpx.Response:
+    presigned = await presign(client, org_id, kb_id, name, len(content))
+    assert presigned.status_code == 201, presigned.text
+    ticket = presigned.json()["data"]
+    stored = await post_to_storage(ticket, content, name)
+    assert stored.status_code == 204, stored.text
+    return await confirm(client, org_id, kb_id, ticket["fileId"], request_id)

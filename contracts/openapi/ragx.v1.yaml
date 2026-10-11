@@ -167,30 +167,84 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /v1/knowledge-bases/{kbId}/uploads:
+    parameters:
+      - $ref: "#/components/parameters/KbId"
+      - $ref: "#/components/parameters/RequestId"
     post:
       tags: [files]
-      operationId: uploadFile
-      summary: Upload one file (scope kb:write); Content-Length is required
-      parameters:
-        - { name: Idempotency-Key, in: header, required: false, schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" } }
+      operationId: createUpload
+      summary: >-
+        Start a presigned upload (scope kb:write). Creates an 'uploading' file (hidden from every read until
+        confirmed) and returns a MinIO POST policy for exactly sizeBytes, signed for the public storage endpoint.
       requestBody:
         required: true
         content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file]
-              properties:
-                file: { type: string, format: binary }
+          application/json:
+            schema: { $ref: "#/components/schemas/UploadRequest" }
       responses:
-        "200": { $ref: "#/components/responses/KbFile" }
-        "201": { $ref: "#/components/responses/KbFile" }
+        "201":
+          description: Upload ticket
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: "#/components/schemas/UploadTicket" }
+                  meta: { $ref: "#/components/schemas/Meta" }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
         "413": { $ref: "#/components/responses/Error" }
         "415": { $ref: "#/components/responses/Error" }
+  /v1/knowledge-bases/{kbId}/files/{fileId}/confirm:
+    parameters:
+      - $ref: "#/components/parameters/KbId"
+      - $ref: "#/components/parameters/FileId"
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [files]
+      operationId: confirmUpload
+      summary: >-
+        Finish a presigned upload (scope kb:write). Idempotent by fileId: a repeat returns the same file, and
+        duplicate content returns the existing file. 400 file MISSING when the object is not in storage yet.
+      parameters:
+        - { name: Idempotency-Key, in: header, required: false, schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" } }
+      responses:
+        "200": { $ref: "#/components/responses/KbFile" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/knowledge-bases/{kbId}/files/{fileId}/download-url:
+    parameters:
+      - $ref: "#/components/parameters/KbId"
+      - $ref: "#/components/parameters/FileId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [files]
+      operationId: getDownloadUrl
+      summary: Short-lived presigned GET (scope kb:read) that always downloads as attachment + application/octet-stream
+      responses:
+        "200":
+          description: Download link
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: "#/components/schemas/DownloadUrl" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /v1/knowledge-bases/{kbId}/files/{fileId}:
     parameters:
       - $ref: "#/components/parameters/KbId"
@@ -220,24 +274,6 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
-  /v1/knowledge-bases/{kbId}/files/{fileId}/raw:
-    parameters:
-      - $ref: "#/components/parameters/KbId"
-      - $ref: "#/components/parameters/FileId"
-      - $ref: "#/components/parameters/RequestId"
-    get:
-      tags: [files]
-      operationId: downloadFile
-      summary: Stream the original file (scope kb:read)
-      responses:
-        "200":
-          description: Original bytes; Content-Disposition uses RFC 5987 filename*
-          content:
-            application/octet-stream:
-              schema: { type: string, format: binary }
-        "401": { $ref: "#/components/responses/Error" }
-        "403": { $ref: "#/components/responses/Error" }
-        "404": { $ref: "#/components/responses/Error" }
   /v1/knowledge-bases/{kbId}/files/{fileId}/preview:
     parameters:
       - $ref: "#/components/parameters/KbId"
@@ -406,6 +442,31 @@ components:
         fileCount: { type: integer, minimum: 0 }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    UploadRequest:
+      type: object
+      additionalProperties: false
+      required: [name, sizeBytes]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        sizeBytes: { type: integer, minimum: 1, maximum: 104857600 }
+    UploadTicket:
+      type: object
+      required: [fileId, upload, expiresAt]
+      properties:
+        fileId: { type: string, format: uuid }
+        upload:
+          type: object
+          required: [url, fields]
+          properties:
+            url: { type: string, format: uri, description: Storage POST URL (public endpoint + bucket) }
+            fields: { type: object, additionalProperties: { type: string }, description: Form fields to send before the file field }
+        expiresAt: { type: string, format: date-time }
+    DownloadUrl:
+      type: object
+      required: [url, expiresAt]
+      properties:
+        url: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }
     KbFile:
       type: object
       required: [id, kbId, name, version, contentType, sizeBytes, sha256, status, errorCode, degraded, createdAt, updatedAt]

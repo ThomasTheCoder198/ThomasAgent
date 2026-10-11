@@ -5,13 +5,14 @@ Owns org spaces, Knowledge Bases and file storage. The org is always the App tok
 
 ## Entry points
 - `KnowledgeBaseService` provisions orgs and manages Knowledge Bases.
-- `FileService` manages upload, listing, deletion, retry, and download.
-- `receive_upload` validates and spools one multipart file.
+- `FileService` manages presigned upload (`create_upload`, `confirm_upload`), listing, deletion, retry, and download links.
+- `presign.UrlSigner` signs the browser's MinIO POST policy and GET URL (`create_url_signer`, `attachment_disposition`).
+- `upload.normalize_file_name` and `content_type_for` validate names and map extensions to types.
 - `require_org` checks that an org space exists.
 - `storage.ObjectStorage` provides MinIO access for files.
 
 ## Dependencies
-- Uses: `RegistryService` for the embedding role, `db.outbox` for purge jobs, MinIO for file storage.
+- Uses: `RegistryService` for the embedding role, `db.outbox` for ingest and purge jobs, MinIO for file storage and presigned URLs.
 - Used by: the `/v1` API and the file routes.
 
 ## Run & test
@@ -22,9 +23,16 @@ uv run pytest -q tests/integration/test_files_api.py
 ```
 
 ## Conventions
-`PUT /v1/orgs/{orgId}` is idempotent and creates the default KB ("Mặc định") only on the first call. It needs the embedding role; without it, provisioning returns `LLM_ROLE_NOT_ASSIGNED` and creates nothing. A KB owned by another org is always `KB_NOT_FOUND`. `fileCount` on a KB counts its non-deleted files. The upload size limits and accepted extensions are pinned to `contracts/kb-upload.json` by `tests/unit/test_upload_contract.py`. The default KB cannot be deleted (`CONFLICT`). Delete marks `deleted_at` and queues `thomas.kb.purge.requested`; the worker removes objects and rows. DTOs forbid unknown fields, so a body naming an org returns `VALIDATION_FAILED`.
+`PUT /v1/orgs/{orgId}` is idempotent and creates the default KB ("Mặc định") only on the first call. It needs the embedding role; without it, provisioning returns `LLM_ROLE_NOT_ASSIGNED` and creates nothing. A KB owned by another org is always `KB_NOT_FOUND`. `fileCount` on a KB counts its non-deleted, confirmed files. The upload size limits and accepted extensions are pinned to `contracts/kb-upload.json` by `tests/unit/test_upload_contract.py`. The default KB cannot be deleted (`CONFLICT`). Delete marks `deleted_at` and queues `thomas.kb.purge.requested`; the worker removes objects and rows. DTOs forbid unknown fields, so a body naming an org returns `VALIDATION_FAILED`.
 
-Uploads need `Content-Length` and are refused before parsing above `RAG_UPLOAD_MAX_BYTES + RAG_UPLOAD_MULTIPART_OVERHEAD_BYTES`. The actual multipart bytes are bounded by the same cap while Starlette parses them. Starlette spools the single file part to a temp file; ragx hashes it and writes `kb-raw/{org}/{kb}/{file}`. Names are NFC normalized with path parts dropped, and control characters are rejected; the type comes from the extension list (main spec §4.1). The KB row lock serializes uploads into one KB, so same-name versions and same-content duplicates never hit a unique violation; a duplicate returns the existing file with 200. `Idempotency-Key` (`^[A-Za-z0-9_-]{8,128}$`) binds that result, including a duplicate, for `RAG_IDEMPOTENCY_TTL_SECONDS`. A key whose file has since been deleted is dropped and the upload proceeds as new; the same key on another KB is `CONFLICT`. Raw downloads use RFC 5987 `filename*`. Previews exist only after ingest writes them (M1.3). Pagination cursors are opaque base64.
+Ragx never receives file bytes. Upload is presign, POST, confirm (spec ragx-custom-app §14.3):
+1. `POST /v1/knowledge-bases/{kbId}/uploads` with `{name, sizeBytes}` (1 to `RAG_UPLOAD_MAX_BYTES`) inserts a `kb_files` row with status `uploading` and answers `{fileId, upload: {url, fields}, expiresAt}`. The POST policy pins the key `{org}/{kb}/{file}` in `kb-raw`, a `content-length-range` of exactly `sizeBytes`, and the expiry `RAG_UPLOAD_URL_TTL` (15 min). The browser POSTs the policy fields, then the file last, straight to MinIO.
+2. `POST …/files/{fileId}/confirm` checks the object: absent is `VALIDATION_FAILED` field `file` `MISSING` (the slot stays, so the browser can POST again); a different size deletes the object and answers `SIZE_MISMATCH`. Otherwise one transaction, under the KB row lock, hashes to a version and flips `uploading` to `pending` and enqueues `thomas.ingest.requested`. Duplicate content (same `sha256` in the KB) deletes the new row and object and returns the existing file.
+3. `GET …/files/{fileId}/download-url` answers `{url, expiresAt}`: a presigned GET valid `RAG_DOWNLOAD_URL_TTL` (60 s) that forces `Content-Disposition: attachment; filename*=UTF-8''<RFC 3986 percent-encoded NFC name>` and `application/octet-stream`, so an uploaded `.html` never renders.
+
+An `uploading` row has no `sha256` and no `version` (a CHECK enforces it); both are set at confirm, so concurrent presigns of one name never collide on a unique index. `uploading` rows are invisible to the list, `fileCount`, retry, delete, download-url and the duplicate lookup; only confirm sees them. Confirm is idempotent by `fileId` (ruling P10): a repeat returns the same file; a folded duplicate is remembered in `idempotency_keys` (operation `confirm`) so repeating it returns the same existing file. `Idempotency-Key` (`^[A-Za-z0-9_-]{8,128}$`) is format-checked only; confirm always answers 200. Names are NFC normalized with path parts dropped and control characters rejected (field `name`, `INVALID_NAME`); the type comes from the extension list (main spec §4.1), not the client.
+
+The signing client takes `RAG_S3_REGION` explicitly (ruling P11): minio would otherwise ask the public endpoint for the bucket region, which the ragx container cannot reach. The public endpoint scheme decides `secure`. The sweep of expired `uploading` slots and their objects is M1.3. Previews exist only after ingest writes them (M1.3). Pagination cursors are opaque base64.
 
 ## Common failures
 - `ORG_NOT_PROVISIONED` → core has not provisioned the org yet.

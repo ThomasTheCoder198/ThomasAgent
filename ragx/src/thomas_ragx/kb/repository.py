@@ -11,7 +11,8 @@ type Connection = AsyncConnection[DictRow]
 KB_SELECT: Final = (
     b"SELECT kb.id, kb.org_id, kb.name, kb.is_default, kb.embedding_dims, kb.created_at, kb.updated_at, "
     b"m.name AS embedding_model, "
-    b"(SELECT count(*) FROM kb_files f WHERE f.kb_id = kb.id AND f.deleted_at IS NULL) AS file_count "
+    b"(SELECT count(*) FROM kb_files f WHERE f.kb_id = kb.id AND f.deleted_at IS NULL "
+    b"AND f.status <> 'uploading') AS file_count "
     b"FROM knowledge_bases kb JOIN models m ON m.id = kb.embedding_model_id "
     b"WHERE kb.deleted_at IS NULL AND kb.org_id = %s"
 )

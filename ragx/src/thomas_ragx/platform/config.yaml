@@ -18,9 +18,12 @@ redis_url: redis://ragx-redis:6379/0
 qdrant_url: http://qdrant:6333
 minio_endpoint: minio:9000
 minio_secure: false
+s3_public_endpoint: http://localhost:9000
+s3_region: us-east-1
+upload_url_ttl: 900
+download_url_ttl: 60
 buckets: [kb-raw, kb-preview, chat-attachments]
 upload_max_bytes: 104857600
-upload_multipart_overhead_bytes: 65536
 idempotency_ttl_seconds: 86400
 page_default_limit: 20
 page_max_limit: 100

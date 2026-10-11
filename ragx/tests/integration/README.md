@@ -7,6 +7,7 @@ Integration tests against real Postgres, Redis and MinIO through testcontainers.
 - `test_migrations.py`: tests migration pairing and up/down behavior.
 - `conftest.py`: shared containers and an isolated pool fixture.
 - `api_client.py`: scoped App token and ASGI client for API tests.
+- `test_files_api.py`: presign, POST to MinIO, confirm, dedupe, download-url and tenant isolation. The helpers in `api_client.py` (`presign`, `post_to_storage`, `confirm`, `upload`) do a real multipart POST to the MinIO container, as a browser does; `api_client` signs for the container's address.
 - `test_kb_api.py`: provisioning, tenant isolation, Knowledge Base CRUD and manifest tests.
 
 ## Dependencies

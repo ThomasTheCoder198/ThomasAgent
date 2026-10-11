@@ -4,6 +4,8 @@ from enum import StrEnum
 from typing import Final
 from uuid import UUID
 
+from thomas_ragx.kb.presign import PresignedPost
+
 # Operators rename it freely; Vietnamese is the product's default language.
 DEFAULT_KB_NAME: Final = "Mặc định"
 
@@ -31,6 +33,7 @@ class KnowledgeBase:
 
 
 class FileStatus(StrEnum):
+    UPLOADING = "uploading"
     PENDING = "pending"
     PARSING = "parsing"
     ENRICHING = "enriching"
@@ -57,3 +60,28 @@ class KbFile:
     degraded: bool
     created_at: datetime
     updated_at: datetime
+
+
+@dataclass(frozen=True)
+class UploadSlot:
+    """A presigned upload that has not been confirmed: its bytes, hash and version are unknown."""
+
+    id: UUID
+    org_id: str
+    kb_id: UUID
+    name: str
+    content_type: str
+    size_bytes: int
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class UploadTicket:
+    file_id: UUID
+    post: PresignedPost
+
+
+@dataclass(frozen=True)
+class DownloadLink:
+    url: str
+    expires_at: datetime

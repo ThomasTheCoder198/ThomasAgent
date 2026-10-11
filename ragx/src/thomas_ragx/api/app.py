@@ -10,12 +10,14 @@ from opentelemetry.propagate import extract
 from thomas_ragx.admin.limiter import LoginLimiter
 from thomas_ragx.admin.service import AdminService
 from thomas_ragx.api.files import router as files_router
+from thomas_ragx.api.files import uploads_router
 from thomas_ragx.api.health import router as health_router
 from thomas_ragx.api.knowledge_bases import router as knowledge_bases_router
 from thomas_ragx.api.manifest import router as manifest_router
 from thomas_ragx.api.orgs import router as orgs_router
 from thomas_ragx.auth.app_token import AppTokenVerifier, load_public_keys
 from thomas_ragx.kb.file_service import FileService
+from thomas_ragx.kb.presign import create_url_signer
 from thomas_ragx.kb.service import KnowledgeBaseService
 from thomas_ragx.platform.config import Config, load_config
 from thomas_ragx.platform.constants import HTTP_STATUS_CLIENT_ERROR, HTTP_STATUS_SERVER_ERROR
@@ -93,8 +95,10 @@ def create_app(config: Config | None = None, resources: Resources | None = None)
     file_service = FileService(
         resources.pool,
         resources.storage,
+        create_url_signer(config),
         max_upload_bytes=config.upload_max_bytes,
-        multipart_overhead_bytes=config.upload_multipart_overhead_bytes,
+        upload_url_ttl=config.upload_url_ttl,
+        download_url_ttl=config.download_url_ttl,
         idempotency_ttl_seconds=config.idempotency_ttl_seconds,
         page_default_limit=config.page_default_limit,
         page_max_limit=config.page_max_limit,
@@ -170,6 +174,7 @@ def create_app(config: Config | None = None, resources: Resources | None = None)
     app.include_router(health_router)
     app.include_router(orgs_router)
     app.include_router(knowledge_bases_router)
+    app.include_router(uploads_router)
     app.include_router(files_router)
     app.include_router(manifest_router)
     install_ui(app, config, admin_service)

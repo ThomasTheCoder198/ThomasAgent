@@ -1,14 +1,15 @@
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Path, Request
+from fastapi import Path, Request
 
+from thomas_ragx.api.routing import api_router
 from thomas_ragx.api.services import KbServiceDep
 from thomas_ragx.auth.caller import ORG_ID_PATTERN
 from thomas_ragx.auth.dependencies import ProvisionCaller
 from thomas_ragx.kb.dto import OrgProvisionRequest, OrgResponse, to_json
 from thomas_ragx.platform.http_response import request_id_of, success_body
 
-router = APIRouter(prefix="/v1")
+router = api_router("/v1")
 
 
 @router.put("/orgs/{org_id}")

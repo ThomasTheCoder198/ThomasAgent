@@ -1,14 +1,15 @@
 from typing import Any, Final
 
-from fastapi import APIRouter, Request
+from fastapi import Request
 
+from thomas_ragx.api.routing import api_router
 from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
 from thomas_ragx.platform.http_response import request_id_of, success_body
 
 STATUS_OK: Final = "ok"
 STATUS_READY: Final = "ready"
-router = APIRouter()
+router = api_router()
 
 
 @router.get("/healthz")

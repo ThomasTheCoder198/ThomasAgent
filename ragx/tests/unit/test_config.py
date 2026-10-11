@@ -1,6 +1,8 @@
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from thomas_ragx.platform.config import Config
 
@@ -76,3 +78,22 @@ def test_config_layers_yaml_dotenv_environment_and_constructor(
     monkeypatch.setenv("RAG_RETRY_MAX_ATTEMPTS", "3")
     assert Config(_env_file=env_file).retry_max_attempts == 3
     assert Config(_env_file=env_file, retry_max_attempts=2).retry_max_attempts == 2
+
+
+def test_presign_settings_have_safe_defaults_and_are_validated(monkeypatch: pytest.MonkeyPatch) -> None:
+    config = Config(minio_access_key="a", minio_secret_key="s")
+    assert config.s3_public_endpoint == "http://localhost:9000"
+    assert config.s3_region == "us-east-1"
+    assert config.upload_url_ttl == timedelta(minutes=15)
+    assert config.download_url_ttl == timedelta(seconds=60)
+    monkeypatch.setenv("RAG_DOWNLOAD_URL_TTL", "PT30S")  # env overrides are ISO 8601
+    assert Config(minio_access_key="a", minio_secret_key="s").download_url_ttl == timedelta(seconds=30)
+    for field, value in [
+        ("s3_public_endpoint", "localhost:9000"),
+        ("s3_public_endpoint", "ftp://files.example"),
+        ("s3_public_endpoint", "http://files.example/prefix"),
+        ("upload_url_ttl", timedelta(0)),
+        ("download_url_ttl", timedelta(days=8)),
+    ]:
+        with pytest.raises(ValidationError):
+            Config(minio_access_key="a", minio_secret_key="s", **{field: value})

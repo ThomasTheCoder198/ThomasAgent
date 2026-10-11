@@ -57,6 +57,12 @@ func (e KbFileStatus) Valid() bool {
 	}
 }
 
+// DownloadUrl defines model for DownloadUrl.
+type DownloadUrl struct {
+	ExpiresAt time.Time `json:"expiresAt"`
+	Url       string    `json:"url"`
+}
+
 // ErrorBody defines model for ErrorBody.
 type ErrorBody struct {
 	Error struct {
@@ -140,6 +146,25 @@ type PageMeta struct {
 	RequestId string `json:"requestId"`
 }
 
+// UploadRequest defines model for UploadRequest.
+type UploadRequest struct {
+	Name      string `json:"name"`
+	SizeBytes int    `json:"sizeBytes"`
+}
+
+// UploadTicket defines model for UploadTicket.
+type UploadTicket struct {
+	ExpiresAt time.Time          `json:"expiresAt"`
+	FileId    openapi_types.UUID `json:"fileId"`
+	Upload    struct {
+		// Fields Form fields to send before the file field
+		Fields map[string]string `json:"fields"`
+
+		// Url Storage POST URL (public endpoint + bucket)
+		Url string `json:"url"`
+	} `json:"upload"`
+}
+
 // FileId defines model for FileId.
 type FileId = openapi_types.UUID
 
@@ -207,19 +232,19 @@ type ListFilesParams struct {
 	XRequestId *RequestId `json:"X-Request-Id,omitempty"`
 }
 
-// UploadFileMultipartBody defines parameters for UploadFile.
-type UploadFileMultipartBody struct {
-	File openapi_types.File `json:"file"`
+// DeleteFileParams defines parameters for DeleteFile.
+type DeleteFileParams struct {
+	XRequestId *RequestId `json:"X-Request-Id,omitempty"`
 }
 
-// UploadFileParams defines parameters for UploadFile.
-type UploadFileParams struct {
+// ConfirmUploadParams defines parameters for ConfirmUpload.
+type ConfirmUploadParams struct {
 	IdempotencyKey *string    `json:"Idempotency-Key,omitempty"`
 	XRequestId     *RequestId `json:"X-Request-Id,omitempty"`
 }
 
-// DeleteFileParams defines parameters for DeleteFile.
-type DeleteFileParams struct {
+// GetDownloadUrlParams defines parameters for GetDownloadUrl.
+type GetDownloadUrlParams struct {
 	XRequestId *RequestId `json:"X-Request-Id,omitempty"`
 }
 
@@ -228,13 +253,13 @@ type GetFilePreviewParams struct {
 	XRequestId *RequestId `json:"X-Request-Id,omitempty"`
 }
 
-// DownloadFileParams defines parameters for DownloadFile.
-type DownloadFileParams struct {
+// RetryFileParams defines parameters for RetryFile.
+type RetryFileParams struct {
 	XRequestId *RequestId `json:"X-Request-Id,omitempty"`
 }
 
-// RetryFileParams defines parameters for RetryFile.
-type RetryFileParams struct {
+// CreateUploadParams defines parameters for CreateUpload.
+type CreateUploadParams struct {
 	XRequestId *RequestId `json:"X-Request-Id,omitempty"`
 }
 
@@ -254,8 +279,8 @@ type CreateKnowledgeBaseJSONRequestBody = KnowledgeBaseWrite
 // RenameKnowledgeBaseJSONRequestBody defines body for RenameKnowledgeBase for application/json ContentType.
 type RenameKnowledgeBaseJSONRequestBody = KnowledgeBaseWrite
 
-// UploadFileMultipartRequestBody defines body for UploadFile for multipart/form-data ContentType.
-type UploadFileMultipartRequestBody UploadFileMultipartBody
+// CreateUploadJSONRequestBody defines body for CreateUpload for application/json ContentType.
+type CreateUploadJSONRequestBody = UploadRequest
 
 // ProvisionOrgJSONRequestBody defines body for ProvisionOrg for application/json ContentType.
 type ProvisionOrgJSONRequestBody = OrgProvision
@@ -392,32 +417,44 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/knowledge-bases/{kbId}/files (the `ListFiles` operationId).
 	ListFiles(ctx context.Context, kbId KbId, params *ListFilesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// UploadFileWithBody Upload one file (scope kb:write); Content-Length is required
-	//
-	// Takes any type of body and a specified content type.
-	//
-	// Corresponds with POST /v1/knowledge-bases/{kbId}/files (the `UploadFile` operationId).
-	UploadFileWithBody(ctx context.Context, kbId KbId, params *UploadFileParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// DeleteFile Delete a file (scope kb:write); objects and vectors are purged by a job
 	//
 	// Corresponds with DELETE /v1/knowledge-bases/{kbId}/files/{fileId} (the `DeleteFile` operationId).
 	DeleteFile(ctx context.Context, kbId KbId, fileId FileId, params *DeleteFileParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ConfirmUpload Finish a presigned upload (scope kb:write). Idempotent by fileId: a repeat returns the same file, and duplicate content returns the existing file. 400 file MISSING when the object is not in storage yet.
+	//
+	// Corresponds with POST /v1/knowledge-bases/{kbId}/files/{fileId}/confirm (the `ConfirmUpload` operationId).
+	ConfirmUpload(ctx context.Context, kbId KbId, fileId FileId, params *ConfirmUploadParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDownloadUrl Short-lived presigned GET (scope kb:read) that always downloads as attachment + application/octet-stream
+	//
+	// Corresponds with GET /v1/knowledge-bases/{kbId}/files/{fileId}/download-url (the `GetDownloadUrl` operationId).
+	GetDownloadUrl(ctx context.Context, kbId KbId, fileId FileId, params *GetDownloadUrlParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetFilePreview Stream the preview JSON produced by ingest (scope kb:read); 404 until ingest writes it (M1.3)
 	//
 	// Corresponds with GET /v1/knowledge-bases/{kbId}/files/{fileId}/preview (the `GetFilePreview` operationId).
 	GetFilePreview(ctx context.Context, kbId KbId, fileId FileId, params *GetFilePreviewParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// DownloadFile Stream the original file (scope kb:read)
-	//
-	// Corresponds with GET /v1/knowledge-bases/{kbId}/files/{fileId}/raw (the `DownloadFile` operationId).
-	DownloadFile(ctx context.Context, kbId KbId, fileId FileId, params *DownloadFileParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// RetryFile Queue a failed file for ingest again (scope kb:write)
 	//
 	// Corresponds with POST /v1/knowledge-bases/{kbId}/files/{fileId}/retry (the `RetryFile` operationId).
 	RetryFile(ctx context.Context, kbId KbId, fileId FileId, params *RetryFileParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateUploadWithBody Start a presigned upload (scope kb:write). Creates an 'uploading' file (hidden from every read until confirmed) and returns a MinIO POST policy for exactly sizeBytes, signed for the public storage endpoint.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/knowledge-bases/{kbId}/uploads (the `CreateUpload` operationId).
+	CreateUploadWithBody(ctx context.Context, kbId KbId, params *CreateUploadParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateUpload Start a presigned upload (scope kb:write). Creates an 'uploading' file (hidden from every read until confirmed) and returns a MinIO POST policy for exactly sizeBytes, signed for the public storage endpoint.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/knowledge-bases/{kbId}/uploads (the `CreateUpload` operationId).
+	CreateUpload(ctx context.Context, kbId KbId, params *CreateUploadParams, body CreateUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetManifest App manifest (scope kb:read); tools are added in M1.3
 	//
@@ -597,13 +634,11 @@ func (c *Client) ListFiles(ctx context.Context, kbId KbId, params *ListFilesPara
 	return c.Client.Do(req)
 }
 
-// UploadFileWithBody Upload one file (scope kb:write); Content-Length is required
+// DeleteFile Delete a file (scope kb:write); objects and vectors are purged by a job
 //
-// Takes any type of body and a specified content type.
-//
-// Corresponds with POST /v1/knowledge-bases/{kbId}/files (the `UploadFile` operationId).
-func (c *Client) UploadFileWithBody(ctx context.Context, kbId KbId, params *UploadFileParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewUploadFileRequestWithBody(c.Server, kbId, params, contentType, body)
+// Corresponds with DELETE /v1/knowledge-bases/{kbId}/files/{fileId} (the `DeleteFile` operationId).
+func (c *Client) DeleteFile(ctx context.Context, kbId KbId, fileId FileId, params *DeleteFileParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteFileRequest(c.Server, kbId, fileId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -614,11 +649,26 @@ func (c *Client) UploadFileWithBody(ctx context.Context, kbId KbId, params *Uplo
 	return c.Client.Do(req)
 }
 
-// DeleteFile Delete a file (scope kb:write); objects and vectors are purged by a job
+// ConfirmUpload Finish a presigned upload (scope kb:write). Idempotent by fileId: a repeat returns the same file, and duplicate content returns the existing file. 400 file MISSING when the object is not in storage yet.
 //
-// Corresponds with DELETE /v1/knowledge-bases/{kbId}/files/{fileId} (the `DeleteFile` operationId).
-func (c *Client) DeleteFile(ctx context.Context, kbId KbId, fileId FileId, params *DeleteFileParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteFileRequest(c.Server, kbId, fileId, params)
+// Corresponds with POST /v1/knowledge-bases/{kbId}/files/{fileId}/confirm (the `ConfirmUpload` operationId).
+func (c *Client) ConfirmUpload(ctx context.Context, kbId KbId, fileId FileId, params *ConfirmUploadParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConfirmUploadRequest(c.Server, kbId, fileId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetDownloadUrl Short-lived presigned GET (scope kb:read) that always downloads as attachment + application/octet-stream
+//
+// Corresponds with GET /v1/knowledge-bases/{kbId}/files/{fileId}/download-url (the `GetDownloadUrl` operationId).
+func (c *Client) GetDownloadUrl(ctx context.Context, kbId KbId, fileId FileId, params *GetDownloadUrlParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDownloadUrlRequest(c.Server, kbId, fileId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -644,11 +694,11 @@ func (c *Client) GetFilePreview(ctx context.Context, kbId KbId, fileId FileId, p
 	return c.Client.Do(req)
 }
 
-// DownloadFile Stream the original file (scope kb:read)
+// RetryFile Queue a failed file for ingest again (scope kb:write)
 //
-// Corresponds with GET /v1/knowledge-bases/{kbId}/files/{fileId}/raw (the `DownloadFile` operationId).
-func (c *Client) DownloadFile(ctx context.Context, kbId KbId, fileId FileId, params *DownloadFileParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDownloadFileRequest(c.Server, kbId, fileId, params)
+// Corresponds with POST /v1/knowledge-bases/{kbId}/files/{fileId}/retry (the `RetryFile` operationId).
+func (c *Client) RetryFile(ctx context.Context, kbId KbId, fileId FileId, params *RetryFileParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRetryFileRequest(c.Server, kbId, fileId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -659,11 +709,30 @@ func (c *Client) DownloadFile(ctx context.Context, kbId KbId, fileId FileId, par
 	return c.Client.Do(req)
 }
 
-// RetryFile Queue a failed file for ingest again (scope kb:write)
+// CreateUploadWithBody Start a presigned upload (scope kb:write). Creates an 'uploading' file (hidden from every read until confirmed) and returns a MinIO POST policy for exactly sizeBytes, signed for the public storage endpoint.
 //
-// Corresponds with POST /v1/knowledge-bases/{kbId}/files/{fileId}/retry (the `RetryFile` operationId).
-func (c *Client) RetryFile(ctx context.Context, kbId KbId, fileId FileId, params *RetryFileParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewRetryFileRequest(c.Server, kbId, fileId, params)
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/knowledge-bases/{kbId}/uploads (the `CreateUpload` operationId).
+func (c *Client) CreateUploadWithBody(ctx context.Context, kbId KbId, params *CreateUploadParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateUploadRequestWithBody(c.Server, kbId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateUpload Start a presigned upload (scope kb:write). Creates an 'uploading' file (hidden from every read until confirmed) and returns a MinIO POST policy for exactly sizeBytes, signed for the public storage endpoint.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/knowledge-bases/{kbId}/uploads (the `CreateUpload` operationId).
+func (c *Client) CreateUpload(ctx context.Context, kbId KbId, params *CreateUploadParams, body CreateUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateUploadRequest(c.Server, kbId, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1122,68 +1191,6 @@ func NewListFilesRequest(server string, kbId KbId, params *ListFilesParams) (*ht
 	return req, nil
 }
 
-// NewUploadFileRequestWithBody constructs an http.Request for the UploadFile method, with any body, and a specified content type
-func NewUploadFileRequestWithBody(server string, kbId KbId, params *UploadFileParams, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "kbId", kbId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/knowledge-bases/%s/files", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	if params != nil {
-
-		if params.IdempotencyKey != nil {
-			var headerParam0 string
-
-			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
-			if err != nil {
-				return nil, err
-			}
-
-			req.Header.Set("Idempotency-Key", headerParam0)
-		}
-
-		if params.XRequestId != nil {
-			var headerParam1 string
-
-			headerParam1, err = runtime.StyleParamWithOptions("simple", false, "X-Request-Id", *params.XRequestId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
-			if err != nil {
-				return nil, err
-			}
-
-			req.Header.Set("X-Request-Id", headerParam1)
-		}
-
-	}
-
-	return req, nil
-}
-
 // NewDeleteFileRequest constructs an http.Request for the DeleteFile method
 func NewDeleteFileRequest(server string, kbId KbId, fileId FileId, params *DeleteFileParams) (*http.Request, error) {
 	var err error
@@ -1218,6 +1225,129 @@ func NewDeleteFileRequest(server string, kbId KbId, fileId FileId, params *Delet
 	}
 
 	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.XRequestId != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Request-Id", *params.XRequestId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("X-Request-Id", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewConfirmUploadRequest constructs an http.Request for the ConfirmUpload method
+func NewConfirmUploadRequest(server string, kbId KbId, fileId FileId, params *ConfirmUploadParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "kbId", kbId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "fileId", fileId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/knowledge-bases/%s/files/%s/confirm", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+		if params.XRequestId != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithOptions("simple", false, "X-Request-Id", *params.XRequestId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("X-Request-Id", headerParam1)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetDownloadUrlRequest constructs an http.Request for the GetDownloadUrl method
+func NewGetDownloadUrlRequest(server string, kbId KbId, fileId FileId, params *GetDownloadUrlParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "kbId", kbId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "fileId", fileId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/knowledge-bases/%s/files/%s/download-url", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1296,62 +1426,6 @@ func NewGetFilePreviewRequest(server string, kbId KbId, fileId FileId, params *G
 	return req, nil
 }
 
-// NewDownloadFileRequest constructs an http.Request for the DownloadFile method
-func NewDownloadFileRequest(server string, kbId KbId, fileId FileId, params *DownloadFileParams) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "kbId", kbId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "fileId", fileId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/knowledge-bases/%s/files/%s/raw", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-
-		if params.XRequestId != nil {
-			var headerParam0 string
-
-			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Request-Id", *params.XRequestId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
-			if err != nil {
-				return nil, err
-			}
-
-			req.Header.Set("X-Request-Id", headerParam0)
-		}
-
-	}
-
-	return req, nil
-}
-
 // NewRetryFileRequest constructs an http.Request for the RetryFile method
 func NewRetryFileRequest(server string, kbId KbId, fileId FileId, params *RetryFileParams) (*http.Request, error) {
 	var err error
@@ -1389,6 +1463,68 @@ func NewRetryFileRequest(server string, kbId KbId, fileId FileId, params *RetryF
 	if err != nil {
 		return nil, err
 	}
+
+	if params != nil {
+
+		if params.XRequestId != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Request-Id", *params.XRequestId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("X-Request-Id", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewCreateUploadRequest calls the generic CreateUpload builder with application/json body
+func NewCreateUploadRequest(server string, kbId KbId, params *CreateUploadParams, body CreateUploadJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateUploadRequestWithBody(server, kbId, params, "application/json", bodyReader)
+}
+
+// NewCreateUploadRequestWithBody constructs an http.Request for the CreateUpload method, with any body, and a specified content type
+func NewCreateUploadRequestWithBody(server string, kbId KbId, params *CreateUploadParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "kbId", kbId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/knowledge-bases/%s/uploads", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -1626,19 +1762,26 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/knowledge-bases/{kbId}/files (the `ListFiles` operationId).
 	ListFilesWithResponse(ctx context.Context, kbId KbId, params *ListFilesParams, reqEditors ...RequestEditorFn) (*ListFilesResponse, error)
 
-	// UploadFileWithBodyWithResponse Upload one file (scope kb:write); Content-Length is required
-	//
-	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with POST /v1/knowledge-bases/{kbId}/files (the `UploadFile` operationId).
-	UploadFileWithBodyWithResponse(ctx context.Context, kbId KbId, params *UploadFileParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadFileResponse, error)
-
 	// DeleteFileWithResponse Delete a file (scope kb:write); objects and vectors are purged by a job
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /v1/knowledge-bases/{kbId}/files/{fileId} (the `DeleteFile` operationId).
 	DeleteFileWithResponse(ctx context.Context, kbId KbId, fileId FileId, params *DeleteFileParams, reqEditors ...RequestEditorFn) (*DeleteFileResponse, error)
+
+	// ConfirmUploadWithResponse Finish a presigned upload (scope kb:write). Idempotent by fileId: a repeat returns the same file, and duplicate content returns the existing file. 400 file MISSING when the object is not in storage yet.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/knowledge-bases/{kbId}/files/{fileId}/confirm (the `ConfirmUpload` operationId).
+	ConfirmUploadWithResponse(ctx context.Context, kbId KbId, fileId FileId, params *ConfirmUploadParams, reqEditors ...RequestEditorFn) (*ConfirmUploadResponse, error)
+
+	// GetDownloadUrlWithResponse Short-lived presigned GET (scope kb:read) that always downloads as attachment + application/octet-stream
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/knowledge-bases/{kbId}/files/{fileId}/download-url (the `GetDownloadUrl` operationId).
+	GetDownloadUrlWithResponse(ctx context.Context, kbId KbId, fileId FileId, params *GetDownloadUrlParams, reqEditors ...RequestEditorFn) (*GetDownloadUrlResponse, error)
 
 	// GetFilePreviewWithResponse Stream the preview JSON produced by ingest (scope kb:read); 404 until ingest writes it (M1.3)
 	//
@@ -1647,19 +1790,26 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/knowledge-bases/{kbId}/files/{fileId}/preview (the `GetFilePreview` operationId).
 	GetFilePreviewWithResponse(ctx context.Context, kbId KbId, fileId FileId, params *GetFilePreviewParams, reqEditors ...RequestEditorFn) (*GetFilePreviewResponse, error)
 
-	// DownloadFileWithResponse Stream the original file (scope kb:read)
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with GET /v1/knowledge-bases/{kbId}/files/{fileId}/raw (the `DownloadFile` operationId).
-	DownloadFileWithResponse(ctx context.Context, kbId KbId, fileId FileId, params *DownloadFileParams, reqEditors ...RequestEditorFn) (*DownloadFileResponse, error)
-
 	// RetryFileWithResponse Queue a failed file for ingest again (scope kb:write)
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/knowledge-bases/{kbId}/files/{fileId}/retry (the `RetryFile` operationId).
 	RetryFileWithResponse(ctx context.Context, kbId KbId, fileId FileId, params *RetryFileParams, reqEditors ...RequestEditorFn) (*RetryFileResponse, error)
+
+	// CreateUploadWithBodyWithResponse Start a presigned upload (scope kb:write). Creates an 'uploading' file (hidden from every read until confirmed) and returns a MinIO POST policy for exactly sizeBytes, signed for the public storage endpoint.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/knowledge-bases/{kbId}/uploads (the `CreateUpload` operationId).
+	CreateUploadWithBodyWithResponse(ctx context.Context, kbId KbId, params *CreateUploadParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateUploadResponse, error)
+
+	// CreateUploadWithResponse Start a presigned upload (scope kb:write). Creates an 'uploading' file (hidden from every read until confirmed) and returns a MinIO POST policy for exactly sizeBytes, signed for the public storage endpoint.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/knowledge-bases/{kbId}/uploads (the `CreateUpload` operationId).
+	CreateUploadWithResponse(ctx context.Context, kbId KbId, params *CreateUploadParams, body CreateUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateUploadResponse, error)
 
 	// GetManifestWithResponse App manifest (scope kb:read); tools are added in M1.3
 	//
@@ -2191,96 +2341,6 @@ func (r ListFilesResponse) ContentType() string {
 	return ""
 }
 
-type UploadFileResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *KbFileResponse
-	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *KbFileResponse
-	// JSON400 the response for an HTTP 400 `application/json` response
-	JSON400 *Error
-	// JSON401 the response for an HTTP 401 `application/json` response
-	JSON401 *Error
-	// JSON403 the response for an HTTP 403 `application/json` response
-	JSON403 *Error
-	// JSON404 the response for an HTTP 404 `application/json` response
-	JSON404 *Error
-	// JSON413 the response for an HTTP 413 `application/json` response
-	JSON413 *Error
-	// JSON415 the response for an HTTP 415 `application/json` response
-	JSON415 *Error
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r UploadFileResponse) GetJSON200() *KbFileResponse {
-	return r.JSON200
-}
-
-// GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r UploadFileResponse) GetJSON201() *KbFileResponse {
-	return r.JSON201
-}
-
-// GetJSON400 returns the response for an HTTP 400 `application/json` response
-func (r UploadFileResponse) GetJSON400() *Error {
-	return r.JSON400
-}
-
-// GetJSON401 returns the response for an HTTP 401 `application/json` response
-func (r UploadFileResponse) GetJSON401() *Error {
-	return r.JSON401
-}
-
-// GetJSON403 returns the response for an HTTP 403 `application/json` response
-func (r UploadFileResponse) GetJSON403() *Error {
-	return r.JSON403
-}
-
-// GetJSON404 returns the response for an HTTP 404 `application/json` response
-func (r UploadFileResponse) GetJSON404() *Error {
-	return r.JSON404
-}
-
-// GetJSON413 returns the response for an HTTP 413 `application/json` response
-func (r UploadFileResponse) GetJSON413() *Error {
-	return r.JSON413
-}
-
-// GetJSON415 returns the response for an HTTP 415 `application/json` response
-func (r UploadFileResponse) GetJSON415() *Error {
-	return r.JSON415
-}
-
-// GetBody returns the raw response body bytes
-func (r UploadFileResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r UploadFileResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r UploadFileResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r UploadFileResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
 type DeleteFileResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2330,6 +2390,164 @@ func (r DeleteFileResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r DeleteFileResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ConfirmUploadResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *KbFileResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Error
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Error
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Error
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Error
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ConfirmUploadResponse) GetJSON200() *KbFileResponse {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r ConfirmUploadResponse) GetJSON400() *Error {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r ConfirmUploadResponse) GetJSON401() *Error {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r ConfirmUploadResponse) GetJSON403() *Error {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r ConfirmUploadResponse) GetJSON404() *Error {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r ConfirmUploadResponse) GetJSON409() *Error {
+	return r.JSON409
+}
+
+// GetBody returns the raw response body bytes
+func (r ConfirmUploadResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ConfirmUploadResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ConfirmUploadResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ConfirmUploadResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetDownloadUrlResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Data DownloadUrl `json:"data"`
+		Meta Meta        `json:"meta"`
+	}
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Error
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Error
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Error
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Error
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetDownloadUrlResponse) GetJSON200() *struct {
+	Data DownloadUrl `json:"data"`
+	Meta Meta        `json:"meta"`
+} {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r GetDownloadUrlResponse) GetJSON400() *Error {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetDownloadUrlResponse) GetJSON401() *Error {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetDownloadUrlResponse) GetJSON403() *Error {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetDownloadUrlResponse) GetJSON404() *Error {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r GetDownloadUrlResponse) GetJSON409() *Error {
+	return r.JSON409
+}
+
+// GetBody returns the raw response body bytes
+func (r GetDownloadUrlResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDownloadUrlResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDownloadUrlResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDownloadUrlResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -2392,61 +2610,6 @@ func (r GetFilePreviewResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetFilePreviewResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type DownloadFileResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON401 the response for an HTTP 401 `application/json` response
-	JSON401 *Error
-	// JSON403 the response for an HTTP 403 `application/json` response
-	JSON403 *Error
-	// JSON404 the response for an HTTP 404 `application/json` response
-	JSON404 *Error
-}
-
-// GetJSON401 returns the response for an HTTP 401 `application/json` response
-func (r DownloadFileResponse) GetJSON401() *Error {
-	return r.JSON401
-}
-
-// GetJSON403 returns the response for an HTTP 403 `application/json` response
-func (r DownloadFileResponse) GetJSON403() *Error {
-	return r.JSON403
-}
-
-// GetJSON404 returns the response for an HTTP 404 `application/json` response
-func (r DownloadFileResponse) GetJSON404() *Error {
-	return r.JSON404
-}
-
-// GetBody returns the raw response body bytes
-func (r DownloadFileResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r DownloadFileResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DownloadFileResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r DownloadFileResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -2516,6 +2679,102 @@ func (r RetryFileResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r RetryFileResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateUploadResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *struct {
+		Data UploadTicket `json:"data"`
+		Meta Meta         `json:"meta"`
+	}
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Error
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Error
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Error
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Error
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Error
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Error
+	// JSON415 the response for an HTTP 415 `application/json` response
+	JSON415 *Error
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateUploadResponse) GetJSON201() *struct {
+	Data UploadTicket `json:"data"`
+	Meta Meta         `json:"meta"`
+} {
+	return r.JSON201
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r CreateUploadResponse) GetJSON400() *Error {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r CreateUploadResponse) GetJSON401() *Error {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r CreateUploadResponse) GetJSON403() *Error {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r CreateUploadResponse) GetJSON404() *Error {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r CreateUploadResponse) GetJSON409() *Error {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r CreateUploadResponse) GetJSON413() *Error {
+	return r.JSON413
+}
+
+// GetJSON415 returns the response for an HTTP 415 `application/json` response
+func (r CreateUploadResponse) GetJSON415() *Error {
+	return r.JSON415
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateUploadResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateUploadResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateUploadResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateUploadResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -2788,19 +3047,6 @@ func (c *ClientWithResponses) ListFilesWithResponse(ctx context.Context, kbId Kb
 	return ParseListFilesResponse(rsp)
 }
 
-// UploadFileWithBodyWithResponse Upload one file (scope kb:write); Content-Length is required
-//
-// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with POST /v1/knowledge-bases/{kbId}/files (the `UploadFile` operationId).
-func (c *ClientWithResponses) UploadFileWithBodyWithResponse(ctx context.Context, kbId KbId, params *UploadFileParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadFileResponse, error) {
-	rsp, err := c.UploadFileWithBody(ctx, kbId, params, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseUploadFileResponse(rsp)
-}
-
 // DeleteFileWithResponse Delete a file (scope kb:write); objects and vectors are purged by a job
 //
 // Returns a wrapper object for the known response body format(s).
@@ -2812,6 +3058,32 @@ func (c *ClientWithResponses) DeleteFileWithResponse(ctx context.Context, kbId K
 		return nil, err
 	}
 	return ParseDeleteFileResponse(rsp)
+}
+
+// ConfirmUploadWithResponse Finish a presigned upload (scope kb:write). Idempotent by fileId: a repeat returns the same file, and duplicate content returns the existing file. 400 file MISSING when the object is not in storage yet.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/knowledge-bases/{kbId}/files/{fileId}/confirm (the `ConfirmUpload` operationId).
+func (c *ClientWithResponses) ConfirmUploadWithResponse(ctx context.Context, kbId KbId, fileId FileId, params *ConfirmUploadParams, reqEditors ...RequestEditorFn) (*ConfirmUploadResponse, error) {
+	rsp, err := c.ConfirmUpload(ctx, kbId, fileId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConfirmUploadResponse(rsp)
+}
+
+// GetDownloadUrlWithResponse Short-lived presigned GET (scope kb:read) that always downloads as attachment + application/octet-stream
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/knowledge-bases/{kbId}/files/{fileId}/download-url (the `GetDownloadUrl` operationId).
+func (c *ClientWithResponses) GetDownloadUrlWithResponse(ctx context.Context, kbId KbId, fileId FileId, params *GetDownloadUrlParams, reqEditors ...RequestEditorFn) (*GetDownloadUrlResponse, error) {
+	rsp, err := c.GetDownloadUrl(ctx, kbId, fileId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDownloadUrlResponse(rsp)
 }
 
 // GetFilePreviewWithResponse Stream the preview JSON produced by ingest (scope kb:read); 404 until ingest writes it (M1.3)
@@ -2827,19 +3099,6 @@ func (c *ClientWithResponses) GetFilePreviewWithResponse(ctx context.Context, kb
 	return ParseGetFilePreviewResponse(rsp)
 }
 
-// DownloadFileWithResponse Stream the original file (scope kb:read)
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with GET /v1/knowledge-bases/{kbId}/files/{fileId}/raw (the `DownloadFile` operationId).
-func (c *ClientWithResponses) DownloadFileWithResponse(ctx context.Context, kbId KbId, fileId FileId, params *DownloadFileParams, reqEditors ...RequestEditorFn) (*DownloadFileResponse, error) {
-	rsp, err := c.DownloadFile(ctx, kbId, fileId, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDownloadFileResponse(rsp)
-}
-
 // RetryFileWithResponse Queue a failed file for ingest again (scope kb:write)
 //
 // Returns a wrapper object for the known response body format(s).
@@ -2851,6 +3110,32 @@ func (c *ClientWithResponses) RetryFileWithResponse(ctx context.Context, kbId Kb
 		return nil, err
 	}
 	return ParseRetryFileResponse(rsp)
+}
+
+// CreateUploadWithBodyWithResponse Start a presigned upload (scope kb:write). Creates an 'uploading' file (hidden from every read until confirmed) and returns a MinIO POST policy for exactly sizeBytes, signed for the public storage endpoint.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/knowledge-bases/{kbId}/uploads (the `CreateUpload` operationId).
+func (c *ClientWithResponses) CreateUploadWithBodyWithResponse(ctx context.Context, kbId KbId, params *CreateUploadParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateUploadResponse, error) {
+	rsp, err := c.CreateUploadWithBody(ctx, kbId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateUploadResponse(rsp)
+}
+
+// CreateUploadWithResponse Start a presigned upload (scope kb:write). Creates an 'uploading' file (hidden from every read until confirmed) and returns a MinIO POST policy for exactly sizeBytes, signed for the public storage endpoint.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/knowledge-bases/{kbId}/uploads (the `CreateUpload` operationId).
+func (c *ClientWithResponses) CreateUploadWithResponse(ctx context.Context, kbId KbId, params *CreateUploadParams, body CreateUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateUploadResponse, error) {
+	rsp, err := c.CreateUpload(ctx, kbId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateUploadResponse(rsp)
 }
 
 // GetManifestWithResponse App manifest (scope kb:read); tools are added in M1.3
@@ -3277,81 +3562,6 @@ func ParseListFilesResponse(rsp *http.Response) (*ListFilesResponse, error) {
 	return response, nil
 }
 
-// ParseUploadFileResponse parses an HTTP response from a UploadFileWithResponse call
-func ParseUploadFileResponse(rsp *http.Response) (*UploadFileResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &UploadFileResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest KbFileResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest KbFileResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Error
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Error
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Error
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest Error
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
-		var dest Error
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON413 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 415:
-		var dest Error
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON415 = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseDeleteFileResponse parses an HTTP response from a DeleteFileWithResponse call
 func ParseDeleteFileResponse(rsp *http.Response) (*DeleteFileResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -3395,26 +3605,33 @@ func ParseDeleteFileResponse(rsp *http.Response) (*DeleteFileResponse, error) {
 	return response, nil
 }
 
-// ParseGetFilePreviewResponse parses an HTTP response from a GetFilePreviewWithResponse call
-func ParseGetFilePreviewResponse(rsp *http.Response) (*GetFilePreviewResponse, error) {
+// ParseConfirmUploadResponse parses an HTTP response from a ConfirmUploadWithResponse call
+func ParseConfirmUploadResponse(rsp *http.Response) (*ConfirmUploadResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetFilePreviewResponse{
+	response := &ConfirmUploadResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest KbFileResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Error
@@ -3437,25 +3654,103 @@ func ParseGetFilePreviewResponse(rsp *http.Response) (*GetFilePreviewResponse, e
 		}
 		response.JSON404 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
 	}
 
 	return response, nil
 }
 
-// ParseDownloadFileResponse parses an HTTP response from a DownloadFileWithResponse call
-func ParseDownloadFileResponse(rsp *http.Response) (*DownloadFileResponse, error) {
+// ParseGetDownloadUrlResponse parses an HTTP response from a GetDownloadUrlWithResponse call
+func ParseGetDownloadUrlResponse(rsp *http.Response) (*GetDownloadUrlResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &DownloadFileResponse{
+	response := &GetDownloadUrlResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data DownloadUrl `json:"data"`
+			Meta Meta        `json:"meta"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetFilePreviewResponse parses an HTTP response from a GetFilePreviewWithResponse call
+func ParseGetFilePreviewResponse(rsp *http.Response) (*GetFilePreviewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetFilePreviewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -3530,6 +3825,84 @@ func ParseRetryFileResponse(rsp *http.Response) (*RetryFileResponse, error) {
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateUploadResponse parses an HTTP response from a CreateUploadWithResponse call
+func ParseCreateUploadResponse(rsp *http.Response) (*CreateUploadResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateUploadResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest struct {
+			Data UploadTicket `json:"data"`
+			Meta Meta         `json:"meta"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 415:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON415 = &dest
 
 	}
 

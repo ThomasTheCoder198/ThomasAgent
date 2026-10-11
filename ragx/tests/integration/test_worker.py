@@ -8,8 +8,7 @@ import pytest
 from minio import Minio
 from redis.asyncio import Redis
 
-from tests.integration.api_client import api_client, bearer
-from tests.tokens import mint
+from tests.integration.api_client import api_client, bearer, upload
 from thomas_ragx.db.outbox import STREAM_INGEST_REQUESTED, STREAM_KB_PURGE_REQUESTED
 from thomas_ragx.db.pool import Pool
 from thomas_ragx.kb.storage import PREVIEW_BUCKET, RAW_BUCKET, ObjectStorage
@@ -59,15 +58,8 @@ async def _uploaded_file(pool: Pool, minio_config: dict[str, Any], redis_url: st
             headers=bearer(ORG, "org:provision"),
         )
         kb_id = org.json()["data"]["defaultKbId"]
-        uploaded = await client.post(
-            f"/v1/knowledge-bases/{kb_id}/files",
-            files={"file": ("w.txt", b"worker", "text/plain")},
-            headers={
-                "Authorization": f"Bearer {mint(ORG, 'kb:write', rid=REQUEST_ID)}",
-                "X-Request-Id": REQUEST_ID,
-            },
-        )
-    assert uploaded.status_code == 201, uploaded.text
+        uploaded = await upload(client, ORG, kb_id, "w.txt", b"worker", REQUEST_ID)
+    assert uploaded.status_code == 200, uploaded.text
     return kb_id, uploaded.json()["data"]["id"]
 
 

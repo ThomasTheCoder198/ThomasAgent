@@ -31,6 +31,8 @@ See the [RAG service conventions](../../../README.md#conventions) for Config, cr
 
 Config uses `environment`, `retry_base_delay_seconds`, and `retry_max_delay_seconds` in Python. Explicit validation aliases preserve `RAG_ENV`, `RAG_RETRY_BASE_DELAY_S`, and `RAG_RETRY_MAX_DELAY_S`; aliases contain the complete variable name because pydantic-settings does not apply `env_prefix` to them. Name validation also allows callers to construct Config with these Python field names, with constructor values taking precedence over environment values. Non-secret defaults live in `config.yaml`.
 
+Presigned URLs use four settings: `RAG_S3_PUBLIC_ENDPOINT` (the origin browsers reach MinIO at, a full `http(s)://host[:port]` URL with no path; dev `http://localhost:9000`), `RAG_S3_REGION` (default `us-east-1`), `RAG_UPLOAD_URL_TTL` (YAML `900` seconds) and `RAG_DOWNLOAD_URL_TTL` (YAML `60`). TTLs are `timedelta` fields between 1 second and 7 days: YAML holds whole seconds, and environment overrides are ISO 8601 durations (`PT15M`, `PT60S`); a bare `"30"` is rejected.
+
 Configuration precedence is constructor > process environment > `.env` > `config.yaml`. `load_config` can read a different dotenv path through `RAG_ENV_FILE`. Compose passes `deploy/ragx/.env` through `env_file` and derives only network endpoints and the MinIO/Phoenix credentials shared with other containers. The environment and dotenv sources disable field-name validation so renamed Python attributes cannot create unplanned environment spellings.
 
 `HTTP_STATUS_CLIENT_ERROR`, `HTTP_STATUS_RATE_LIMITED` and `HTTP_STATUS_SERVER_ERROR` in `constants.py` provide the shared logging, retry and HTTP response thresholds.

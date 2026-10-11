@@ -1,14 +1,15 @@
 from importlib.metadata import version
 from typing import Any, Final
 
-from fastapi import APIRouter, Request
+from fastapi import Request
 
+from thomas_ragx.api.routing import api_router
 from thomas_ragx.auth.dependencies import KbReadCaller
 from thomas_ragx.platform.http_response import request_id_of, success_body
 
 APP_NAME: Final = "ragx"
 DISTRIBUTION: Final = "thomas-ragx"
-router = APIRouter(prefix="/v1")
+router = api_router("/v1")
 
 
 @router.get("/manifest")

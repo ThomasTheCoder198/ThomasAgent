@@ -1,6 +1,7 @@
 import asyncio
+import hashlib
 from collections.abc import AsyncIterator
-from typing import BinaryIO, Final
+from typing import Final
 from uuid import UUID
 
 from minio import Minio
@@ -39,12 +40,35 @@ class ObjectStorage:
     async def ready(self) -> bool:
         return await asyncio.to_thread(self._client.bucket_exists, RAW_BUCKET)
 
-    async def put_object(
-        self, bucket: str, key: str, stream: BinaryIO, length: int, content_type: str
-    ) -> None:
-        await asyncio.to_thread(
-            self._client.put_object, bucket, key, stream, length, content_type=content_type
-        )
+    async def size_of(self, bucket: str, key: str) -> int | None:
+        """None when the object does not exist (yet)."""
+        try:
+            stat = await asyncio.to_thread(self._client.stat_object, bucket, key)
+        except S3Error as exc:
+            if exc.code in MISSING_OBJECT_CODES:
+                return None
+            raise
+        return int(stat.size or 0)
+
+    def _sha256_of(self, bucket: str, key: str) -> str | None:
+        try:
+            response = self._client.get_object(bucket, key)
+        except S3Error as exc:
+            if exc.code in MISSING_OBJECT_CODES:
+                return None
+            raise
+        digest = hashlib.sha256()
+        try:
+            while chunk := response.read(STREAM_CHUNK_BYTES):
+                digest.update(chunk)
+        finally:
+            response.close()
+            response.release_conn()
+        return digest.hexdigest()
+
+    async def sha256_of(self, bucket: str, key: str) -> str | None:
+        """Streams the object in chunks; None if it vanished meanwhile (a concurrent dedupe)."""
+        return await asyncio.to_thread(self._sha256_of, bucket, key)
 
     async def exists(self, bucket: str, key: str) -> bool:
         try:

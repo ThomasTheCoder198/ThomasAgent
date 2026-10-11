@@ -3,9 +3,9 @@ import binascii
 import json
 import re
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Final
 from uuid import UUID
 
@@ -19,20 +19,29 @@ from thomas_ragx.db.outbox import (
 from thomas_ragx.db.pool import Pool
 from thomas_ragx.kb import file_repository as files
 from thomas_ragx.kb import repository as kbs
-from thomas_ragx.kb.model import KbFile
+from thomas_ragx.kb.model import DownloadLink, KbFile, UploadSlot, UploadTicket
+from thomas_ragx.kb.presign import UrlSigner
 from thomas_ragx.kb.repository import Connection
 from thomas_ragx.kb.service import require_org
 from thomas_ragx.kb.storage import PREVIEW_BUCKET, RAW_BUCKET, ObjectStorage, preview_key, raw_key
-from thomas_ragx.kb.upload import ReceivedFile
+from thomas_ragx.kb.upload import content_type_for, field_error, normalize_file_name
 from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
 
 IDEMPOTENCY_KEY_PATTERN: Final = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 CURSOR_PARTS: Final = 2
+NAME_FIELD: Final = "name"
+SIZE_FIELD: Final = "sizeBytes"
+FILE_FIELD: Final = "file"
+IDEMPOTENCY_KEY_FIELD: Final = "Idempotency-Key"
+CODE_EMPTY: Final = "EMPTY"
+CODE_MISSING: Final = "MISSING"
+CODE_SIZE_MISMATCH: Final = "SIZE_MISMATCH"
+CODE_INVALID: Final = "INVALID"
 
 
-def _field_error(field: str, code: str) -> AppError:
-    return AppError(ErrorCode.VALIDATION_FAILED, details={"fields": [{"field": field, "code": code}]})
+def utc_now() -> datetime:
+    return datetime.now(UTC)
 
 
 def encode_cursor(file: KbFile) -> str:
@@ -47,7 +56,7 @@ def decode_cursor(value: str) -> tuple[datetime, UUID]:
             raise ValueError("cursor shape")  # noqa: TRY301 - reject malformed decoded data in this validator
         return datetime.fromisoformat(str(parts[0])), UUID(str(parts[1]))
     except (ValueError, binascii.Error, json.JSONDecodeError, TypeError):
-        raise _field_error("cursor", "INVALID") from None
+        raise field_error("cursor", CODE_INVALID) from None
 
 
 class FileService:
@@ -55,19 +64,26 @@ class FileService:
         self,
         pool: Pool,
         storage: ObjectStorage,
+        signer: UrlSigner,
+        *,
         max_upload_bytes: int,
-        multipart_overhead_bytes: int,
+        upload_url_ttl: timedelta,
+        download_url_ttl: timedelta,
         idempotency_ttl_seconds: int,
         page_default_limit: int,
         page_max_limit: int,
+        now: Callable[[], datetime] = utc_now,
     ) -> None:
         self._pool = pool
         self._storage = storage
+        self._signer = signer
         self.max_upload_bytes = max_upload_bytes
-        self.multipart_overhead_bytes = multipart_overhead_bytes
+        self._upload_url_ttl = upload_url_ttl
+        self._download_url_ttl = download_url_ttl
         self._idempotency_ttl = idempotency_ttl_seconds
         self._page_default = page_default_limit
         self._page_max = page_max_limit
+        self._now = now
 
     @asynccontextmanager
     async def _transaction(self) -> AsyncIterator[Connection]:
@@ -79,109 +95,113 @@ class FileService:
         if await kbs.get_kb(conn, caller.org_id, kb_id) is None:
             raise AppError(ErrorCode.KB_NOT_FOUND)
 
-    async def ensure_kb(self, caller: Caller, kb_id: UUID) -> None:
-        """Checked before the body is read, so an upload to a missing KB never spools its file."""
+    async def create_upload(
+        self, caller: Caller, kb_id: UUID, raw_name: str, size_bytes: int
+    ) -> UploadTicket:
+        name = normalize_file_name(raw_name, NAME_FIELD)
+        content_type = content_type_for(name)
+        if size_bytes < 1:
+            raise field_error(SIZE_FIELD, CODE_EMPTY)
+        if size_bytes > self.max_upload_bytes:
+            raise AppError(ErrorCode.PAYLOAD_TOO_LARGE)
+        file_id = uuid.uuid4()
+        async with self._transaction() as conn:
+            await self._require_kb(conn, caller, kb_id)
+            await files.insert_upload_slot(
+                conn, file_id, caller.org_id, kb_id, name, content_type, size_bytes
+            )
+        expires_at = self._now() + self._upload_url_ttl
+        post = self._signer.post_policy(
+            RAW_BUCKET, raw_key(caller.org_id, kb_id, file_id), size_bytes, expires_at
+        )
+        return UploadTicket(file_id=file_id, post=post)
+
+    async def confirm_upload(
+        self, caller: Caller, kb_id: UUID, file_id: UUID, idempotency_key: str | None, request_id: str
+    ) -> KbFile:
+        """Idempotent by file_id (ruling P10): every repeat answers the same file."""
+        if idempotency_key is not None and IDEMPOTENCY_KEY_PATTERN.fullmatch(idempotency_key) is None:
+            raise field_error(IDEMPOTENCY_KEY_FIELD, CODE_INVALID)
         async with self._pool.connection() as conn:
             await self._require_kb(conn, caller, kb_id)
-
-    async def _replay(self, conn: Connection, caller: Caller, kb_id: UUID, key: str | None) -> KbFile | None:
-        if key is None:
-            return None
-        file_id = await files.remembered_file_id(conn, caller.org_id, key, self._idempotency_ttl)
-        if file_id is None:
-            return None
-        file = await files.get_any_file(conn, caller.org_id, file_id)
-        if file is None:
-            # The file was deleted since: the key has nothing left to replay, so this upload starts fresh.
-            await files.forget_file_id(conn, caller.org_id, key)
-            return None
-        if file.kb_id != kb_id:
-            raise AppError(ErrorCode.CONFLICT)
-        return file
-
-    async def _existing(
-        self, conn: Connection, caller: Caller, kb_id: UUID, received: ReceivedFile, key: str | None
-    ) -> KbFile | None:
-        replay = await self._replay(conn, caller, kb_id, key)
-        if replay is not None:
-            return replay
-        duplicate = await files.find_by_sha(conn, kb_id, received.sha256)
-        if (
-            duplicate is not None
-            and key is not None
-            and not await files.remember_file_id(conn, caller.org_id, key, duplicate.id)
-        ):
-            raise AppError(ErrorCode.CONFLICT)
-        return duplicate
-
-    async def upload(
-        self,
-        caller: Caller,
-        kb_id: UUID,
-        received: ReceivedFile,
-        idempotency_key: str | None,
-        request_id: str,
-    ) -> tuple[KbFile, bool]:
-        if idempotency_key is not None and IDEMPOTENCY_KEY_PATTERN.fullmatch(idempotency_key) is None:
-            raise _field_error("Idempotency-Key", "INVALID")
-        async with self._transaction() as conn:
-            await self._require_kb(conn, caller, kb_id)
-            if await kbs.lock_kb(conn, caller.org_id, kb_id) is None:
-                raise AppError(ErrorCode.KB_NOT_FOUND)
-            existing = await self._existing(conn, caller, kb_id, received, idempotency_key)
-        if existing is not None:
-            return existing, False
-        file_id = uuid.uuid4()
+            settled = await self._settled(conn, caller, kb_id, file_id)
+            if settled is not None:
+                return settled
+            slot = await files.get_upload_slot(conn, caller.org_id, kb_id, file_id)
+        if slot is None:
+            raise AppError(ErrorCode.KB_FILE_NOT_FOUND)
         key = raw_key(caller.org_id, kb_id, file_id)
-        await self._storage.put_object(RAW_BUCKET, key, received.stream, received.size, received.content_type)
-        try:
-            stored, created = await self._insert(
-                caller, kb_id, file_id, received, idempotency_key, request_id
-            )
-        except Exception:
+        size = await self._storage.size_of(RAW_BUCKET, key)
+        if size is None:
+            return await self._settled_or(caller, kb_id, file_id, CODE_MISSING)
+        if size != slot.size_bytes:
             await self._storage.remove(RAW_BUCKET, key)
-            raise
-        if not created:
+            raise field_error(FILE_FIELD, CODE_SIZE_MISMATCH)
+        sha256 = await self._storage.sha256_of(RAW_BUCKET, key)
+        if sha256 is None:
+            return await self._settled_or(caller, kb_id, file_id, CODE_MISSING)
+        stored, duplicate = await self._settle(caller, slot, sha256, request_id)
+        if duplicate:
             await self._storage.remove(RAW_BUCKET, key)
-        return stored, created
+        return stored
 
-    async def _insert(
-        self,
-        caller: Caller,
-        kb_id: UUID,
-        file_id: UUID,
-        received: ReceivedFile,
-        idempotency_key: str | None,
-        request_id: str,
+    async def _settled(self, conn: Connection, caller: Caller, kb_id: UUID, file_id: UUID) -> KbFile | None:
+        """The confirmed file, or the existing file a duplicate upload was folded into."""
+        confirmed = await files.get_file(conn, caller.org_id, kb_id, file_id)
+        if confirmed is not None:
+            return confirmed
+        folded_into = await files.remembered_file_id(
+            conn, caller.org_id, str(file_id), self._idempotency_ttl, operation=files.OPERATION_CONFIRM
+        )
+        return None if folded_into is None else await files.get_file(conn, caller.org_id, kb_id, folded_into)
+
+    async def _settled_or(self, caller: Caller, kb_id: UUID, file_id: UUID, code: str) -> KbFile:
+        """A missing object is fine if a concurrent confirm already settled this upload."""
+        async with self._pool.connection() as conn:
+            settled = await self._settled(conn, caller, kb_id, file_id)
+        if settled is None:
+            raise field_error(FILE_FIELD, code)
+        return settled
+
+    async def _settle(
+        self, caller: Caller, slot: UploadSlot, sha256: str, request_id: str
     ) -> tuple[KbFile, bool]:
         async with self._transaction() as conn:
-            # The KB row lock serializes uploads into one KB: versions and duplicate checks cannot race.
-            if await kbs.lock_kb(conn, caller.org_id, kb_id) is None:
+            # The KB row lock serializes confirms into one KB: versions and the duplicate check cannot race.
+            if await kbs.lock_kb(conn, caller.org_id, slot.kb_id) is None:
                 raise AppError(ErrorCode.KB_NOT_FOUND)
-            existing = await self._existing(conn, caller, kb_id, received, idempotency_key)
-            if existing is not None:
-                return existing, False
-            version = await files.next_version(conn, kb_id, received.name)
-            stored = await files.insert_file(conn, file_id, caller.org_id, kb_id, received, version)
-            await enqueue_outbox(
-                conn,
-                caller.org_id,
-                STREAM_INGEST_REQUESTED,
-                {"kb_id": str(kb_id), "file_id": str(file_id), "version": version},
-                request_id,
-            )
-            if idempotency_key is not None and not await files.remember_file_id(
-                conn, caller.org_id, idempotency_key, file_id
-            ):
-                raise AppError(ErrorCode.CONFLICT)
-            return stored, True
+            if await files.lock_upload_slot(conn, caller.org_id, slot.kb_id, slot.id) is None:
+                settled = await self._settled(conn, caller, slot.kb_id, slot.id)  # a concurrent confirm won
+                if settled is None:
+                    raise AppError(ErrorCode.KB_FILE_NOT_FOUND)
+                return settled, False
+            duplicate = await files.find_by_sha(conn, slot.kb_id, sha256)
+            if duplicate is not None:
+                await files.delete_upload_slot(conn, slot.id)
+                await files.remember_file_id(
+                    conn, caller.org_id, str(slot.id), duplicate.id, operation=files.OPERATION_CONFIRM
+                )
+                return duplicate, True
+            version = await files.next_version(conn, slot.kb_id, slot.name)
+            stored = await files.confirm_upload_slot(conn, slot.id, sha256, version)
+            payload = {"kb_id": str(slot.kb_id), "file_id": str(slot.id), "version": version}
+            await enqueue_outbox(conn, caller.org_id, STREAM_INGEST_REQUESTED, payload, request_id)
+            return stored, False
+
+    async def download_url(self, caller: Caller, kb_id: UUID, file_id: UUID) -> DownloadLink:
+        file = await self._file(caller, kb_id, file_id)
+        issued_at = self._now()
+        url = self._signer.download_url(
+            RAW_BUCKET, raw_key(caller.org_id, kb_id, file_id), file.name, self._download_url_ttl, issued_at
+        )
+        return DownloadLink(url=url, expires_at=issued_at + self._download_url_ttl)
 
     async def list_page(
         self, caller: Caller, kb_id: UUID, cursor: str | None, limit: int | None
     ) -> tuple[list[KbFile], str | None, int]:
         size = self._page_default if limit is None else limit
         if size < 1 or size > self._page_max:
-            raise _field_error("limit", "OUT_OF_RANGE")
+            raise field_error("limit", "OUT_OF_RANGE")
         after = decode_cursor(cursor) if cursor else None
         async with self._pool.connection() as conn:
             await self._require_kb(conn, caller, kb_id)
@@ -216,12 +236,6 @@ class FileService:
         if file is None:
             raise AppError(ErrorCode.KB_FILE_NOT_FOUND)
         return file
-
-    async def open_raw(
-        self, caller: Caller, kb_id: UUID, file_id: UUID
-    ) -> tuple[KbFile, AsyncIterator[bytes]]:
-        file = await self._file(caller, kb_id, file_id)
-        return file, await self._storage.stream_object(RAW_BUCKET, raw_key(caller.org_id, kb_id, file_id))
 
     async def open_preview(self, caller: Caller, kb_id: UUID, file_id: UUID) -> AsyncIterator[bytes]:
         await self._file(caller, kb_id, file_id)

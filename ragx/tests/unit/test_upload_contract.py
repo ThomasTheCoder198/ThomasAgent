@@ -12,4 +12,3 @@ def test_upload_limits_match_the_shared_contract() -> None:
     config = Config(minio_access_key="a", minio_secret_key="s")
     assert list(SUPPORTED_EXTENSIONS) == contract["extensions"]
     assert config.upload_max_bytes == contract["maxFileBytes"]
-    assert config.upload_multipart_overhead_bytes == contract["multipartOverheadBytes"]

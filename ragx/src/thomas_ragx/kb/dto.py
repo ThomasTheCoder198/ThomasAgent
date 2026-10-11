@@ -2,10 +2,10 @@ from datetime import datetime
 from typing import Annotated, Any, Final
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StringConstraints
 from pydantic.alias_generators import to_camel
 
-from thomas_ragx.kb.model import KbFile, KnowledgeBase, Org
+from thomas_ragx.kb.model import DownloadLink, KbFile, KnowledgeBase, Org, UploadTicket
 
 NAME_MAX_LENGTH: Final = 200
 DisplayName = Annotated[
@@ -103,3 +103,36 @@ class FileResponse(CamelModel):
             created_at=file.created_at,
             updated_at=file.updated_at,
         )
+
+
+class UploadRequest(CamelModel):
+    name: str
+    size_bytes: StrictInt  # "10" is a client bug, not a size
+
+
+class UploadTarget(CamelModel):
+    url: str
+    form_fields: dict[str, str] = Field(alias="fields")  # `fields` would shadow pydantic internals
+
+
+class UploadTicketResponse(CamelModel):
+    file_id: UUID
+    upload: UploadTarget
+    expires_at: datetime
+
+    @classmethod
+    def from_model(cls, ticket: UploadTicket) -> "UploadTicketResponse":
+        return cls(
+            file_id=ticket.file_id,
+            upload=UploadTarget(url=ticket.post.url, fields=ticket.post.fields),
+            expires_at=ticket.post.expires_at,
+        )
+
+
+class DownloadUrlResponse(CamelModel):
+    url: str
+    expires_at: datetime
+
+    @classmethod
+    def from_model(cls, link: DownloadLink) -> "DownloadUrlResponse":
+        return cls(url=link.url, expires_at=link.expires_at)

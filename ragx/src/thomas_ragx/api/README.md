@@ -8,7 +8,8 @@ Owns FastAPI construction, request tracing, error responses, and health endpoint
 - `health.py`: GET /healthz and GET /readyz.
 - `orgs.py`: org provisioning.
 - `knowledge_bases.py`: Knowledge Base CRUD.
-- `files.py`: file upload, listing, deletion, retry, and download.
+- `files.py`: `POST /v1/knowledge-bases/{kbId}/uploads` (presign), `POST …/files/{fileId}/confirm`, `GET …/files/{fileId}/download-url`, file listing, deletion, retry and preview.
+- `routing.py`: `api_router`, whose routes answer `HEAD` like `GET`.
 - `manifest.py`: app manifest.
 - `services.py`: dependency access to application services.
 
@@ -25,6 +26,8 @@ uv run pytest -q tests/unit
 
 ## Conventions
 See the [RAG service conventions](../../../README.md#conventions) for Config, credentials, shared naming, and boundary logging.
+
+Every GET route also serves `HEAD` (`HeadCapableRoute`; FastAPI does not do it): same status and headers, no body. HEAD has no body on the wire, so a failed HEAD carries only a status. HEAD is not in the OpenAPI contract, which documents GET once.
 
 Every `/v1` route takes a scoped `Caller` from `auth.dependencies`; services read `app.state.*_service` through `api/services.py`.
 `ragx/tests/unit/test_openapi_contract.py` keeps served routes and `contracts/openapi/ragx.v1.yaml` identical.

@@ -1,9 +1,11 @@
 import os
+from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Final, Literal
+from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -12,6 +14,9 @@ from pydantic_settings import (
 )
 
 DEFAULT_CONFIG_FILE = Path(__file__).with_name("config.yaml")
+PUBLIC_ENDPOINT_SCHEMES: Final = frozenset({"http", "https"})
+PRESIGN_MIN_TTL: Final = timedelta(seconds=1)
+PRESIGN_MAX_TTL: Final = timedelta(days=7)
 
 
 class Config(BaseSettings):
@@ -45,9 +50,12 @@ class Config(BaseSettings):
     minio_access_key: str
     minio_secret_key: SecretStr
     minio_secure: bool
+    s3_public_endpoint: str
+    s3_region: str
+    upload_url_ttl: timedelta
+    download_url_ttl: timedelta
     buckets: tuple[str, ...]
     upload_max_bytes: int
-    upload_multipart_overhead_bytes: int
     idempotency_ttl_seconds: int
     page_default_limit: int
     page_max_limit: int
@@ -68,6 +76,29 @@ class Config(BaseSettings):
     ui_login_window_seconds: int
     retry_base_delay_seconds: float = Field(validation_alias="RAG_RETRY_BASE_DELAY_S")
     retry_max_delay_seconds: float = Field(validation_alias="RAG_RETRY_MAX_DELAY_S")
+
+    @field_validator("s3_public_endpoint")
+    @classmethod
+    def _public_endpoint_is_an_origin(cls, value: str) -> str:
+        """The browser POSTs and GETs here; ragx signs for it but never connects to it."""
+        parts = urlsplit(value)
+        if (
+            parts.scheme not in PUBLIC_ENDPOINT_SCHEMES
+            or not parts.netloc
+            or parts.path not in ("", "/")
+            or parts.query
+        ):
+            raise ValueError(
+                "RAG_S3_PUBLIC_ENDPOINT must be an http(s) origin such as https://files.example.com"
+            )
+        return value.rstrip("/")
+
+    @field_validator("upload_url_ttl", "download_url_ttl")
+    @classmethod
+    def _presign_ttl_in_range(cls, value: timedelta) -> timedelta:
+        if not PRESIGN_MIN_TTL <= value <= PRESIGN_MAX_TTL:  # MinIO accepts 1 second to 7 days
+            raise ValueError("presigned URL lifetimes must be between 1 second and 7 days")
+        return value
 
     @classmethod
     def settings_customise_sources(

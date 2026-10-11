@@ -7,6 +7,7 @@ export default tseslint.config(
       ".next/**",
       "node_modules/**",
       "lib/errors/codes.gen.ts",
+      "lib/ragx/api.gen.ts",
       "playwright-report/**",
       "test-results/**",
       "next-env.d.ts",
@@ -38,6 +39,19 @@ export default tseslint.config(
     // JSX markup inflates line counts; components get a looser limit, logic in .ts files keeps 50.
     files: ["**/*.tsx"],
     rules: { "max-lines-per-function": ["error", { max: 120, skipBlankLines: true, skipComments: true }] },
+  },
+  {
+    // Tests index into results they have just asserted on, mock modules with import() types and type
+    // 204-style calls as `<void>`; none of that is worth contortions in a test body.
+    files: ["**/*.test.ts", "**/*.test.tsx"],
+    rules: {
+      "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/no-invalid-void-type": "off",
+      "@typescript-eslint/consistent-type-imports": [
+        "error",
+        { fixStyle: "inline-type-imports", disallowTypeAnnotations: false },
+      ],
+    },
   },
   {
     // Fixtures are data tables (scores, page numbers), like test tables.

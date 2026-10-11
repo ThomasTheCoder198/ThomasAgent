@@ -74,8 +74,10 @@ test("@screens capture", async ({ page }) => {
   await shot(page, "drawer-mobile-light");
 
   await page.setViewportSize(desktop);
+  // /knowledge-bases redirects to the current org's list.
   await page.goto("/knowledge-bases");
-  await shot(page, "empty-kb-desktop-light");
+  await expect(page).toHaveURL(/\/orgs\/[^/]+\/knowledge-bases$/);
+  await shot(page, "kb-list-desktop-light");
 
   await page.request.post(`${process.env.MOCK_CORE_URL ?? "http://localhost:8787"}/__mock/reset`);
   await page.goto("/agents");

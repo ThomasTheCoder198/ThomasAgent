@@ -11,6 +11,11 @@ export const mockConfig = {
   // Leading tag so the word survives truncation in the 248px owner plate.
   ownerName: process.env.MOCK_CORE_OWNER_NAME ?? "Mẫu · Thomas",
   sessionTtlSeconds: Number(process.env.MOCK_CORE_SESSION_TTL ?? SESSION_TTL_SECONDS),
+  /** Where the browser reaches this fake, for the fake S3 URLs it hands out in upload tickets and download links. */
+  publicUrl:
+    process.env.MOCK_CORE_PUBLIC_URL ?? `http://localhost:${process.env.MOCK_CORE_PORT ?? DEFAULT_PORT}`,
+  /** The web app's origin: the fake S3 answers CORS for it, like MinIO's MINIO_API_CORS_ALLOW_ORIGIN. */
+  webOrigin: process.env.MOCK_CORE_WEB_ORIGIN ?? "http://localhost:3000",
   /** Multiplies every scripted delay; 0 makes runs instant (handy for e2e). */
   speed: Number(process.env.MOCK_CORE_SPEED ?? 1),
 } as const;

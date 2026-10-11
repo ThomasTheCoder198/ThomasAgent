@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { REQUEST_ID_PATTERN } from "../lib/api/request-id.ts";
-import { errorDefinitions, type ErrorCode } from "../lib/errors/codes.gen.ts";
+import { ErrorCode as Codes, errorDefinitions, type ErrorCode } from "../lib/errors/codes.gen.ts";
 
 export type Locale = "vi" | "en";
 
@@ -48,6 +48,46 @@ export function sendError(
     { error: { code, message: spec.message[requestLocale(req)], requestId } },
     { "X-Request-Id": requestId, ...headers },
   );
+}
+
+/** An error envelope that also carries `details.fields`, like core's validation and conflict answers. */
+export function sendFieldError(
+  req: IncomingMessage,
+  res: ServerResponse,
+  code: ErrorCode,
+  fields: { field: string; code: string }[],
+) {
+  const spec = errorDefinitions[code];
+  const sent = req.headers["x-request-id"];
+  const requestId = typeof sent === "string" && REQUEST_ID_PATTERN.test(sent) ? sent : `req_${randomUUID()}`;
+  writeJson(
+    res,
+    spec.httpStatus,
+    { error: { code, message: spec.message[requestLocale(req)], details: { fields }, requestId } },
+    { "X-Request-Id": requestId },
+  );
+}
+
+export const HTTP_NO_CONTENT = 204;
+const HTTP_UNAVAILABLE = 503;
+
+/** Core's answer when ragx is down: HTTP 503, but the body shows only INTERNAL_ERROR + requestId (rule 4, F17). */
+export function sendUnavailable(req: IncomingMessage, res: ServerResponse) {
+  const spec = errorDefinitions[Codes.INTERNAL_ERROR];
+  const sent = req.headers["x-request-id"];
+  const requestId = typeof sent === "string" && REQUEST_ID_PATTERN.test(sent) ? sent : `req_${randomUUID()}`;
+  writeJson(
+    res,
+    HTTP_UNAVAILABLE,
+    { error: { code: Codes.INTERNAL_ERROR, message: spec.message[requestLocale(req)], requestId } },
+    { "X-Request-Id": requestId },
+  );
+}
+
+/** Ragx deletes answer 204 and core's app proxy passes it through. */
+export function sendNoContent(res: ServerResponse) {
+  res.writeHead(HTTP_NO_CONTENT);
+  res.end();
 }
 
 export async function readJson<T>(req: IncomingMessage): Promise<T | undefined> {

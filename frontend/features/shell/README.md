@@ -8,7 +8,7 @@ one-station empty state.
 
 ## Entry points
 
-- `Sidebar.tsx` — presentational; folds to a 64px rail through the `group/shell` `data-collapsed` variant.
+- `Sidebar.tsx` — presentational; folds to a 64px rail through the `group/shell` `data-collapsed` variant. The `org` slot renders the org plate (`features/orgs`) right under the brand, before New chat.
 - `ShellFrame.tsx` + `useShellState.ts` — drawer below `md`; rail toggle on desktop (button or ⌘/Ctrl+B), persisted in the `thomas_sidebar` cookie (`sidebar-state.ts`) so the server renders the right width.
 - `shell-menu.ts` — context for `MenuButton` / `CollapseButton`; `pageOwnsHeader()` lists routes whose header carries the mobile menu.
 - `NavLink.tsx` — `aria-current` from the live pathname (layouts persist across navigations).

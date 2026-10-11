@@ -17,6 +17,7 @@ controls.
 - `ui/Tabs.tsx` — WAI-ARIA tabs: roving tabindex, ←/→ (wrapping), Home/End; pair with `tabPanelId()` and give the panel `tabIndex={0}`.
 - `ui/SettingsSection.tsx` — one ruled settings row (title + hint left, control right).
 - `ui/InlineAlert.tsx` — in-place error with the server's message.
+- `ui/Dialog.tsx`, `ui/DropdownMenu.tsx`, `ui/Switch.tsx` — wrappers over `radix-ui` 1.6.7 restyled to Metro (lifted paper dialog on the scrim; menus that open from the sign wear the sign). Never build these controls by hand: Radix owns focus trapping, roving focus, Escape and the switch semantics.
 - `ui/useDismiss.ts` — Escape / outside-press closing.
 
 ## Dependencies

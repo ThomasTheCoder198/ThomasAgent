@@ -10,8 +10,8 @@ Every call sends a fresh `X-Request-Id` (`request-id.ts`, values copied from `co
 
 ## Entry points
 
-- `client.ts` — `apiFetch` (browser), `parseResponse`, `mutationHeaders` (also used by the chat transport), `ApiError`.
-- `server.ts` — `serverFetch` for server components; calls `WEB_CORE_URL` directly and forwards the browser's cookies. `serverFetchOptional` (404 → fallback) is only for endpoints core may not serve yet where "empty" is a true answer (e.g. the Agent list); `serverFetchResult` returns a `Loaded<T>` so any other failure is rendered as an error state instead of an empty list.
+- `client.ts` — `apiFetch` (browser), `apiFetchPage` (list endpoints: resolves `{ data, page: { cursor, limit } }` from `meta.page`), `parseResponse`, `mutationHeaders` (also used by the chat transport), `csrfHeaders`, `networkError`, `ApiError`. A **204 No Content** answer (ragx deletes, passed through by core's app proxy) resolves `undefined` instead of being reported as a network error, so type such calls `apiFetch<void>`.
+- `server.ts` — `serverFetch` and `serverFetchPage` (same shape as `apiFetchPage`) for server components, sharing one request builder; calls `WEB_CORE_URL` directly and forwards the browser's cookies. `serverFetchOptional` (404 → fallback) is only for endpoints core may not serve yet where "empty" is a true answer (e.g. the Agent list); `serverFetchResult` returns a `Loaded<T>` so any other failure is rendered as an error state instead of an empty list.
 - `request-id.ts` — `newRequestId` and the shared header/pattern constants.
 - `loaded.ts` — the `Loaded<T>` type and `loadedOr`, shared by server loaders and client components.
 

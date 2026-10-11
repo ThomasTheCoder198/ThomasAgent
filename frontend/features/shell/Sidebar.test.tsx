@@ -49,6 +49,24 @@ describe("Sidebar", () => {
     expect(el).toHaveAttribute("title", title);
   });
 
+  it("places the org plate between the brand and the New chat link", () => {
+    render(
+      <Sidebar
+        items={[]}
+        recents={[]}
+        user={user}
+        labels={labels}
+        activeHref="/chat"
+        org={<span>Org plate</span>}
+      />,
+    );
+    const plate = screen.getByText("Org plate");
+    const brand = screen.getByText("ThomasAgent");
+    const newChat = screen.getByRole("link", { name: labels.newChat });
+    expect(brand.compareDocumentPosition(plate) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(plate.compareDocumentPosition(newChat) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("marks the open conversation in recents", () => {
     render(
       <Sidebar

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, apiFetch, describeApiError, mutationHeaders } from "./client";
+import { ApiError, apiFetch, apiFetchPage, describeApiError, mutationHeaders } from "./client";
 import { REQUEST_ID_PATTERN } from "./request-id";
 
 function mockFetch(response: Response | Error) {
@@ -112,5 +112,35 @@ describe("apiFetch", () => {
       code: "CLIENT_NETWORK_ERROR",
       message: "Could not reach the server.",
     });
+  });
+
+  it("resolves undefined for 204 No Content (ragx deletes through the proxy)", async () => {
+    mockFetch(new Response(null, { status: 204 }));
+    await expect(
+      apiFetch<void>("/api/v1/orgs/o/apps/ragx/knowledge-bases/k", { method: "DELETE" }),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe("apiFetchPage", () => {
+  it("returns the data with the page cursor from meta.page", async () => {
+    mockFetch(
+      json(200, { data: [{ id: "f1" }], meta: { requestId: "r", page: { cursor: "c2", limit: 20 } } }),
+    );
+    await expect(apiFetchPage<{ id: string }[]>("/api/v1/files")).resolves.toEqual({
+      data: [{ id: "f1" }],
+      page: { cursor: "c2", limit: 20 },
+    });
+  });
+
+  it("throws ApiError like apiFetch on errors", async () => {
+    mockFetch(json(404, { error: { code: "KB_NOT_FOUND", message: "Không có", requestId: "req_abcdefgh" } }));
+    await expect(apiFetchPage("/api/v1/files")).rejects.toMatchObject({
+      code: "KB_NOT_FOUND",
+      status: 404,
+      requestId: "req_abcdefgh",
+    });
+    mockFetch(new TypeError("Failed to fetch"));
+    await expect(apiFetchPage("/api/v1/files")).rejects.toMatchObject({ code: "CLIENT_NETWORK_ERROR" });
   });
 });

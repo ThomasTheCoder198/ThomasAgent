@@ -12,7 +12,8 @@ no business data; everything comes from Go core through the same-origin `/api/v1
 - `app/(workspace)/layout.tsx` — session check (`requireUser`), sidebar, recents.
 - `app/(workspace)/chat/page.tsx`, `chat/[id]/page.tsx` — chat surface (`features/chat`).
 - `app/(workspace)/agents`, `agents/[id]` — Agents list and tabbed Agent settings (`features/agents`).
-- `app/(workspace)/{knowledge-bases,tools,usage}` — designed empty states until their milestones.
+- `app/(workspace)/orgs/[orgId]/knowledge-bases`, `.../[kbId]` — Knowledge Base list and documents with presigned upload (`features/knowledge-bases`); `app/(workspace)/knowledge-bases` redirects to the current org's list.
+- `app/(workspace)/{tools,usage}` — designed empty states until their milestones.
 - `app/(workspace)/template.tsx` — route-change fade; the sidebar rail state comes from the `thomas_sidebar` cookie.
 - `proxy.ts` — redirects to `/login` without a `thomas_session` cookie; forwards the path as `x-pathname`.
 - `app/globals.css` — Metro tokens for light (station white) and dark (platform night).
@@ -37,11 +38,12 @@ The frontend runs on the host, not in compose. From the repo root, use `task web
 or `task web:dev:mock`; `task lint:frontend` and `task test:frontend` also run from there.
 Bun is only the script runner; install with npm and keep `package-lock.json` as the lockfile of record.
 
-| Env            | Where                           | Meaning                                             |
-| -------------- | ------------------------------- | --------------------------------------------------- |
-| `WEB_CORE_URL` | server, build time for rewrites | Base URL of core (default `http://localhost:8080`). |
-| `WEB_BASE_URL` | Playwright                      | App under test (default `http://localhost:3000`).   |
-| `MOCK_CORE_*`  | `mock-core/`                    | See `mock-core/README.md`.                          |
+| Env               | Where                           | Meaning                                                                                   |
+| ----------------- | ------------------------------- | ----------------------------------------------------------------------------------------- |
+| `WEB_CORE_URL`    | server, build time for rewrites | Base URL of core (default `http://localhost:8080`).                                       |
+| `WEB_RAGX_UI_URL` | server                          | Ragx's model UI, opened in a new tab (dev `http://localhost:8090/ui`). Hidden when unset. |
+| `WEB_BASE_URL`    | Playwright                      | App under test (default `http://localhost:3000`).                                         |
+| `MOCK_CORE_*`     | `mock-core/`                    | See `mock-core/README.md`.                                                                |
 
 ## Conventions
 

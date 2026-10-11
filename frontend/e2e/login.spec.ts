@@ -18,5 +18,7 @@ test("wrong password shows the localized error", async ({ page }) => {
   await page.getByLabel("Mật khẩu").fill("definitely wrong!!");
   await page.getByRole("button", { name: "Đăng nhập" }).click();
   // Scoped to the form: Next 16 also mounts its route announcer with role="alert".
-  await expect(page.locator("form").getByRole("alert")).toHaveText("Email hoặc mật khẩu không đúng.");
+  await expect(page.locator("form").getByRole("alert")).toHaveText(
+    /^Email hoặc mật khẩu không đúng\. \(Mã yêu cầu: \S+\)$/,
+  );
 });

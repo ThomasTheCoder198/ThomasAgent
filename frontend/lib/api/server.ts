@@ -7,7 +7,7 @@ import { env } from "@/lib/env";
 
 import { ErrorCode } from "@/lib/errors/codes.gen";
 
-import { ApiError, parseResponse } from "./client";
+import { ApiError, parseEnvelope, parseResponse, type Page } from "./client";
 import type { Loaded } from "./loaded";
 import { REQUEST_ID_HEADER, newRequestId } from "./request-id";
 
@@ -16,7 +16,7 @@ async function requestLocale(): Promise<Locale> {
 }
 
 /** Server components call core directly and forward the browser's cookies, so the session stays first-party. */
-export async function serverFetch<T>(path: string, init?: RequestInit): Promise<T> {
+async function serverRequest(path: string, init?: RequestInit): Promise<{ res: Response; lang: Locale }> {
   const cookieHeader = (await cookies()).toString();
   const lang = await requestLocale();
   const outgoingHeaders = new Headers(init?.headers);
@@ -28,7 +28,19 @@ export async function serverFetch<T>(path: string, init?: RequestInit): Promise<
     cache: "no-store",
     headers: outgoingHeaders,
   });
+  return { res, lang };
+}
+
+export async function serverFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const { res, lang } = await serverRequest(path, init);
   return parseResponse<T>(res, lang);
+}
+
+/** Like serverFetch, for list endpoints whose `meta.page` carries the next cursor. */
+export async function serverFetchPage<T>(path: string): Promise<{ data: T; page: Page }> {
+  const { res, lang } = await serverRequest(path);
+  const { data, page } = await parseEnvelope<T>(res, lang);
+  return { data, page: page ?? { cursor: null, limit: 0 } };
 }
 
 export type { Loaded } from "./loaded";

@@ -33,8 +33,9 @@ export function ShellFrame({ sidebar, initialCollapsed, labels, children }: Prop
         <div
           id="workspace-sidebar"
           className={cn(
-            "ease-out-expo fixed inset-y-0 left-0 z-40 transition-transform duration-300 md:static md:translate-x-0",
-            open ? "translate-x-0" : "-translate-x-full",
+            "ease-out-expo fixed inset-y-0 left-0 z-40 transition-[transform,visibility] duration-300 md:static md:translate-x-0",
+            // Hidden once the slide-out ends so the closed drawer's links and org plate leave the tab order.
+            open ? "translate-x-0" : "-translate-x-full max-md:invisible",
           )}
         >
           {sidebar}

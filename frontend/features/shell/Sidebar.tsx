@@ -9,9 +9,16 @@ import type { Line, ToolLine } from "@/components/metro/lines";
 import type { SessionUser } from "@/features/auth/types";
 import { cn } from "@/lib/cn";
 
-import { NavLink } from "./NavLink";
+import { NavLink, type OrgScope } from "./NavLink";
 
-export type NavItem = { href: string; label: string; icon: LucideIcon; lines?: Line[] };
+export type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  lines?: Line[];
+  /** Makes `href` follow the org in the URL, with the server-resolved org as fallback. */
+  orgScope?: OrgScope;
+};
 export type RecentItem = { id: string; title: string; lines: ToolLine[] };
 export type SidebarLabels = {
   newChat: string;
@@ -30,6 +37,8 @@ type Props = {
   labels: SidebarLabels;
   activeHref: string;
   footer?: ReactNode;
+  /** The org plate, under the brand. */
+  org?: ReactNode;
   /** Desktop collapse control, rendered beside the brand. */
   toggle?: ReactNode;
   className?: string;
@@ -57,7 +66,7 @@ function Recents({ recents, labels, activeHref }: Pick<Props, "recents" | "label
                 serverPath={activeHref}
                 className={cn(
                   rowLink,
-                  "text-sign-ink/85 grid grid-cols-[1fr_auto] gap-2 px-2.5 py-1.5 text-[13.5px]",
+                  "text-sign-ink/85 max-md:min-h-touch grid grid-cols-[1fr_auto] items-center gap-2 px-2.5 py-1.5 text-[13.5px]",
                 )}
               >
                 <span className="truncate" title={r.title}>
@@ -86,7 +95,7 @@ function PrimaryActions({ labels }: Pick<Props, "labels">) {
         href={NEW_CHAT_HREF}
         title={labels.newChat}
         className={cn(
-          "bg-sign-ink text-sign flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-semibold transition-[opacity,transform] hover:opacity-90 active:scale-[0.97]",
+          "bg-sign-ink text-sign max-md:min-h-touch flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-semibold transition-[opacity,transform] hover:opacity-90 active:scale-[0.97]",
           RAIL_CENTER,
         )}
       >
@@ -98,7 +107,7 @@ function PrimaryActions({ labels }: Pick<Props, "labels">) {
         disabled
         title={labels.searchSoon}
         className={cn(
-          "border-sign-rule text-sign-ink-2 mt-2 flex cursor-not-allowed items-center gap-2.5 rounded-lg border px-3 py-2 text-sm",
+          "border-sign-rule text-sign-ink-2 max-md:min-h-touch mt-2 flex cursor-not-allowed items-center gap-2.5 rounded-lg border px-3 py-2 text-sm",
           RAIL_CENTER,
         )}
       >
@@ -136,7 +145,7 @@ function OwnerPlate({ user, labels, footer }: Pick<Props, "user" | "labels" | "f
 }
 
 /** The enamel-black station sign: brand, primary actions, lines, recents and the owner plate. */
-export function Sidebar({ items, recents, user, labels, activeHref, footer, toggle, className }: Props) {
+export function Sidebar({ items, recents, user, labels, activeHref, footer, org, toggle, className }: Props) {
   return (
     <aside
       className={cn(
@@ -154,16 +163,18 @@ export function Sidebar({ items, recents, user, labels, activeHref, footer, togg
         <BrandMark label="ThomasAgent" labelClassName={RAIL_TEXT} />
         {toggle}
       </div>
+      {org}
       <PrimaryActions labels={labels} />
       <nav aria-label={labels.nav} className="mt-4.5 flex flex-col gap-0.5">
-        {items.map(({ href, label, icon: Icon, lines }) => (
+        {items.map(({ href, label, icon: Icon, lines, orgScope }) => (
           <NavLink
             key={href}
             href={href}
+            orgScope={orgScope}
             match="section"
             serverPath={activeHref}
             title={label}
-            className={cn(rowLink, "gap-2.5 px-2.5 py-2 text-sm", RAIL_CENTER)}
+            className={cn(rowLink, "max-md:min-h-touch gap-2.5 px-2.5 py-2 text-sm", RAIL_CENTER)}
           >
             <Icon aria-hidden className="size-4 shrink-0" />
             <span className={RAIL_TEXT}>{label}</span>

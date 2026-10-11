@@ -1,6 +1,7 @@
 .next
 node_modules
 lib/errors/codes.gen.ts
+lib/ragx/api.gen.ts
 package-lock.json
 playwright-report
 test-results

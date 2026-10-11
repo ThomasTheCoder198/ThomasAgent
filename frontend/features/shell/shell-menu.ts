@@ -22,7 +22,7 @@ export function useShellMenu() {
 }
 
 /** Routes whose page header owns the mobile bar (menu button + title), so phones get one bar, not two. */
-const OWN_HEADER_PREFIXES = ["/chat", "/agents"] as const;
+const OWN_HEADER_PREFIXES = ["/chat", "/agents", "/orgs"] as const;
 
 export function pageOwnsHeader(pathname: string): boolean {
   return OWN_HEADER_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));

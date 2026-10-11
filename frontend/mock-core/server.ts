@@ -7,12 +7,18 @@ import { guard, login, logout, me } from "./auth.ts";
 import { models, roles } from "./catalog.ts";
 import { chat } from "./chat/handler.ts";
 import { mockConfig } from "./config.ts";
+import { getObjectResponse, postObject, preflight } from "./fake-s3.ts";
 import { defaultScope, getConversation, listConversations, seedConversations } from "./conversations.ts";
 import { documentPages } from "./fixtures/refund-policy.ts";
 import { sendData, sendError } from "./http.ts";
+import { ragxProxy, resetKnowledgeBases } from "./knowledge-bases.ts";
+import { createOrg, getOrg, listOrgs, patchOrg, provisionOrg, resetOrgs } from "./orgs.ts";
 
 type Handler = (req: IncomingMessage, res: ServerResponse, params: string[]) => unknown;
 type Route = { method: string; pattern: RegExp; handler: Handler; public?: boolean };
+
+const PROXY_METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"] as const;
+const RAGX_PROXY_PATTERN = /^\/api\/v1\/orgs\/([^/]+)\/apps\/ragx\/(.+)$/;
 
 const routes: Route[] = [
   { method: "POST", pattern: /^\/api\/v1\/auth\/login$/, handler: login, public: true },
@@ -21,9 +27,24 @@ const routes: Route[] = [
     method: "POST",
     pattern: /^\/__mock\/reset$/,
     handler: (req, res) => {
-      resetAgents(new URL(req.url ?? "/", "http://mock-core").searchParams.get("agent") ?? undefined);
+      const agent = new URL(req.url ?? "/", "http://mock-core").searchParams.get("agent") ?? undefined;
+      // A reset scoped to one Agent (the Agents e2e, per test) leaves orgs and KBs alone: other specs run in parallel.
+      if (!agent) {
+        resetOrgs();
+        resetKnowledgeBases();
+      }
+      resetAgents(agent);
       sendData(res, { status: "reset" });
     },
+    public: true,
+  },
+  // The fake S3 is public and outside /api/v1, like MinIO: the browser posts and fetches bytes here directly.
+  { method: "OPTIONS", pattern: /^\/__mock\/s3\/kb-raw(?:\/.*)?$/, handler: preflight, public: true },
+  { method: "POST", pattern: /^\/__mock\/s3\/kb-raw$/, handler: postObject, public: true },
+  {
+    method: "GET",
+    pattern: /^\/__mock\/s3\/kb-raw\/(.+)$/,
+    handler: (req, res, [key]) => getObjectResponse(req, res, key ?? ""),
     public: true,
   },
   { method: "GET", pattern: /^\/api\/v1\/auth\/me$/, handler: me },
@@ -43,6 +64,25 @@ const routes: Route[] = [
     handler: (req, res, [id]) => patchAgent(req, res, id ?? ""),
   },
   { method: "GET", pattern: /^\/api\/v1\/knowledge-bases$/, handler: listKnowledgeBases },
+  { method: "GET", pattern: /^\/api\/v1\/orgs$/, handler: listOrgs },
+  { method: "POST", pattern: /^\/api\/v1\/orgs$/, handler: createOrg },
+  {
+    method: "GET",
+    pattern: /^\/api\/v1\/orgs\/([^/]+)$/,
+    handler: (req, res, [id]) => getOrg(req, res, decodeURIComponent(id ?? "")),
+  },
+  {
+    method: "PATCH",
+    pattern: /^\/api\/v1\/orgs\/([^/]+)$/,
+    handler: (req, res, [id]) => patchOrg(req, res, decodeURIComponent(id ?? "")),
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/orgs\/([^/]+)\/provision$/,
+    handler: (req, res, [id]) => provisionOrg(req, res, decodeURIComponent(id ?? "")),
+  },
+  // Core's generic app proxy to ragx: every method, one pattern, dispatched like ragx would.
+  ...PROXY_METHODS.map((method): Route => ({ method, pattern: RAGX_PROXY_PATTERN, handler: ragxProxy })),
   { method: "POST", pattern: new RegExp(`^${CHAT_PATHS.chat}$`), handler: chat },
   {
     method: "GET",

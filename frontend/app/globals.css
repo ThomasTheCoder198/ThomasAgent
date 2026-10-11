@@ -100,6 +100,8 @@
 }
 
 @theme inline {
+  /* The root font is 15px, so Tailwind's step 11 is 41px: touch targets use this token instead. */
+  --spacing-touch: 44px;
   --color-ground: var(--ground);
   --color-paper: var(--paper);
   --color-paper-2: var(--paper-2);

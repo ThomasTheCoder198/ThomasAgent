@@ -1,0 +1,50 @@
+# features/orgs
+
+## Purpose
+
+The operator's organizations as the web app shows them: the org plate on the sidebar sign, the org menu, and the
+create / settings dialogs. Core owns the data; ragx is provisioned by core, never by the browser.
+
+## Entry points
+
+- `contract.ts` — `Organization`, `RagxStatus`, `ORG_PATHS`, `CURRENT_ORG_COOKIE` (`thomas_org`), `ORG_NAME_MAX_LENGTH`, `orgHome(id)` and `validateOrgName(raw)` (mirrors core: trimmed, 1-200 characters, no control characters).
+- `current.ts` — `resolveCurrentOrg(orgs, pathOrgId, cookieOrgId)` and `orgIdFromPath(path)`.
+- `server.ts` — `listOrganizations()` and `getOrganization(id)` for server components (`server-only`).
+- `api.ts` — `createOrganization`, `updateOrganization`, `retryOrganization` (each resolves to the org's state).
+- `OrgPlate.tsx` — the plate and its menu; `OrgDialog.tsx` — `mode="create" | "edit"`; a save always ends with `router.refresh()` (create also pushes to the new org), because the workspace layout that lists the orgs stays mounted across navigations; `useLiveOrgId.ts` — the one hook the plate and the Knowledge Base nav link share (URL org, else last seen, else server org); `OrgStatusDot.tsx`.
+
+## Current-org rule
+
+Path (`/orgs/{id}/...`) -> the `thomas_org` cookie (set by `proxy.ts` whenever a page under `/orgs/{id}` is opened) -> the
+first org. An id that is not in the operator's list is ignored. This is memory for the UI, never authority: core
+re-checks the org on every request.
+
+## The plate and the dialogs
+
+- A plate on the black sign under the brand: the org's name, a status dot and a chevron. On the folded icon rail it shrinks to the org's initial in a roundel.
+- The menu lists every org with its status, then _Org settings_ (current org), _New organization_, and, when `WEB_RAGX_UI_URL` is set, _RAG model settings_ (an external link, new tab, `rel="noopener noreferrer"`). The URL is read in the workspace layout (a server component) and passed down as the `ragxUiUrl` prop; `lib/env.ts` is never imported by client code. The link's placement is owner decision P14 and may move.
+- Status dots (Lines Do Jobs): **ready** = solid `sign-ink`, **pending** = hollow ring, **failed** = Apps red. Green stays the KB line's.
+
+## Synchronous provisioning and Retry
+
+Core provisions into ragx during create / provision, so the answer already carries the real state. The settings dialog
+shows **Retry** when `ragxStatus !== "ready"` or `!settingsSynced`. A `pending` org is therefore stuck (a core
+process died mid-call), and Retry is its way out. `POST /api/v1/orgs/{id}/provision` answers 200 with the real
+state; the dialog shows it at once and calls `router.refresh()`. The UI never keys on the code `RAGX_UNAVAILABLE`.
+
+## Dependencies
+
+- Uses: `components/ui` (Dialog, DropdownMenu, Switch, Button, TextField, InlineAlert), `lib/api`.
+- Used by: `app/(workspace)/layout.tsx`, `proxy.ts`, the Knowledge Base surface (Task 7).
+
+## Run & test
+
+```bash
+cd frontend
+npx vitest run features/orgs proxy.test.ts
+npm run dev:mock   # Công ty Demo (ready), Beta (failed), Gamma (stuck pending); "Acme !fail" creates a failed org
+```
+
+## Common failures
+
+- The plate says "Organizations unavailable" -> core's `GET /api/v1/orgs` failed; the rest of the shell still renders.

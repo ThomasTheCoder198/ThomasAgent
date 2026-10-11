@@ -7,7 +7,7 @@ export function InlineAlert({
   detail,
   children,
 }: {
-  title: string;
+  title: ReactNode;
   detail?: string;
   children?: ReactNode;
 }) {

@@ -33,7 +33,7 @@ export function Button({
       type={type}
       aria-busy={pending || undefined}
       className={cn(
-        "relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-lg px-3.5 py-2 text-[13.5px] font-semibold transition-[background-color,filter,transform] duration-200 disabled:cursor-not-allowed disabled:opacity-60",
+        "max-md:min-h-touch relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-lg px-3.5 py-2 text-[13.5px] font-semibold transition-[background-color,filter,transform] duration-200 disabled:cursor-not-allowed disabled:opacity-60",
         PRESS,
         variants[variant],
         className,
@@ -67,7 +67,7 @@ export function IconButton({
       aria-label={label}
       title={label}
       className={cn(
-        "grid size-8.5 shrink-0 place-items-center rounded-lg transition-[background-color,color,transform] duration-200 disabled:cursor-not-allowed disabled:opacity-50",
+        "max-md:size-touch grid size-8.5 shrink-0 place-items-center rounded-lg transition-[background-color,color,transform] duration-200 disabled:cursor-not-allowed disabled:opacity-50",
         PRESS,
         tone === "ground"
           ? "text-ink-2 hover:bg-hover hover:text-ink"

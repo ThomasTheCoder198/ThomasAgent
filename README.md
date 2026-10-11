@@ -11,9 +11,13 @@ Self-hosted AI workspace (one operator, many tenants): a built-in agent that ans
 ```bash
 cp deploy/core/.env.example deploy/core/.env   # fill in secrets
 cp deploy/ragx/.env.example deploy/ragx/.env   # ragx stack (task up:ragx)
+task ragx:dev-key   # put the printed RAG_CORE_PUBLIC_KEYS into deploy/ragx/.env
+task up:ragx   # ragx + MinIO/Qdrant/Phoenix
+task ragx:seed-dev   # embedding role that org provisioning needs
 task up        # core + Postgres/Redis + observability
-task smoke     # health checks
+task smoke     # health checks, including the upload path through core
 task web:dev   # run in a separate terminal; host frontend, WEB_CORE_URL defaults to http://localhost:8080
+               # set WEB_RAGX_UI_URL=http://localhost:8090/ui to show the ragx model-settings link
 ```
 
 `CORE_SERVICE_TOKEN` in `deploy/core/.env` is currently unused (reserved; its `/internal` role was removed in M1.2) but config validation still requires it.

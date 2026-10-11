@@ -94,23 +94,6 @@ if curl -fsS http://localhost:8090/healthz >/dev/null 2>&1; then
     else
       echo "FAIL ragx-provision-idempotent"; exit 1
     fi
-    upload_id="req_smoke-upload-$(date +%s)-$RANDOM"
-    # The file goes through stdin: Git Bash does not convert a /tmp path inside curl's -F value for Windows curl.
-    upload_token="$(mint kb:write "$upload_id")"
-    upload_response="$(printf 'smoke %s\n' "$upload_id" | curl -sS -w '\n%{http_code}' \
-      -H "Authorization: Bearer ${upload_token}" -H "X-Request-Id: ${upload_id}" -F "file=@-;filename=smoke.txt" \
-      "http://localhost:8090/v1/knowledge-bases/${kb_first}/files")"
-    upload_status="${upload_response##*$'\n'}"
-    upload_file_id="$(echo "$upload_response" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -n 1)"
-    [[ "$upload_status" == 201 ]] && echo "ok   ragx-upload" || { echo "FAIL ragx-upload ($upload_status)"; exit 1; }
-    wait_for "ragx worker handled upload" bash -c \
-      "$ragx_compose logs --since 5m ragx-worker | grep '${upload_id}' | grep -q 'job handled'"
-    # Remove the smoke file so repeated runs do not pile up data in smoke-org (the purge job deletes the object).
-    cleanup_id="req_smoke-cleanup-$(date +%s)-$RANDOM"
-    curl -fsS -o /dev/null -X DELETE -H "Authorization: Bearer $(mint kb:write "$cleanup_id")" \
-      -H "X-Request-Id: ${cleanup_id}" \
-      "http://localhost:8090/v1/knowledge-bases/${kb_first}/files/${upload_file_id}" && echo "ok   ragx-upload-cleanup" \
-      || { echo "FAIL ragx-upload-cleanup"; exit 1; }
   else
     echo "skip ragx-provision (run task ragx:dev-key and put the printed RAG_CORE_PUBLIC_KEYS in deploy/ragx/.env)"
   fi
@@ -122,3 +105,9 @@ else
 fi
 
 "$uv_bin" run --directory ragx python ../scripts/smoke_identity.py
+
+if curl -fsS http://localhost:8090/healthz >/dev/null 2>&1 && [[ -f deploy/ragx/dev-app-signing-key.pem ]]; then
+  "$uv_bin" run --directory ragx python ../scripts/smoke_ragx_app.py
+else
+  echo "skip ragx-app-through-core (needs task ragx:dev-key, task up:ragx and the core stack)"
+fi

@@ -12,6 +12,7 @@ tasks:
       - go run ./cmd/apptokengen -out app-token.json
       - npm run lint:openapi
       - npm run gen:postman
+      - npm run gen:ragx-types
       - task: gen:ragx-client
     dir: contracts
 

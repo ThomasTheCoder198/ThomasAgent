@@ -37,6 +37,10 @@ Bootstrap explicitly sets an empty `RAG_OTLP_ENDPOINT`: it still logs its work a
 
 `PHOENIX_HOST_PORT` defaults to 6006; Windows may require 16006 in the local `.env`. Internal OTLP and healthchecks remain on 6006. Set core's `GRAFANA_PHOENIX_URL` to the browser-accessible Phoenix URL when overriding the host port; smoke reads the local port automatically.
 
+Ragx's API is called only by core: 8090 is published in dev for core and the smoke, and is never public in production. MinIO's 9000 is the one browser-facing origin; `MINIO_API_CORS_ALLOW_ORIGIN` (default `http://localhost:3000`) is the frontend origin allowed to call it, set in `compose.yaml` because MinIO has no config file.
+
+File bytes go from the browser to MinIO through presigned URLs, so ragx must sign for an address the browser can reach: `RAG_S3_PUBLIC_ENDPOINT` is that origin (dev `http://localhost:9000`; production an HTTPS origin in front of MinIO/S3). Ragx never connects to it. `RAG_S3_REGION` (default `us-east-1`) is the signing region, set explicitly so signing makes no network call. `RAG_UPLOAD_URL_TTL` (15 min) and `RAG_DOWNLOAD_URL_TTL` (60 s) are ISO 8601 durations when set in `.env` (`PT15M`, `PT60S`); their YAML defaults are seconds. Defaults live in `ragx/src/thomas_ragx/platform/config.yaml`.
+
 Core-only smoke skips ragx only when its API container is absent. An existing ragx API with a failing health endpoint makes smoke fail, including a stopped or crashed API.
 
 Named volumes preserve data; container log rotation follows Docker daemon defaults. Bootstrap is a one-shot gate; the API image provides its healthcheck.

@@ -5,8 +5,9 @@ Owns root service smoke checks, including core log/metrics correlation, optional
 See the [glossary](../docs/glossary.md) for response and health terminology.
 
 ## Entry points
-- `smoke.sh`: called by `task smoke`; checks ragx readiness, idempotent org provisioning, upload, worker handling and cleanup when a dev signing key exists.
+- `smoke.sh`: called by `task smoke`; checks ragx readiness, idempotent org provisioning when a dev signing key exists.
 - `app_token_dev.py`: dev-only keygen/mint of App tokens until core signs them in M1.2. Ragx rejects a token whose `rid` differs from the request's `X-Request-Id` (spec §3), so pass `mint --rid <id>` and send the same id in that header.
+- `smoke_ragx_app.py`: end to end through core's ragx proxy as a browser would: org ready, list KBs, presign, MinIO CORS preflight, MinIO POST, confirm, presigned download, cleanup (checks `ragx-app-*`, `minio-cors-preflight`, `minio-post`). It reuses one org named `Smoke` (orgs cannot be deleted yet) and deletes its file. `smoke.sh` runs it only when ragx is up and `deploy/ragx/dev-app-signing-key.pem` exists. `SMOKE_WEB_ORIGIN` (default `http://localhost:3000`) is the Origin sent to MinIO and must match `MINIO_API_CORS_ALLOW_ORIGIN`. Deferred: a check that the ragx worker consumed the upload (covered by ragx tests).
 - `smoke_identity.py`: checks login, identity, CSRF, provider creation and cleanup, then logout.
 
 ## Dependencies

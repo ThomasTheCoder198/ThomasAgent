@@ -8,11 +8,14 @@
   "scripts": {
     "lint:openapi": "redocly lint openapi/core.v1.yaml openapi/ragx.v1.yaml",
     "gen:postman": "openapi2postmanv2 -s openapi/core.v1.yaml -o postman/.raw.json -p -O folderStrategy=Tags,parametersResolution=Example,schemaFaker=false && node postman/postprocess.mjs postman/.raw.json postman/thomasagent.postman_collection.json",
+    "gen:ragx-types": "openapi-typescript openapi/ragx.v1.yaml -o ../frontend/lib/ragx/api.gen.ts",
     "test": "node --test \"postman/*.test.mjs\""
   },
   "devDependencies": {
     "@redocly/cli": "2.57.0",
     "newman": "6.2.2",
-    "openapi-to-postmanv2": "6.3.3"
+    "openapi-to-postmanv2": "6.3.3",
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
   }
 }

@@ -12,9 +12,10 @@ Single source for error codes and shared schemas used by the Go core, Python RAG
   TypeScript (`frontend/lib/api/request-id.ts`) copy the values and each has a test that reads this file.
 - `app-token.json` — generated App-token test vector (trusted key, valid tokens, invalid tokens with the rejection
   reason). Built by `cmd/apptokengen` from `internal/apptoken`; ragx's verifier and core's signer test against it.
-- `kb-upload.json` — Knowledge Base upload limits and accepted extensions. Ragx enforces them; the frontend validates
+- `kb-upload.json` — Knowledge Base upload limits and accepted extensions (`maxFileBytes` and `extensions`). Ragx enforces them; the frontend validates
   with them. Each side has a test that fails when it drifts.
-- `openapi/ragx.v1.yaml` — the ragx `/v1` API that only core calls (App token per request). Tool routes are added in M1.3.
+- `openapi/ragx.v1.yaml` — the ragx `/v1` API that only core calls (App token per request). File bytes never pass through it: upload is presign (`createUpload`), a browser POST to MinIO, then `confirmUpload`; download is `getDownloadUrl`. `HEAD` on a GET route is served but not documented. Tool routes are added in M1.3.
+- `npm run gen:ragx-types` — `openapi-typescript` turns `openapi/ragx.v1.yaml` into `frontend/lib/ragx/api.gen.ts` (run by `task gen`, never edited). It lives here, not in `frontend/`, because its peer dependency `typescript ^5` conflicts with the frontend's TypeScript 6; `typescript@5.9.3` is pinned in this package only.
 - `cmd/errorcodegen` — command invoked by `task gen`.
 - `internal/errorcodegen` — catalog parser and Go, Python, and TypeScript renderers.
 - `openapi/core.v1.yaml` — source of truth for the core HTTP API.

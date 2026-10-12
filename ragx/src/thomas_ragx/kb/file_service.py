@@ -9,6 +9,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Final
 from uuid import UUID
 
+import structlog
+
 from thomas_ragx.auth.caller import Caller
 from thomas_ragx.db.outbox import (
     PURGE_KIND_FILE,
@@ -38,6 +40,7 @@ CODE_EMPTY: Final = "EMPTY"
 CODE_MISSING: Final = "MISSING"
 CODE_SIZE_MISMATCH: Final = "SIZE_MISMATCH"
 CODE_INVALID: Final = "INVALID"
+log = structlog.get_logger(__name__)
 
 
 def utc_now() -> datetime:
@@ -142,8 +145,14 @@ class FileService:
             return await self._settled_or(caller, kb_id, file_id, CODE_MISSING)
         stored, duplicate = await self._settle(caller, slot, sha256, request_id)
         if duplicate:
-            await self._storage.remove(RAW_BUCKET, key)
+            await self._remove_orphan(key)
         return stored
+
+    async def _remove_orphan(self, key: str) -> None:
+        try:
+            await self._storage.remove(RAW_BUCKET, key)
+        except Exception as exc:  # the dedupe is committed; the sweeper removes the row-less object (A17)
+            log.warning("duplicate object left for the sweep", error_type=type(exc).__name__)
 
     async def _settled(self, conn: Connection, caller: Caller, kb_id: UUID, file_id: UUID) -> KbFile | None:
         """The confirmed file, or the existing file a duplicate upload was folded into."""
@@ -240,3 +249,10 @@ class FileService:
     async def open_preview(self, caller: Caller, kb_id: UUID, file_id: UUID) -> AsyncIterator[bytes]:
         await self._file(caller, kb_id, file_id)
         return await self._storage.stream_object(PREVIEW_BUCKET, preview_key(caller.org_id, kb_id, file_id))
+
+    async def preview_size(self, caller: Caller, kb_id: UUID, file_id: UUID) -> int:
+        await self._file(caller, kb_id, file_id)
+        size = await self._storage.size_of(PREVIEW_BUCKET, preview_key(caller.org_id, kb_id, file_id))
+        if size is None:
+            raise AppError(ErrorCode.KB_FILE_NOT_FOUND)
+        return size

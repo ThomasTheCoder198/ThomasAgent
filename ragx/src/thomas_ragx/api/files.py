@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import Request, Response, status
 from fastapi.responses import StreamingResponse
 
-from thomas_ragx.api.routing import api_router
+from thomas_ragx.api.routing import METHOD_HEAD, api_router
 from thomas_ragx.api.services import FileServiceDep
 from thomas_ragx.auth.dependencies import KbReadCaller, KbWriteCaller
 from thomas_ragx.kb.dto import DownloadUrlResponse, FileResponse, UploadRequest, UploadTicketResponse, to_json
@@ -12,6 +12,7 @@ from thomas_ragx.platform.http_response import page_body, request_id_of, success
 
 IDEMPOTENCY_KEY_HEADER: Final = "Idempotency-Key"
 PREVIEW_MEDIA_TYPE: Final = "application/json"
+CONTENT_LENGTH_HEADER: Final = "Content-Length"
 router = api_router("/v1/knowledge-bases/{kb_id}/files")
 uploads_router = api_router("/v1/knowledge-bases/{kb_id}/uploads")
 
@@ -75,8 +76,11 @@ async def get_download_url(
 
 @router.get("/{file_id}/preview")
 async def get_preview(
-    kb_id: UUID, file_id: UUID, caller: KbReadCaller, service: FileServiceDep
-) -> StreamingResponse:
+    kb_id: UUID, file_id: UUID, caller: KbReadCaller, service: FileServiceDep, request: Request
+) -> Response:
+    if request.method == METHOD_HEAD:  # a stat, never a read (ruling A23)
+        size = await service.preview_size(caller, kb_id, file_id)
+        return Response(media_type=PREVIEW_MEDIA_TYPE, headers={CONTENT_LENGTH_HEADER: str(size)})
     return StreamingResponse(
         await service.open_preview(caller, kb_id, file_id), media_type=PREVIEW_MEDIA_TYPE
     )

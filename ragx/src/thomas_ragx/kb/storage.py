@@ -1,6 +1,8 @@
 import asyncio
 import hashlib
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Final
 from uuid import UUID
 
@@ -29,6 +31,12 @@ def raw_key(org_id: str, kb_id: UUID | str, file_id: UUID | str) -> str:
 
 def preview_key(org_id: str, kb_id: UUID | str, file_id: UUID | str) -> str:
     return f"{kb_prefix(org_id, kb_id)}{file_id}{PREVIEW_SUFFIX}"
+
+
+@dataclass(frozen=True)
+class StoredObject:
+    key: str
+    last_modified: datetime
 
 
 class ObjectStorage:
@@ -78,6 +86,16 @@ class ObjectStorage:
                 return False
             raise
         return True
+
+    def _list_objects(self, bucket: str) -> list[StoredObject]:
+        return [
+            StoredObject(str(item.object_name), item.last_modified)
+            for item in self._client.list_objects(bucket, recursive=True)
+            if item.last_modified is not None
+        ]
+
+    async def list_objects(self, bucket: str) -> list[StoredObject]:
+        return await asyncio.to_thread(self._list_objects, bucket)
 
     async def remove(self, bucket: str, key: str) -> None:
         await asyncio.to_thread(self._client.remove_object, bucket, key)

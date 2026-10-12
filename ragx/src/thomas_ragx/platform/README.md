@@ -9,9 +9,10 @@ Owns typed config, catalog errors, safe structured logging, tracing, and retry h
 - `errors.py`: AppError and language selection.
 - `error_codes_gen.py`: shared definitions covering authentication, internal service-token validation, and provider/model registry errors.
 - `http_response.py`: success_body, error_response, request_id_of, and exception handlers; error bodies carry `requestId`.
-- `request_id.py`: shared request id header, pattern and prefixes (mirrored from `contracts/request-id.json`, checked by `test_request_id.py`), `is_valid_request_id`, and `accept_request_id`.
+- `request_id.py`: shared request id header, pattern and prefixes (mirrored from `contracts/request-id.json`, checked by `test_request_id.py`), `is_valid_request_id`, `accept_request_id`, and `new_job_id` (the `job_` id for work with no inbound request: worker jobs, sweeps, CLI replays).
 - `request_state.py`: request.state names shared by auth and the access log.
-- `logging.py`, `retry.py`: shared logging and retry infrastructure.
+- `logging.py`, `retry.py`: shared logging and retry infrastructure; `retry.backoff_seconds` is the full-jitter delay for callers that sleep between requeues themselves (the stream consumer).
+- `timing.py`: `MILLISECONDS_PER_SECOND` and `elapsed_ms(started)`, the one way to compute a `duration_ms` log field from a `perf_counter()` reading.
 - `tracing.py`: tracer provider exporting to Phoenix (`RAG_OTLP_ENDPOINT` + `/v1/traces`, bearer `RAG_PHOENIX_API_KEY`, project `RAG_PHOENIX_PROJECT`), `install_global_tracer_provider` (CLI only), and `apply_trace_content_policy` (`RAG_TRACE_CONTENT`, default off).
 
 ## Dependencies

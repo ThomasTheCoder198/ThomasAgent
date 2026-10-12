@@ -9,7 +9,7 @@ Owns org spaces, Knowledge Bases and file storage. The org is always the App tok
 - `presign.UrlSigner` signs the browser's MinIO POST policy and GET URL (`create_url_signer`, `attachment_disposition`).
 - `upload.normalize_file_name` and `content_type_for` validate names and map extensions to types.
 - `require_org` checks that an org space exists.
-- `storage.ObjectStorage` provides MinIO access for files.
+- `storage.ObjectStorage` provides MinIO access for files, including `list_objects` for the worker's sweeper.
 
 ## Dependencies
 - Uses: `RegistryService` for the embedding role, `db.outbox` for ingest and purge jobs, MinIO for file storage and presigned URLs.
@@ -27,12 +27,12 @@ uv run pytest -q tests/integration/test_files_api.py
 
 Ragx never receives file bytes. Upload is presign, POST, confirm (spec ragx-custom-app §14.3):
 1. `POST /v1/knowledge-bases/{kbId}/uploads` with `{name, sizeBytes}` (1 to `RAG_UPLOAD_MAX_BYTES`) inserts a `kb_files` row with status `uploading` and answers `{fileId, upload: {url, fields}, expiresAt}`. The POST policy pins the key `{org}/{kb}/{file}` in `kb-raw`, a `content-length-range` of exactly `sizeBytes`, and the expiry `RAG_UPLOAD_URL_TTL` (15 min). The browser POSTs the policy fields, then the file last, straight to MinIO.
-2. `POST …/files/{fileId}/confirm` checks the object: absent is `VALIDATION_FAILED` field `file` `MISSING` (the slot stays, so the browser can POST again); a different size deletes the object and answers `SIZE_MISMATCH`. Otherwise one transaction, under the KB row lock, hashes to a version and flips `uploading` to `pending` and enqueues `thomas.ingest.requested`. Duplicate content (same `sha256` in the KB) deletes the new row and object and returns the existing file.
+2. `POST …/files/{fileId}/confirm` checks the object: absent is `VALIDATION_FAILED` field `file` `MISSING` (the slot stays, so the browser can POST again); a different size deletes the object and answers `SIZE_MISMATCH`. Otherwise one transaction, under the KB row lock, hashes to a version and flips `uploading` to `pending` and enqueues `thomas.ingest.requested`. Duplicate content (same `sha256` in the KB) deletes the new row and object and returns the existing file. After that commit, a failing object delete is only logged (`duplicate object left for the sweep`) and confirm still answers 200; the sweeper removes the orphan later (ruling A17).
 3. `GET …/files/{fileId}/download-url` answers `{url, expiresAt}`: a presigned GET valid `RAG_DOWNLOAD_URL_TTL` (60 s) that forces `Content-Disposition: attachment; filename*=UTF-8''<RFC 3986 percent-encoded NFC name>` and `application/octet-stream`, so an uploaded `.html` never renders.
 
 An `uploading` row has no `sha256` and no `version` (a CHECK enforces it); both are set at confirm, so concurrent presigns of one name never collide on a unique index. `uploading` rows are invisible to the list, `fileCount`, retry, delete, download-url and the duplicate lookup; only confirm sees them. Confirm is idempotent by `fileId` (ruling P10): a repeat returns the same file; a folded duplicate is remembered in `idempotency_keys` (operation `confirm`) so repeating it returns the same existing file. `Idempotency-Key` (`^[A-Za-z0-9_-]{8,128}$`) is format-checked only; confirm always answers 200. Names are NFC normalized with path parts dropped and control characters rejected (field `name`, `INVALID_NAME`); the type comes from the extension list (main spec §4.1), not the client.
 
-The signing client takes `RAG_S3_REGION` explicitly (ruling P11): minio would otherwise ask the public endpoint for the bucket region, which the ragx container cannot reach. The public endpoint scheme decides `secure`. The sweep of expired `uploading` slots and their objects is M1.3. Previews exist only after ingest writes them (M1.3). Pagination cursors are opaque base64.
+The signing client takes `RAG_S3_REGION` explicitly (ruling P11): minio would otherwise ask the public endpoint for the bucket region, which the ragx container cannot reach. The public endpoint scheme decides `secure`. The worker's sweeper removes expired `uploading` slots and objects no `kb_files` row owns (see the worker README). Previews exist only after ingest writes them (M1.3); `FileService.preview_size` answers `HEAD` on the preview from a `stat`. Pagination cursors are opaque base64.
 
 ## Common failures
 - `ORG_NOT_PROVISIONED` → core has not provisioned the org yet.

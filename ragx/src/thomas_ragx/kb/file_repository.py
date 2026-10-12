@@ -97,8 +97,38 @@ async def confirm_upload_slot(conn: Connection, file_id: UUID, sha256: str, vers
     return to_file(row)
 
 
-async def delete_upload_slot(conn: Connection, file_id: UUID) -> None:
-    await conn.execute(b"DELETE FROM kb_files WHERE id = %s AND status = 'uploading'", (file_id,))
+async def delete_upload_slot(conn: Connection, file_id: UUID) -> bool:
+    """False when the slot is gone or was confirmed meanwhile: the DELETE waits on confirm's row lock."""
+    cursor = await conn.execute(b"DELETE FROM kb_files WHERE id = %s AND status = 'uploading'", (file_id,))
+    return cursor.rowcount > 0
+
+
+async def expired_upload_slots(conn: Connection, older_than_seconds: float) -> list[UploadSlot]:
+    # The age is judged by the database clock, the one that stamped created_at.
+    rows = await (
+        await conn.execute(
+            b"SELECT id, org_id, kb_id, name, content_type, size_bytes, created_at FROM kb_files "
+            b"WHERE status = 'uploading' AND created_at < now() - make_interval(secs => %s)",
+            (older_than_seconds,),
+        )
+    ).fetchall()
+    return [_to_slot(row) for row in rows]
+
+
+async def existing_file_ids(conn: Connection, ids: list[UUID]) -> set[UUID]:
+    rows = await (await conn.execute(b"SELECT id FROM kb_files WHERE id = ANY(%s)", (ids,))).fetchall()
+    return {row["id"] for row in rows}
+
+
+async def mark_ingest_failed(conn: Connection, org_id: str, file_id: UUID, error_code: str) -> bool:
+    """False when the file already finished (or is gone) and the row was left alone."""
+    cursor = await conn.execute(
+        b"UPDATE kb_files SET status = 'failed', error_code = %s, ingest_lease_until = NULL, "
+        b"updated_at = now() WHERE id = %s AND org_id = %s AND deleted_at IS NULL "
+        b"AND status NOT IN ('uploading', 'ready', 'degraded')",
+        (error_code, file_id, org_id),
+    )
+    return cursor.rowcount > 0
 
 
 async def get_file(conn: Connection, org_id: str, kb_id: UUID, file_id: UUID) -> KbFile | None:

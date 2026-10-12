@@ -1,6 +1,7 @@
 import io
 import json
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import Mock
 
@@ -8,16 +9,19 @@ import pytest
 from minio import Minio
 from redis.asyncio import Redis
 
-from tests.integration.api_client import api_client, bearer, upload
+from tests.integration.api_client import api_client, bearer, confirm, post_to_storage, presign, upload
 from thomas_ragx.db.outbox import STREAM_INGEST_REQUESTED, STREAM_KB_PURGE_REQUESTED
 from thomas_ragx.db.pool import Pool
+from thomas_ragx.kb import file_repository
 from thomas_ragx.kb.storage import PREVIEW_BUCKET, RAW_BUCKET, ObjectStorage
 from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
 from thomas_ragx.registry.dev_seed import seed_dev_registry
 from thomas_ragx.worker.consumer import CONSUMER_GROUP, DEAD_LETTER_SUFFIX, StreamConsumer, StreamMessage
-from thomas_ragx.worker.handlers import IngestHandler, PurgeHandler
+from thomas_ragx.worker.dlq import DeadLetterReplayer
+from thomas_ragx.worker.handlers import IngestDeadLetter, IngestHandler, PurgeHandler
 from thomas_ragx.worker.relay import OutboxRelay
+from thomas_ragx.worker.sweeper import Sweeper
 
 pytestmark = pytest.mark.integration
 ORG = "org-alpha"
@@ -61,6 +65,10 @@ async def _uploaded_file(pool: Pool, minio_config: dict[str, Any], redis_url: st
         uploaded = await upload(client, ORG, kb_id, "w.txt", b"worker", REQUEST_ID)
     assert uploaded.status_code == 200, uploaded.text
     return kb_id, uploaded.json()["data"]["id"]
+
+
+def _message_fields(payload: dict[str, Any]) -> dict[str, str]:
+    return {"payload": json.dumps(payload), "request_id": REQUEST_ID, "org_id": ORG, "outbox_id": "o-1"}
 
 
 def _consumer(redis: Redis, stream: str, max_deliveries: int = 3) -> StreamConsumer:
@@ -147,14 +155,18 @@ async def test_failing_job_moves_to_the_dlq_with_its_request_id(redis: Redis) ->
 
     async def failing(message: StreamMessage) -> None:
         seen.append(message)
-        raise AppError(ErrorCode.KB_FILE_NOT_FOUND)
+        raise AppError(ErrorCode.PROVIDER_UNAVAILABLE)
 
     for _ in range(3):
         await consumer.poll_once(failing)
     dead = await redis.xrange(STREAM_INGEST_REQUESTED + DEAD_LETTER_SUFFIX)
     assert len(dead) == 1
     fields = dead[0][1]
-    assert (fields["request_id"], fields["org_id"], fields["error"]) == (REQUEST_ID, ORG, "KB_FILE_NOT_FOUND")
+    assert (fields["request_id"], fields["org_id"], fields["error"]) == (
+        REQUEST_ID,
+        ORG,
+        "PROVIDER_UNAVAILABLE",
+    )
     assert [m.deliveries for m in seen] == [1, 2]
     assert [call.args[1] for call in recorder.observe_job.call_args_list] == ["retry", "dead_letter"]
     assert all(call.args[0] == STREAM_INGEST_REQUESTED for call in recorder.observe_job.call_args_list)
@@ -197,3 +209,202 @@ async def test_purge_handler_removes_objects_and_rows(
         row = await (await conn.execute(b"SELECT count(*) AS n FROM kb_files")).fetchone()
     assert row is not None and row["n"] == 0
     assert (await redis.xpending(STREAM_KB_PURGE_REQUESTED, CONSUMER_GROUP))["pending"] == 0
+
+
+async def test_retryable_failure_is_requeued_without_waiting_for_visibility(redis: Redis) -> None:
+    await redis.xadd(STREAM_INGEST_REQUESTED, _message_fields({"kb_id": "k"}))
+    consumer = StreamConsumer(
+        redis,
+        STREAM_INGEST_REQUESTED,
+        "c",
+        max_deliveries=3,
+        visibility_timeout_ms=3_600_000,
+        block_ms=10,
+        batch_size=10,
+        retry_delay=lambda _: 0.0,
+    )
+    await consumer.ensure_group()
+    seen: list[int] = []
+
+    async def flaky(message: StreamMessage) -> None:
+        seen.append(message.deliveries)
+        if len(seen) == 1:
+            raise AppError(ErrorCode.PROVIDER_UNAVAILABLE)
+
+    await consumer.poll_once(flaky)
+    await consumer.poll_once(flaky)  # an hour of visibility, yet the retry runs on the next poll
+    assert seen == [1, 2]
+    assert (await redis.xpending(STREAM_INGEST_REQUESTED, CONSUMER_GROUP))["pending"] == 0
+
+
+async def test_non_retryable_error_dead_letters_on_first_delivery(redis: Redis) -> None:
+    await redis.xadd(STREAM_INGEST_REQUESTED, _message_fields({"kb_id": str(uuid.uuid4())}))
+    hooked: list[tuple[str, str]] = []
+
+    async def hook(message: StreamMessage, code: str) -> None:
+        hooked.append((message.org_id, code))
+
+    consumer = StreamConsumer(
+        redis,
+        STREAM_INGEST_REQUESTED,
+        "c",
+        max_deliveries=3,
+        visibility_timeout_ms=0,
+        block_ms=10,
+        batch_size=10,
+        on_dead_letter=hook,
+    )
+    await consumer.ensure_group()
+
+    async def corrupt(_: StreamMessage) -> None:
+        raise AppError(ErrorCode.INGEST_PARSE_FAILED)
+
+    await consumer.poll_once(corrupt)
+    dead = await redis.xrange(STREAM_INGEST_REQUESTED + DEAD_LETTER_SUFFIX)
+    assert [entry[1]["error"] for entry in dead] == ["INGEST_PARSE_FAILED"]
+    assert hooked == [(ORG, "INGEST_PARSE_FAILED")]
+
+
+async def test_a_failing_dead_letter_hook_still_acknowledges(redis: Redis) -> None:
+    await redis.xadd(STREAM_INGEST_REQUESTED, _message_fields({}))
+
+    async def broken_hook(_: StreamMessage, __: str) -> None:
+        raise RuntimeError("db down")
+
+    consumer = StreamConsumer(
+        redis,
+        STREAM_INGEST_REQUESTED,
+        "c",
+        max_deliveries=1,
+        visibility_timeout_ms=0,
+        block_ms=10,
+        batch_size=10,
+        on_dead_letter=broken_hook,
+    )
+    await consumer.ensure_group()
+
+    async def failing(_: StreamMessage) -> None:
+        raise AppError(ErrorCode.INGEST_NO_TEXT)
+
+    await consumer.poll_once(failing)
+    assert (await redis.xpending(STREAM_INGEST_REQUESTED, CONSUMER_GROUP))["pending"] == 0
+
+
+async def test_dead_letter_replay_runs_the_job_again(redis: Redis) -> None:
+    await redis.xadd(STREAM_INGEST_REQUESTED, _message_fields({"kb_id": "k"}))
+    consumer = _consumer(redis, STREAM_INGEST_REQUESTED, max_deliveries=1)
+    await consumer.ensure_group()
+
+    async def failing(_: StreamMessage) -> None:
+        raise AppError(ErrorCode.PROVIDER_UNAVAILABLE)
+
+    await consumer.poll_once(failing)
+    assert len(await redis.xrange(STREAM_INGEST_REQUESTED + DEAD_LETTER_SUFFIX)) == 1
+    assert await DeadLetterReplayer(redis).replay(STREAM_INGEST_REQUESTED, None) == 1
+    assert await redis.xrange(STREAM_INGEST_REQUESTED + DEAD_LETTER_SUFFIX) == []
+    seen: list[StreamMessage] = []
+
+    async def record(message: StreamMessage) -> None:
+        seen.append(message)
+
+    await consumer.poll_once(record)
+    assert [(m.request_id, m.org_id, dict(m.payload)) for m in seen] == [(REQUEST_ID, ORG, {"kb_id": "k"})]
+
+
+async def test_replay_of_named_entries_leaves_the_others(redis: Redis) -> None:
+    dlq = STREAM_INGEST_REQUESTED + DEAD_LETTER_SUFFIX
+    first = await redis.xadd(dlq, _message_fields({"n": 1}))
+    await redis.xadd(dlq, _message_fields({"n": 2}))
+    assert await DeadLetterReplayer(redis).replay(STREAM_INGEST_REQUESTED, [first]) == 1
+    assert len(await redis.xrange(dlq)) == 1
+
+
+async def test_ingest_dead_letter_marks_the_file_failed_unless_finished(
+    pool: Pool, minio_config: dict[str, Any], minio: Minio, redis_url: str
+) -> None:
+    kb_id, file_id = await _uploaded_file(pool, minio_config, redis_url)
+    payload = {"kb_id": kb_id, "file_id": file_id, "version": 1}
+    message = StreamMessage(STREAM_INGEST_REQUESTED, "1-0", "o", ORG, REQUEST_ID, payload, 3)
+    await IngestDeadLetter(pool)(message, "ValueError")  # not a catalog code
+    async with pool.connection() as conn:
+        row = await (
+            await conn.execute(b"SELECT status, error_code FROM kb_files WHERE id = %s", (file_id,))
+        ).fetchone()
+        assert row is not None and (row["status"], row["error_code"]) == ("failed", "INTERNAL_ERROR")
+        await conn.execute(b"UPDATE kb_files SET status = 'ready', error_code = '' WHERE id = %s", (file_id,))
+    await IngestDeadLetter(pool)(message, "INGEST_NO_TEXT")
+    async with pool.connection() as conn:
+        row = await (await conn.execute(b"SELECT status FROM kb_files WHERE id = %s", (file_id,))).fetchone()
+    assert row is not None and row["status"] == "ready"
+
+
+async def test_sweeper_removes_only_expired_slots_and_rowless_objects(
+    pool: Pool, minio_config: dict[str, Any], minio: Minio, redis_url: str
+) -> None:
+    kb_id, file_id = await _uploaded_file(pool, minio_config, redis_url)  # confirmed: must survive
+    async with api_client(pool, redis_url=redis_url, minio_config=minio_config) as (client, _):
+        stale = (await presign(client, ORG, kb_id, "stale.txt", 3)).json()["data"]
+        fresh = (await presign(client, ORG, kb_id, "fresh.txt", 3)).json()["data"]
+    await post_to_storage(stale, b"old", "stale.txt")
+    orphan_key = f"{ORG}/{kb_id}/{uuid.uuid4()}"
+    minio.put_object(RAW_BUCKET, orphan_key, io.BytesIO(b"x"), 1)
+    async with pool.connection() as conn:
+        await conn.execute(
+            b"UPDATE kb_files SET created_at = now() - interval '2 hours' WHERE id = %s", (stale["fileId"],)
+        )
+    later = datetime.now(UTC) + timedelta(hours=1)  # every object is older than the cutoff by then
+    sweeper = Sweeper(
+        pool,
+        ObjectStorage(minio),
+        cutoff_age=timedelta(minutes=20),
+        interval_seconds=1,
+        now=lambda: later,
+    )
+    result = await sweeper.sweep_once()
+    keys = {str(item.object_name) for item in minio.list_objects(RAW_BUCKET, recursive=True)}
+    assert f"{ORG}/{kb_id}/{file_id}" in keys
+    assert orphan_key not in keys and f"{ORG}/{kb_id}/{stale['fileId']}" not in keys
+    async with pool.connection() as conn:
+        ids = {row["id"] for row in await (await conn.execute(b"SELECT id FROM kb_files")).fetchall()}
+    assert uuid.UUID(file_id) in ids and uuid.UUID(fresh["fileId"]) in ids
+    assert uuid.UUID(stale["fileId"]) not in ids
+    assert (result.slots, result.objects) == (1, 1)
+
+
+async def test_sweeper_keeps_a_slot_that_a_late_confirm_won(
+    pool: Pool,
+    minio_config: dict[str, Any],
+    minio: Minio,
+    redis_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    kb_id, _ = await _uploaded_file(pool, minio_config, redis_url)
+    async with api_client(pool, redis_url=redis_url, minio_config=minio_config) as (client, _):
+        slot = (await presign(client, ORG, kb_id, "late.txt", 4)).json()["data"]
+        await post_to_storage(slot, b"late", "late.txt")
+        async with pool.connection() as conn:
+            await conn.execute(
+                b"UPDATE kb_files SET created_at = now() - interval '2 hours' WHERE id = %s",
+                (slot["fileId"],),
+            )
+        listed_slots = file_repository.expired_upload_slots
+
+        async def listed_then_confirmed(conn: Any, older_than_seconds: float) -> Any:
+            expired = await listed_slots(conn, older_than_seconds)
+            assert [str(s.id) for s in expired] == [slot["fileId"]]
+            assert (
+                await confirm(client, ORG, kb_id, slot["fileId"])
+            ).status_code == 200  # confirm wins the race
+            return expired
+
+        monkeypatch.setattr(file_repository, "expired_upload_slots", listed_then_confirmed)
+        sweeper = Sweeper(pool, ObjectStorage(minio), cutoff_age=timedelta(minutes=20), interval_seconds=1)
+        result = await sweeper.sweep_once()
+    keys = {str(item.object_name) for item in minio.list_objects(RAW_BUCKET, recursive=True)}
+    assert f"{ORG}/{kb_id}/{slot['fileId']}" in keys
+    async with pool.connection() as conn:
+        row = await (
+            await conn.execute(b"SELECT status FROM kb_files WHERE id = %s", (slot["fileId"],))
+        ).fetchone()
+    assert row is not None and row["status"] == "pending"
+    assert result.slots == 0

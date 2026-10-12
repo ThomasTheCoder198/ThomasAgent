@@ -109,7 +109,7 @@ services:
       RAG_OTLP_ENDPOINT: ${RAG_OTLP_ENDPOINT-http://phoenix:6006}
       RAG_PHOENIX_API_KEY: ${RAG_PHOENIX_API_KEY:-${PHOENIX_ADMIN_SECRET}}
     healthcheck:
-      # The worker has no HTTP port; it touches its heartbeat file on every poll (RAG_WORKER_HEARTBEAT_FILE).
+      # The worker has no HTTP port; a separate task touches its heartbeat file every RAG_WORKER_HEARTBEAT_INTERVAL_SECONDS (RAG_WORKER_HEARTBEAT_FILE).
       test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(0 if time.time() - os.path.getmtime('/tmp/ragx-worker.heartbeat') < 60 else 1)"]
       interval: 15s
       timeout: 3s

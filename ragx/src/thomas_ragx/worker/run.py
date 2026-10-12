@@ -1,6 +1,8 @@
 import asyncio
+import contextlib
 import os
 import socket
+from datetime import timedelta
 from pathlib import Path
 
 import structlog
@@ -8,12 +10,15 @@ from opentelemetry.trace import Tracer
 
 from thomas_ragx.db.outbox import STREAM_INGEST_REQUESTED, STREAM_KB_PURGE_REQUESTED
 from thomas_ragx.platform.config import Config
+from thomas_ragx.platform.retry import backoff_seconds
 from thomas_ragx.platform.tracing import ATTR_ORG_ID, ATTR_REQUEST_ID
 from thomas_ragx.resources import Resources
 from thomas_ragx.worker.consumer import Handler, StreamConsumer, StreamMessage
-from thomas_ragx.worker.handlers import IngestHandler, PurgeHandler
+from thomas_ragx.worker.handlers import IngestDeadLetter, IngestHandler, PurgeHandler
 from thomas_ragx.worker.metrics import WorkerMetrics, configure_worker_metrics
+from thomas_ragx.worker.plan import consumer_plan
 from thomas_ragx.worker.relay import OutboxRelay
+from thomas_ragx.worker.sweeper import Sweeper
 
 SPAN_NAMES = {STREAM_INGEST_REQUESTED: "rag.ingest.receive", STREAM_KB_PURGE_REQUESTED: "rag.kb.purge"}
 log = structlog.get_logger(__name__)
@@ -32,11 +37,16 @@ def _traced(tracer: Tracer, stream: str, handler: Handler) -> Handler:
     return run
 
 
-async def _consume(
-    consumer: StreamConsumer, handler: Handler, stop: asyncio.Event, heartbeat: Path, pause: float
-) -> None:
+async def heartbeat(path: Path, interval_seconds: float, stop: asyncio.Event) -> None:
+    """Separate from polling: one long ingest job must not make the container look dead."""
     while not stop.is_set():
-        heartbeat.touch()
+        path.touch()
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(stop.wait(), interval_seconds)
+
+
+async def _consume(consumer: StreamConsumer, handler: Handler, stop: asyncio.Event, pause: float) -> None:
+    while not stop.is_set():
         try:
             await consumer.poll_once(handler)
         except Exception as exc:  # Redis outage: log once per poll and back off
@@ -60,21 +70,26 @@ async def _run_worker(
         STREAM_INGEST_REQUESTED: IngestHandler(resources.pool, resources.storage),
         STREAM_KB_PURGE_REQUESTED: PurgeHandler(resources.pool, resources.storage),
     }
+    dead_letter_hooks = {STREAM_INGEST_REQUESTED: IngestDeadLetter(resources.pool)}
     consumers = [
         (
             StreamConsumer(
                 resources.redis,
-                stream,
-                name,
+                spec.stream,
+                spec.consumer_name,
                 max_deliveries=config.stream_max_deliveries,
-                visibility_timeout_ms=config.stream_visibility_timeout_milliseconds,
+                visibility_timeout_ms=spec.visibility_timeout_ms,
                 block_ms=config.stream_block_milliseconds,
-                batch_size=config.stream_batch_size,
+                batch_size=spec.batch_size,
                 metrics=metrics,
+                on_dead_letter=dead_letter_hooks.get(spec.stream),
+                retry_delay=lambda attempt: backoff_seconds(
+                    attempt, config.retry_base_delay_seconds, config.retry_max_delay_seconds
+                ),
             ),
-            _traced(tracer, stream, handler),
+            _traced(tracer, spec.stream, handlers[spec.stream]),
         )
-        for stream, handler in handlers.items()
+        for spec in consumer_plan(config, name)
     ]
     for consumer, _ in consumers:
         await consumer.ensure_group()
@@ -85,9 +100,17 @@ async def _run_worker(
         config.outbox_poll_interval_seconds,
         metrics=metrics,
     )
-    heartbeat = Path(config.worker_heartbeat_file)
-    log.info("worker started", consumer=name)
+    sweeper = Sweeper(
+        resources.pool,
+        resources.storage,
+        cutoff_age=config.upload_url_ttl + timedelta(seconds=config.upload_sweep_grace_seconds),
+        interval_seconds=config.sweep_interval_seconds,
+        metrics=metrics,
+    )
+    log.info("worker started", consumer=name, ingest_concurrency=config.ingest_concurrency)
     await asyncio.gather(
         relay.run(stop),
-        *(_consume(c, h, stop, heartbeat, config.outbox_poll_interval_seconds) for c, h in consumers),
+        heartbeat(Path(config.worker_heartbeat_file), config.worker_heartbeat_interval_seconds, stop),
+        sweeper.run(stop),
+        *(_consume(c, h, stop, config.outbox_poll_interval_seconds) for c, h in consumers),
     )

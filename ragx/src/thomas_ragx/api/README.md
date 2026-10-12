@@ -8,7 +8,7 @@ Owns FastAPI construction, request tracing, error responses, and health endpoint
 - `health.py`: GET /healthz and GET /readyz.
 - `orgs.py`: org provisioning.
 - `knowledge_bases.py`: Knowledge Base CRUD.
-- `files.py`: `POST /v1/knowledge-bases/{kbId}/uploads` (presign), `POST …/files/{fileId}/confirm`, `GET …/files/{fileId}/download-url`, file listing, deletion, retry and preview.
+- `files.py`: `POST /v1/knowledge-bases/{kbId}/uploads` (presign), `POST …/files/{fileId}/confirm`, `GET …/files/{fileId}/download-url`, file listing, deletion, retry and preview. `HEAD` on the preview answers from a `stat` (status and `Content-Length`, no read of the object).
 - `routing.py`: `api_router`, whose routes answer `HEAD` like `GET`.
 - `manifest.py`: app manifest.
 - `services.py`: dependency access to application services.

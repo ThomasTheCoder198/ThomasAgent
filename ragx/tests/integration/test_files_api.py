@@ -434,3 +434,40 @@ async def test_head_on_download_url_and_list_answers_like_get_with_no_body(
             f"/v1/knowledge-bases/{kb_id}/files/{uuid.uuid4()}/download-url", headers=read
         )
     assert missing.status_code == 404
+
+
+async def test_confirm_of_duplicate_content_survives_a_failed_object_delete(
+    pool: Pool, minio_config: dict[str, Any], minio: Minio
+) -> None:
+    async with api_client(pool, minio_config=minio_config) as (client, app):
+        kb_id = await _kb(client, app)
+        first = await upload(client, ORG, kb_id, "a.txt", b"same")
+        storage = app.state.file_service._storage
+
+        async def refuse(_: str, __: str) -> None:
+            raise RuntimeError("storage hiccup")
+
+        storage.remove = refuse  # the sweeper cleans the orphan later (ruling A17)
+        second = await upload(client, ORG, kb_id, "b.txt", b"same")
+    assert second.status_code == 200
+    assert second.json()["data"]["id"] == first.json()["data"]["id"]
+
+
+async def test_preview_head_answers_from_stat_without_reading(
+    pool: Pool, minio_config: dict[str, Any], minio: Minio
+) -> None:
+    async with api_client(pool, minio_config=minio_config) as (client, app):
+        kb_id = await _kb(client, app)
+        file_id = (await upload(client, ORG, kb_id, "p.txt", b"preview")).json()["data"]["id"]
+        minio.put_object(PREVIEW_BUCKET, f"{ORG}/{kb_id}/{file_id}.json", io.BytesIO(b'{"blocks":[]}'), 13)
+
+        async def no_reads(_: str, __: str) -> None:
+            raise AssertionError("HEAD must not open the object")
+
+        app.state.file_service._storage.stream_object = no_reads
+        head = await client.head(
+            f"/v1/knowledge-bases/{kb_id}/files/{file_id}/preview", headers=bearer(ORG, "kb:read")
+        )
+    assert head.status_code == 200
+    assert head.headers["content-length"] == "13"
+    assert head.content == b""

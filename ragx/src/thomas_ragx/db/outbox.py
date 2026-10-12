@@ -9,6 +9,7 @@ from psycopg.types.json import Jsonb
 
 STREAM_INGEST_REQUESTED: Final = "thomas.ingest.requested"
 STREAM_KB_PURGE_REQUESTED: Final = "thomas.kb.purge.requested"
+KNOWN_STREAMS: Final = (STREAM_INGEST_REQUESTED, STREAM_KB_PURGE_REQUESTED)
 PURGE_KIND_KB: Final = "kb"
 PURGE_KIND_FILE: Final = "file"
 

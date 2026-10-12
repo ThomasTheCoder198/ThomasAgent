@@ -1,3 +1,4 @@
+import random
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 
@@ -26,6 +27,11 @@ def is_retryable(exc: BaseException) -> bool:
             or exc.response.status_code >= HTTP_STATUS_SERVER_ERROR
         )
     return isinstance(exc, httpx.TransportError)
+
+
+def backoff_seconds(attempt: int, base_seconds: float, max_seconds: float) -> float:
+    """Full jitter, the same rule as `retrying`, for callers that sleep between requeues themselves."""
+    return random.uniform(0, min(max_seconds, base_seconds * 2 ** (attempt - 1)))  # noqa: S311 - jitter, not crypto
 
 
 def retrying(config: Config) -> AsyncRetrying:

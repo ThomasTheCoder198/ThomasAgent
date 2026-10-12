@@ -18,6 +18,9 @@ JOB_DURATION_NAME: Final = "ragx_worker_job_duration_seconds"
 RELAY_BATCH_COUNT_NAME: Final = "ragx_worker_relay_batches_total"
 RELAY_DURATION_NAME: Final = "ragx_worker_relay_duration_seconds"
 RELAY_ROWS_NAME: Final = "ragx_worker_relay_rows_total"
+SWEEP_COUNT_NAME: Final = "ragx_worker_sweep_total"
+SWEEP_KIND_SLOT: Final = "slot"
+SWEEP_KIND_OBJECT: Final = "object"
 OUTCOME_SUCCESS: Final = "success"
 OUTCOME_ERROR: Final = "error"
 OUTCOME_RETRY: Final = "retry"
@@ -39,6 +42,7 @@ class WorkerMetrics:
             RELAY_DURATION_NAME, unit="s", description="Outbox relay batch duration"
         )
         self._relay_rows = meter.create_counter(RELAY_ROWS_NAME, description="Outbox rows published")
+        self._sweeps = meter.create_counter(SWEEP_COUNT_NAME, description="Items the sweeper deleted")
 
     def observe_job(self, stream: str, outcome: str, duration_seconds: float) -> None:
         attributes = {"stream": stream, "outcome": outcome}
@@ -51,6 +55,10 @@ class WorkerMetrics:
         self._relay_duration.record(duration_seconds, attributes)
         if rows:
             self._relay_rows.add(rows)
+
+    def observe_sweep(self, kind: str, count: int) -> None:
+        if count > 0:
+            self._sweeps.add(count, {"kind": kind})
 
 
 def _one_line(data: MetricsData) -> str:

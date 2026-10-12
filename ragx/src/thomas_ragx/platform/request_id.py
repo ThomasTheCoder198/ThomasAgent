@@ -20,6 +20,10 @@ def new_request_id() -> str:
     return f"{REQUEST_PREFIX}{uuid.uuid4()}"
 
 
+def new_job_id() -> str:
+    return f"{JOB_PREFIX}{uuid.uuid4()}"
+
+
 def accept_request_id(sent: str | None) -> tuple[str, bool]:
     """Return the id to use and whether a client-sent value was rejected (it is never logged)."""
     if is_valid_request_id(sent):

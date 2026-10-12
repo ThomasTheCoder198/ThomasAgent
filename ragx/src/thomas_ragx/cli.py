@@ -2,18 +2,21 @@ import asyncio
 import contextlib
 import os
 import signal
-from typing import Final
+from typing import Annotated, Final
 
 import structlog
 import typer
 import uvicorn
+from redis.asyncio import Redis
 
 from thomas_ragx import bootstrap as bootstrap_module
 from thomas_ragx.api.app import create_app
 from thomas_ragx.db.migrate import migrate_down, migrate_up
+from thomas_ragx.db.outbox import KNOWN_STREAMS
 from thomas_ragx.platform.config import Config, load_config
 from thomas_ragx.platform.litellm_policy import apply_litellm_policy
 from thomas_ragx.platform.logging import configure_logging
+from thomas_ragx.platform.request_id import new_job_id
 from thomas_ragx.platform.tracing import (
     apply_trace_content_policy,
     configure_tracing,
@@ -21,7 +24,8 @@ from thomas_ragx.platform.tracing import (
 )
 from thomas_ragx.registry.dev_seed import seed_dev_registry
 from thomas_ragx.registry.factory import create_registry_service
-from thomas_ragx.resources import Resources
+from thomas_ragx.resources import REDIS_PROTOCOL, Resources
+from thomas_ragx.worker.dlq import DeadLetterReplayer
 from thomas_ragx.worker.run import run_worker
 
 DEV_ENVIRONMENT: Final = "dev"
@@ -30,6 +34,8 @@ log = structlog.get_logger(__name__)
 app = typer.Typer(no_args_is_help=True)
 migrate_app = typer.Typer(no_args_is_help=True)
 app.add_typer(migrate_app, name="migrate")
+dlq_app = typer.Typer(no_args_is_help=True)
+app.add_typer(dlq_app, name="dlq")
 
 
 @migrate_app.command("up")
@@ -117,3 +123,31 @@ def seed_dev() -> None:
         log.error("seed-dev refused outside dev", environment=config.environment)
         raise typer.Exit(code=1)
     asyncio.run(_seed_dev(config))
+
+
+async def _replay(config: Config, stream: str, entry_ids: list[str] | None) -> None:
+    redis = Redis.from_url(config.redis_url, decode_responses=True, protocol=REDIS_PROTOCOL)
+    try:
+        with structlog.contextvars.bound_contextvars(request_id=new_job_id()):
+            replayed = await DeadLetterReplayer(redis).replay(stream, entry_ids)
+            log.info("dlq replay finished", stream=stream, count=replayed)
+    finally:
+        await redis.aclose()
+
+
+@dlq_app.command("replay")
+def dlq_replay(
+    stream: str,
+    entry_id: Annotated[
+        list[str] | None, typer.Option("--entry-id", help="Replay only these DLQ entry ids")
+    ] = None,
+    replay_all: Annotated[bool, typer.Option("--all", help="Replay every entry of the stream's DLQ")] = False,
+) -> None:
+    """Move dead letters back to their stream; run it inside the worker container."""
+    apply_litellm_policy(os.environ)
+    config = load_config()
+    configure_logging(config.log_level, config.service_name, config.environment)
+    if stream not in KNOWN_STREAMS or (not entry_id and not replay_all):
+        log.error("dlq replay needs a known stream and --entry-id or --all", stream=stream)
+        raise typer.Exit(code=1)
+    asyncio.run(_replay(config, stream, entry_id or None))

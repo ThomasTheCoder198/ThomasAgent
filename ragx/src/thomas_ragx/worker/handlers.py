@@ -24,6 +24,31 @@ def _uuid_field(message: StreamMessage, name: str) -> UUID:
         raise AppError(ErrorCode.VALIDATION_FAILED) from None
 
 
+def _catalog_code(code: str) -> str:
+    # The DLQ also records exception type names; the file row only ever shows catalog codes.
+    try:
+        return ErrorCode(code).value
+    except ValueError:
+        return ErrorCode.INTERNAL_ERROR.value
+
+
+class IngestDeadLetter:
+    """After the last delivery the file is failed with a reason (spec §13), unless it already finished."""
+
+    def __init__(self, pool: Pool) -> None:
+        self._pool = pool
+
+    async def __call__(self, message: StreamMessage, error_code: str) -> None:
+        file_id = _uuid_field(message, FIELD_FILE_ID)
+        code = _catalog_code(error_code)
+        async with self._pool.connection() as conn:
+            marked = await files.mark_ingest_failed(conn, message.org_id, file_id, code)
+        if marked:
+            log.info("ingest marked failed", file_id=str(file_id), error_code=code)
+        else:
+            log.info("ingest dead letter ignored, file finished", file_id=str(file_id), error_code=code)
+
+
 class IngestHandler:
     """M1.1 proves outbox → stream → consumer end to end; M1.3 replaces it with parse → index."""
 

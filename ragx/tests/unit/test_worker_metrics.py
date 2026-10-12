@@ -8,6 +8,8 @@ from thomas_ragx.worker.metrics import (
     RELAY_BATCH_COUNT_NAME,
     RELAY_DURATION_NAME,
     RELAY_ROWS_NAME,
+    SWEEP_COUNT_NAME,
+    SWEEP_KIND_SLOT,
     configure_worker_metrics,
 )
 
@@ -17,6 +19,7 @@ def test_worker_metrics_export_to_stdout_with_bounded_labels(capfd: pytest.Captu
     provider, metrics = configure_worker_metrics(config)
     metrics.observe_job("thomas.ingest.requested", OUTCOME_RETRY, 0.25)
     metrics.observe_relay("success", 0.1, 2)
+    metrics.observe_sweep(SWEEP_KIND_SLOT, 3)
     provider.force_flush()
     output = capfd.readouterr().out
     provider.shutdown()
@@ -26,6 +29,7 @@ def test_worker_metrics_export_to_stdout_with_bounded_labels(capfd: pytest.Captu
     assert RELAY_BATCH_COUNT_NAME in output
     assert RELAY_DURATION_NAME in output
     assert RELAY_ROWS_NAME in output
+    assert SWEEP_COUNT_NAME in output
     assert "thomas.ingest.requested" in output
     assert OUTCOME_RETRY in output
     assert "request_id" not in output

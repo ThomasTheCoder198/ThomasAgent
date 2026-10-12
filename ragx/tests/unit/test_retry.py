@@ -4,7 +4,7 @@ import pytest
 from thomas_ragx.platform.config import Config
 from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
-from thomas_ragx.platform.retry import is_retryable, retrying
+from thomas_ragx.platform.retry import backoff_seconds, is_retryable, retrying
 
 
 def fast_config() -> Config:
@@ -41,3 +41,10 @@ async def test_retrying_does_not_retry_non_retryable() -> None:
                 calls += 1
                 raise AppError(ErrorCode.VALIDATION_FAILED)
     assert calls == 1
+
+
+@pytest.mark.parametrize("attempt", [1, 2, 3, 10])
+def test_backoff_seconds_stays_within_the_capped_exponential_window(attempt: int) -> None:
+    base, cap = 0.5, 4.0
+    ceiling = min(cap, base * 2 ** (attempt - 1))
+    assert all(0 <= backoff_seconds(attempt, base, cap) <= ceiling for _ in range(50))

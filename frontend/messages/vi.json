@@ -226,7 +226,7 @@
     "version": "Phiên bản {version}",
     "problem": {
       "type": "Không hỗ trợ loại tệp này.",
-      "size": "Tệp tối đa 100 MB.",
+      "size": "Tệp tối đa 50 MB.",
       "empty": "Tệp rỗng.",
       "storage": "Kho lưu trữ từ chối tệp (<mono>{code}</mono>).",
       "storageUnreachable": "Không kết nối được tới kho lưu trữ tệp (<mono>{code}</mono>)."
@@ -243,7 +243,7 @@
       "degraded": "Sẵn sàng (phân tích cục bộ)"
     },
     "emptyTitle": "Tải tài liệu đầu tiên lên",
-    "emptyBody": "PDF, Word, Excel, PowerPoint, Markdown, văn bản, HTML hoặc ảnh, tối đa 100 MB mỗi tệp.",
+    "emptyBody": "PDF, Word, Excel, PowerPoint, Markdown, văn bản, HTML hoặc ảnh, tối đa 50 MB mỗi tệp.",
     "orgPending": "Ragx chưa chuẩn bị xong tổ chức này.",
     "orgPendingStalled": "Vẫn chưa sẵn sàng. Bấm Thử lại để khởi tạo lại.",
     "orgFailed": "Ragx chưa chuẩn bị được tổ chức này.",

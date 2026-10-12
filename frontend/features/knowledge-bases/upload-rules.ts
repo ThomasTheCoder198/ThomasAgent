@@ -1,5 +1,5 @@
 /** Mirrors contracts/kb-upload.json (ragx enforces it; upload-rules.test.ts fails when they drift). */
-export const UPLOAD_MAX_FILE_BYTES = 104_857_600;
+export const UPLOAD_MAX_FILE_BYTES = 52_428_800;
 export const UPLOAD_EXTENSIONS = [
   ".pdf",
   ".docx",

@@ -31,9 +31,19 @@ def test_migrate_up_then_down_leaves_only_the_bookkeeping_table(postgres_url: st
     url = _fresh_database(postgres_url, "migrate_check")
     applied = migrate_up(url)
     assert applied == [m.version for m in load_migrations()]
-    assert {"orgs", "providers", "models", "model_roles", "knowledge_bases", "kb_files", "outbox"} <= _tables(
-        url
-    )
+    assert {
+        "orgs",
+        "providers",
+        "models",
+        "model_roles",
+        "knowledge_bases",
+        "kb_files",
+        "outbox",
+        "doc_nodes",
+        "doc_blocks",
+        "kb_tables",
+        "embedding_cache",
+    } <= _tables(url)
     assert migrate_up(url) == []
     reverted = migrate_down(url, steps=len(applied))
     assert reverted == list(reversed(applied))
@@ -55,8 +65,9 @@ def test_presigned_uploads_down_removes_uploading_rows(postgres_url: str) -> Non
             (model_id, provider_id),
         )
         conn.execute(
-            b"INSERT INTO knowledge_bases (id, org_id, name, is_default, embedding_model_id, embedding_dims) "
-            b"VALUES (%s, 'o', 'kb', true, %s, 8)",
+            b"INSERT INTO knowledge_bases "
+            b"(id, org_id, name, is_default, embedding_model_id, embedding_dims, collection_name) "
+            b"VALUES (%s, 'o', 'kb', true, %s, 8, 'kb_x_8')",
             (kb_id, model_id),
         )
         conn.execute(
@@ -70,7 +81,35 @@ def test_presigned_uploads_down_removes_uploading_rows(postgres_url: str) -> Non
                 b"VALUES (gen_random_uuid(), 'o', %s, 'b.txt', 'text/plain', 1, 'pending')",
                 (kb_id,),
             )
-    assert migrate_down(url, steps=1) == [3]
+    assert migrate_down(url, steps=2) == [4, 3]
     with psycopg.connect(url) as conn:
         assert conn.execute(b"SELECT count(*) FROM kb_files").fetchone() == (0,)
-    assert migrate_up(url) == [3]
+    assert migrate_up(url) == [3, 4]
+
+
+def test_rag_pipeline_up_backfills_collection_names_and_down_drops_the_tables(postgres_url: str) -> None:
+    url = _fresh_database(postgres_url, "migrate_pipeline")
+    migrate_up(url)
+    assert migrate_down(url, steps=1) == [4]
+    provider_id, model_id, kb_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    with psycopg.connect(url, autocommit=True) as conn:
+        conn.execute(b"INSERT INTO orgs (id, name, external_parsing) VALUES ('o', 'O', true)")
+        conn.execute(b"INSERT INTO providers (id, kind, name) VALUES (%s, 'openai', 'p')", (provider_id,))
+        conn.execute(
+            b"INSERT INTO models (id, provider_id, name, embedding_dims, source) "
+            b"VALUES (%s, %s, 'e', 8, 'manual')",
+            (model_id, provider_id),
+        )
+        conn.execute(
+            b"INSERT INTO knowledge_bases (id, org_id, name, is_default, embedding_model_id, embedding_dims) "
+            b"VALUES (%s, 'o', 'kb', true, %s, 8)",
+            (kb_id, model_id),
+        )
+    assert migrate_up(url) == [4]
+    with psycopg.connect(url) as conn:
+        row = conn.execute(b"SELECT collection_name FROM knowledge_bases WHERE id = %s", (kb_id,)).fetchone()
+    assert row == (f"kb_{model_id.hex}_8",)
+    pipeline_tables = {"doc_nodes", "doc_blocks", "kb_tables", "embedding_cache"}
+    assert pipeline_tables <= _tables(url)
+    migrate_down(url, steps=1)
+    assert not pipeline_tables & _tables(url)

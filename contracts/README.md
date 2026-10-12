@@ -6,13 +6,13 @@ Single source for error codes and shared schemas used by the Go core, Python RAG
 
 ## Entry points
 - `errors.yaml` — authoritative error codes, HTTP statuses, retryability, and VI/EN messages.
-  Includes authentication and LLM provider catalog errors (`INTERNAL_TOKEN_INVALID` stays registered but is unused since M1.2).
+  Includes authentication and LLM provider catalog errors (`INTERNAL_TOKEN_INVALID` stays registered but is unused since M1.2) and the M1.3 ingest and retrieval codes (`INGEST_CONTENT_CHANGED`, `INGEST_PARSE_FAILED`, `INGEST_NO_TEXT`, `INGEST_EMBEDDING_MISMATCH`, `KB_NODE_NOT_FOUND`).
 - `request-id.json` — the `X-Request-Id` header, its pattern and prefixes, with valid/invalid examples. There is no
   generator: Go (`backend-core/internal/platform/requestid`), Python (`ragx/.../platform/request_id.py`) and
   TypeScript (`frontend/lib/api/request-id.ts`) copy the values and each has a test that reads this file.
 - `app-token.json` — generated App-token test vector (trusted key, valid tokens, invalid tokens with the rejection
   reason). Built by `cmd/apptokengen` from `internal/apptoken`; ragx's verifier and core's signer test against it.
-- `kb-upload.json` — Knowledge Base upload limits and accepted extensions (`maxFileBytes` and `extensions`). Ragx enforces them; the frontend validates
+- `kb-upload.json` — Knowledge Base upload limits and accepted extensions (`maxFileBytes`, 50 MB since 2026-10-11, and `extensions`). Ragx enforces them; the frontend validates
   with them. Each side has a test that fails when it drifts.
 - `openapi/ragx.v1.yaml` — the ragx `/v1` API that only core calls (App token per request). File bytes never pass through it: upload is presign (`createUpload`), a browser POST to MinIO, then `confirmUpload`; download is `getDownloadUrl`. `HEAD` on a GET route is served but not documented. Tool routes are added in M1.3.
 - `npm run gen:ragx-types` — `openapi-typescript` turns `openapi/ragx.v1.yaml` into `frontend/lib/ragx/api.gen.ts` (run by `task gen`, never edited). It lives here, not in `frontend/`, because its peer dependency `typescript ^5` conflicts with the frontend's TypeScript 6; `typescript@5.9.3` is pinned in this package only.

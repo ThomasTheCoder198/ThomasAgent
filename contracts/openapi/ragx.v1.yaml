@@ -448,7 +448,7 @@ components:
       required: [name, sizeBytes]
       properties:
         name: { type: string, minLength: 1, maxLength: 255 }
-        sizeBytes: { type: integer, minimum: 1, maximum: 104857600 }
+        sizeBytes: { type: integer, minimum: 1, maximum: 52428800 }
     UploadTicket:
       type: object
       required: [fileId, upload, expiresAt]

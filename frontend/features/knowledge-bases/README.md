@@ -9,7 +9,7 @@ this module only speaks to it through core. Preview UI arrives with M1.3.
 ## Entry points
 
 - `contract.ts` — `RAGX_PATHS` (every KB/file URL), `kbPage`, `fileStatuses`, `FINAL_FILE_STATUSES`, the polling and paging constants and `ORG_PENDING_MAX_REFRESHES`. Types come from `@/lib/ragx/types` (generated from `contracts/openapi/ragx.v1.yaml`), never hand-written.
-- `upload-rules.ts` — `checkUpload` (extension, empty, 100 MB) mirroring `contracts/kb-upload.json`; `upload-rules.test.ts` fails when they drift.
+- `upload-rules.ts` — `checkUpload` (extension, empty, 50 MB) mirroring `contracts/kb-upload.json`; `upload-rules.test.ts` fails when they drift.
 - `upload.ts` — `presignUpload`, `postToStorage`, `confirmUpload`, `fetchDownloadUrl`, `StorageUploadError`.
 - `useUploadQueue.ts` — sequential queue `{ items, add, cancel, retry, dismiss }` with per-step retry.
 - `useFiles.ts` — paging, `upsert` / `remove`, and polling while a file is in flight.

@@ -97,3 +97,41 @@ def test_presign_settings_have_safe_defaults_and_are_validated(monkeypatch: pyte
     ]:
         with pytest.raises(ValidationError):
             Config(minio_access_key="a", minio_secret_key="s", **{field: value})
+
+
+def test_config_defaults_for_the_rag_pipeline() -> None:
+    config = Config(minio_access_key="a", minio_secret_key="s")
+    assert config.upload_max_bytes == 52_428_800
+    assert config.ingest_concurrency == 2
+    assert config.ingest_visibility_timeout_milliseconds == 1_800_000
+    assert config.worker_heartbeat_interval_seconds == 10.0
+    assert config.sweep_interval_seconds == 600.0
+    assert config.upload_sweep_grace_seconds == 300
+    assert config.datalab_api_key is None
+    assert config.ocr_base_url == "https://www.datalab.to"
+    assert (config.datalab_mode, config.datalab_retry_mode) == ("balanced", "accurate")
+    assert config.datalab_min_quality == 3.0
+    assert config.datalab_skip_cache is True
+
+
+def test_config_rejects_a_visibility_timeout_shorter_than_two_converts() -> None:
+    with pytest.raises(ValidationError):
+        Config(
+            minio_access_key="a",
+            minio_secret_key="s",
+            datalab_timeout_seconds=600.0,
+            ingest_visibility_timeout_milliseconds=1_200_000,
+        )
+
+
+def test_config_rejects_zero_ingest_concurrency() -> None:
+    with pytest.raises(ValidationError):
+        Config(minio_access_key="a", minio_secret_key="s", ingest_concurrency=0)
+
+
+def test_datalab_key_comes_only_from_the_rag_variable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATALAB_API_KEY", "ignored")
+    assert Config(minio_access_key="a", minio_secret_key="s").datalab_api_key is None
+    monkeypatch.setenv("RAG_DATALAB_API_KEY", "dl-key")
+    key = Config(minio_access_key="a", minio_secret_key="s").datalab_api_key
+    assert key is not None and key.get_secret_value() == "dl-key"

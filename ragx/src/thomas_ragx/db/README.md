@@ -23,6 +23,16 @@ uv run pytest -q tests/integration/test_migrations.py
 ## Conventions
 Migrations are `NNNN_name.up.sql` and `.down.sql` pairs. Never edit an applied migration; breaking changes use expand/contract (main spec §18.8). The runner holds one advisory lock and applies each migration in its own transaction. SQL files are bytes so psycopg runs multi-statement files without parameters.
 
+Migration 0004 (`rag_pipeline`, M1.3) adds:
+- `knowledge_bases.collection_name`: the KB's Qdrant collection, `kb_<embedding model id hex>_<dims>`, backfilled for existing rows;
+- `kb_files` columns `parse_provider`, `parse_quality`, `page_count`, `chunk_count`, `ingest_lease_until`, `ingested_at`;
+- `doc_nodes`: the document tree (one row per section, `parent_id`, `position`, `depth`, `title`, `summary`);
+- `doc_blocks`: one row per normalized block with its `locator` JSON, keyed by `(file_id, block_id)` and ordered inside a node by `position`;
+- `kb_tables`: table JSON (`header`, `rows`) with its locator;
+- `embedding_cache`: vectors keyed by `(model_id, content_sha256)`, shared across orgs on purpose.
+
+The new tables reference `kb_files` with `ON DELETE CASCADE`, so purging a file removes its tree, blocks and tables.
+
 Call `enqueue_outbox` before committing the associated business change. The worker relay publishes committed rows to Redis Streams.
 
 ## Common failures

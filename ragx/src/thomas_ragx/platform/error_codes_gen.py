@@ -13,9 +13,14 @@ class ErrorCode(StrEnum):
     CONFLICT = "CONFLICT"
     DEPENDENCY_TIMEOUT = "DEPENDENCY_TIMEOUT"
     FORBIDDEN = "FORBIDDEN"
+    INGEST_CONTENT_CHANGED = "INGEST_CONTENT_CHANGED"
+    INGEST_EMBEDDING_MISMATCH = "INGEST_EMBEDDING_MISMATCH"
+    INGEST_NO_TEXT = "INGEST_NO_TEXT"
+    INGEST_PARSE_FAILED = "INGEST_PARSE_FAILED"
     INTERNAL_ERROR = "INTERNAL_ERROR"
     INTERNAL_TOKEN_INVALID = "INTERNAL_TOKEN_INVALID"
     KB_FILE_NOT_FOUND = "KB_FILE_NOT_FOUND"
+    KB_NODE_NOT_FOUND = "KB_NODE_NOT_FOUND"
     KB_NOT_FOUND = "KB_NOT_FOUND"
     LLM_MODEL_CAPABILITY_MISMATCH = "LLM_MODEL_CAPABILITY_MISMATCH"
     LLM_MODEL_IN_USE = "LLM_MODEL_IN_USE"
@@ -54,9 +59,14 @@ ERROR_DEFINITIONS: Final[dict[ErrorCode, ErrorDefinition]] = {
     ErrorCode.CONFLICT: ErrorDefinition(http_status=409, retryable=False, message_vi="Dữ liệu bị xung đột với trạng thái hiện tại.", message_en="The request conflicts with the current state."),
     ErrorCode.DEPENDENCY_TIMEOUT: ErrorDefinition(http_status=504, retryable=True, message_vi="Dịch vụ phụ thuộc phản hồi quá chậm.", message_en="A dependency timed out."),
     ErrorCode.FORBIDDEN: ErrorDefinition(http_status=403, retryable=False, message_vi="Bạn không có quyền thực hiện thao tác này.", message_en="You are not allowed to do this."),
+    ErrorCode.INGEST_CONTENT_CHANGED: ErrorDefinition(http_status=409, retryable=False, message_vi="Nội dung tệp đã thay đổi sau khi tải lên. Vui lòng tải lại.", message_en="The file changed after upload. Please upload it again."),
+    ErrorCode.INGEST_EMBEDDING_MISMATCH: ErrorDefinition(http_status=409, retryable=False, message_vi="Model embedding trả về số chiều khác với Knowledge Base.", message_en="The embedding model returned a different dimension than the Knowledge Base."),
+    ErrorCode.INGEST_NO_TEXT: ErrorDefinition(http_status=422, retryable=False, message_vi="Không tìm thấy chữ nào trong tệp.", message_en="No text was found in the file."),
+    ErrorCode.INGEST_PARSE_FAILED: ErrorDefinition(http_status=422, retryable=False, message_vi="Không đọc được nội dung tệp (tệp hỏng hoặc bị khoá).", message_en="The file could not be read (corrupt or protected)."),
     ErrorCode.INTERNAL_ERROR: ErrorDefinition(http_status=500, retryable=False, message_vi="Đã có lỗi xảy ra. Vui lòng thử lại.", message_en="Something went wrong. Please try again."),
     ErrorCode.INTERNAL_TOKEN_INVALID: ErrorDefinition(http_status=401, retryable=False, message_vi="Token dịch vụ không hợp lệ.", message_en="Invalid service token."),
     ErrorCode.KB_FILE_NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy tài liệu.", message_en="File not found."),
+    ErrorCode.KB_NODE_NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy mục tài liệu.", message_en="Document section not found."),
     ErrorCode.KB_NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy Knowledge Base.", message_en="Knowledge Base not found."),
     ErrorCode.LLM_MODEL_CAPABILITY_MISMATCH: ErrorDefinition(http_status=422, retryable=False, message_vi="Model không có khả năng cần cho vai trò này.", message_en="The model lacks a capability this role requires."),
     ErrorCode.LLM_MODEL_IN_USE: ErrorDefinition(http_status=409, retryable=False, message_vi="Model đang được gán cho một vai trò.", message_en="The model is assigned to a role."),

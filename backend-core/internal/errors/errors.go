@@ -13,9 +13,14 @@ const (
 	CodeConflict                   Code = "CONFLICT"
 	CodeDependencyTimeout          Code = "DEPENDENCY_TIMEOUT"
 	CodeForbidden                  Code = "FORBIDDEN"
+	CodeIngestContentChanged       Code = "INGEST_CONTENT_CHANGED"
+	CodeIngestEmbeddingMismatch    Code = "INGEST_EMBEDDING_MISMATCH"
+	CodeIngestNoText               Code = "INGEST_NO_TEXT"
+	CodeIngestParseFailed          Code = "INGEST_PARSE_FAILED"
 	CodeInternalError              Code = "INTERNAL_ERROR"
 	CodeInternalTokenInvalid       Code = "INTERNAL_TOKEN_INVALID"
 	CodeKbFileNotFound             Code = "KB_FILE_NOT_FOUND"
+	CodeKbNodeNotFound             Code = "KB_NODE_NOT_FOUND"
 	CodeKbNotFound                 Code = "KB_NOT_FOUND"
 	CodeLLMModelCapabilityMismatch Code = "LLM_MODEL_CAPABILITY_MISMATCH"
 	CodeLLMModelInUse              Code = "LLM_MODEL_IN_USE"
@@ -46,9 +51,14 @@ const (
 	ErrConflict                   NamedError = NamedError(CodeConflict)
 	ErrDependencyTimeout          NamedError = NamedError(CodeDependencyTimeout)
 	ErrForbidden                  NamedError = NamedError(CodeForbidden)
+	ErrIngestContentChanged       NamedError = NamedError(CodeIngestContentChanged)
+	ErrIngestEmbeddingMismatch    NamedError = NamedError(CodeIngestEmbeddingMismatch)
+	ErrIngestNoText               NamedError = NamedError(CodeIngestNoText)
+	ErrIngestParseFailed          NamedError = NamedError(CodeIngestParseFailed)
 	ErrInternalError              NamedError = NamedError(CodeInternalError)
 	ErrInternalTokenInvalid       NamedError = NamedError(CodeInternalTokenInvalid)
 	ErrKbFileNotFound             NamedError = NamedError(CodeKbFileNotFound)
+	ErrKbNodeNotFound             NamedError = NamedError(CodeKbNodeNotFound)
 	ErrKbNotFound                 NamedError = NamedError(CodeKbNotFound)
 	ErrLLMModelCapabilityMismatch NamedError = NamedError(CodeLLMModelCapabilityMismatch)
 	ErrLLMModelInUse              NamedError = NamedError(CodeLLMModelInUse)
@@ -88,12 +98,22 @@ func LookupDefinition(code Code) ErrorDefinition {
 		return ErrorDefinition{HTTPStatus: 504, Retryable: true, MessageVI: "Dịch vụ phụ thuộc phản hồi quá chậm.", MessageEN: "A dependency timed out."}
 	case CodeForbidden:
 		return ErrorDefinition{HTTPStatus: 403, Retryable: false, MessageVI: "Bạn không có quyền thực hiện thao tác này.", MessageEN: "You are not allowed to do this."}
+	case CodeIngestContentChanged:
+		return ErrorDefinition{HTTPStatus: 409, Retryable: false, MessageVI: "Nội dung tệp đã thay đổi sau khi tải lên. Vui lòng tải lại.", MessageEN: "The file changed after upload. Please upload it again."}
+	case CodeIngestEmbeddingMismatch:
+		return ErrorDefinition{HTTPStatus: 409, Retryable: false, MessageVI: "Model embedding trả về số chiều khác với Knowledge Base.", MessageEN: "The embedding model returned a different dimension than the Knowledge Base."}
+	case CodeIngestNoText:
+		return ErrorDefinition{HTTPStatus: 422, Retryable: false, MessageVI: "Không tìm thấy chữ nào trong tệp.", MessageEN: "No text was found in the file."}
+	case CodeIngestParseFailed:
+		return ErrorDefinition{HTTPStatus: 422, Retryable: false, MessageVI: "Không đọc được nội dung tệp (tệp hỏng hoặc bị khoá).", MessageEN: "The file could not be read (corrupt or protected)."}
 	case CodeInternalError:
 		return ErrorDefinition{HTTPStatus: 500, Retryable: false, MessageVI: "Đã có lỗi xảy ra. Vui lòng thử lại.", MessageEN: "Something went wrong. Please try again."}
 	case CodeInternalTokenInvalid:
 		return ErrorDefinition{HTTPStatus: 401, Retryable: false, MessageVI: "Token dịch vụ không hợp lệ.", MessageEN: "Invalid service token."}
 	case CodeKbFileNotFound:
 		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Không tìm thấy tài liệu.", MessageEN: "File not found."}
+	case CodeKbNodeNotFound:
+		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Không tìm thấy mục tài liệu.", MessageEN: "Document section not found."}
 	case CodeKbNotFound:
 		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Không tìm thấy Knowledge Base.", MessageEN: "Knowledge Base not found."}
 	case CodeLLMModelCapabilityMismatch:

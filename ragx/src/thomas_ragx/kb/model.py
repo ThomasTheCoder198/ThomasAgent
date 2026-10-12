@@ -8,6 +8,12 @@ from thomas_ragx.kb.presign import PresignedPost
 
 # Operators rename it freely; Vietnamese is the product's default language.
 DEFAULT_KB_NAME: Final = "Mặc định"
+COLLECTION_PREFIX: Final = "kb_"
+
+
+def collection_name_for(model_id: UUID, dims: int) -> str:
+    """One Qdrant collection per embedding model and dimension (main spec §4.2 step 7)."""
+    return f"{COLLECTION_PREFIX}{model_id.hex}_{dims}"
 
 
 @dataclass(frozen=True)
@@ -26,7 +32,9 @@ class KnowledgeBase:
     name: str
     is_default: bool
     embedding_model: str
+    embedding_model_id: UUID
     embedding_dims: int
+    collection_name: str
     file_count: int
     created_at: datetime
     updated_at: datetime

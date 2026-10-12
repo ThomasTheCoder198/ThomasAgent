@@ -4,6 +4,7 @@ import io
 import json
 import unicodedata
 import uuid
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -19,6 +20,8 @@ from thomas_ragx.registry.dev_seed import seed_dev_registry
 pytestmark = pytest.mark.integration
 ORG = "org-alpha"
 REQUEST_ID = "req_3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21"
+UPLOAD_CONTRACT = Path(__file__).resolve().parents[3] / "contracts" / "kb-upload.json"
+UPLOAD_MAX_BYTES = json.loads(UPLOAD_CONTRACT.read_text(encoding="utf-8"))["maxFileBytes"]
 
 
 @pytest.fixture
@@ -266,7 +269,7 @@ async def test_presign_rejects_unsupported_type_size_and_bad_names(
         url = f"/v1/knowledge-bases/{kb_id}/uploads"
         unsupported = await presign(client, ORG, kb_id, "setup.exe", 10)
         empty = await presign(client, ORG, kb_id, "a.pdf", 0)
-        too_big = await presign(client, ORG, kb_id, "a.pdf", 104857601)
+        too_big = await presign(client, ORG, kb_id, "a.pdf", UPLOAD_MAX_BYTES + 1)
         bad_name = await presign(client, ORG, kb_id, "..", 10)
         extra = await client.post(url, json={"name": "a.pdf", "sizeBytes": 1, "kbId": kb_id}, headers=write)
         textual = await client.post(url, json={"name": "a.pdf", "sizeBytes": "10"}, headers=write)

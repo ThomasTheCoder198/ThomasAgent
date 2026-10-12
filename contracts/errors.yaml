@@ -121,3 +121,23 @@ errors:
     status: 503
     retryable: true
     message: { vi: "Dịch vụ tài liệu đang không khả dụng. Vui lòng thử lại.", en: "The document service is unavailable. Please try again." }
+  - code: INGEST_CONTENT_CHANGED
+    status: 409
+    retryable: false
+    message: { vi: "Nội dung tệp đã thay đổi sau khi tải lên. Vui lòng tải lại.", en: "The file changed after upload. Please upload it again." }
+  - code: INGEST_PARSE_FAILED
+    status: 422
+    retryable: false
+    message: { vi: "Không đọc được nội dung tệp (tệp hỏng hoặc bị khoá).", en: "The file could not be read (corrupt or protected)." }
+  - code: INGEST_NO_TEXT
+    status: 422
+    retryable: false
+    message: { vi: "Không tìm thấy chữ nào trong tệp.", en: "No text was found in the file." }
+  - code: INGEST_EMBEDDING_MISMATCH
+    status: 409
+    retryable: false
+    message: { vi: "Model embedding trả về số chiều khác với Knowledge Base.", en: "The embedding model returned a different dimension than the Knowledge Base." }
+  - code: KB_NODE_NOT_FOUND
+    status: 404
+    retryable: false
+    message: { vi: "Không tìm thấy mục tài liệu.", en: "Document section not found." }

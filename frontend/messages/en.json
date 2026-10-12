@@ -226,7 +226,7 @@
     "version": "Version {version}",
     "problem": {
       "type": "This file type is not supported.",
-      "size": "Files can be at most 100 MB.",
+      "size": "Files can be at most 50 MB.",
       "empty": "The file is empty.",
       "storage": "Storage refused the upload (<mono>{code}</mono>).",
       "storageUnreachable": "Could not reach file storage (<mono>{code}</mono>)."
@@ -243,7 +243,7 @@
       "degraded": "Ready (local parse)"
     },
     "emptyTitle": "Upload the first document",
-    "emptyBody": "PDF, Word, Excel, PowerPoint, Markdown, text, HTML or images, up to 100 MB each.",
+    "emptyBody": "PDF, Word, Excel, PowerPoint, Markdown, text, HTML or images, up to 50 MB each.",
     "orgPending": "Ragx has not finished preparing this organization.",
     "orgPendingStalled": "Still not ready. Retry to provision it again.",
     "orgFailed": "Ragx could not prepare this organization.",

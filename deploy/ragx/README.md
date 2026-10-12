@@ -41,6 +41,8 @@ Ragx's API is called only by core: 8090 is published in dev for core and the smo
 
 File bytes go from the browser to MinIO through presigned URLs, so ragx must sign for an address the browser can reach: `RAG_S3_PUBLIC_ENDPOINT` is that origin (dev `http://localhost:9000`; production an HTTPS origin in front of MinIO/S3). Ragx never connects to it. `RAG_S3_REGION` (default `us-east-1`) is the signing region, set explicitly so signing makes no network call. `RAG_UPLOAD_URL_TTL` (15 min) and `RAG_DOWNLOAD_URL_TTL` (60 s) are ISO 8601 durations when set in `.env` (`PT15M`, `PT60S`); their YAML defaults are seconds. Defaults live in `ragx/src/thomas_ragx/platform/config.yaml`.
 
+`RAG_DATALAB_API_KEY` (secret, `.env` only, optional) enables Datalab Convert for PDF, images, DOCX and PPTX; without it ingest parses locally and marks files `degraded`. The per-file upload cap is 50 MB. **Owner action (ruling A8):** Datalab's SDK has no zero-data-retention option, so ragx relies on the account default and sends `skip_cache=true` (`RAG_DATALAB_SKIP_CACHE`, default true) because a server-side result cache may itself count as retention. Before promising privacy to a customer, confirm the account's retention and cache behaviour with Datalab; set `RAG_DATALAB_SKIP_CACHE=false` only if the cache is acceptable.
+
 Core-only smoke skips ragx only when its API container is absent. An existing ragx API with a failing health endpoint makes smoke fail, including a stopped or crashed API.
 
 Named volumes preserve data; container log rotation follows Docker daemon defaults. Bootstrap is a one-shot gate; the API image provides its healthcheck.

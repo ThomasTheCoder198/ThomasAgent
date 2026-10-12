@@ -23,7 +23,7 @@ s3_region: us-east-1
 upload_url_ttl: 900
 download_url_ttl: 60
 buckets: [kb-raw, kb-preview, chat-attachments]
-upload_max_bytes: 104857600
+upload_max_bytes: 52428800
 idempotency_ttl_seconds: 86400
 page_default_limit: 20
 page_max_limit: 100
@@ -43,3 +43,16 @@ ui_session_ttl_seconds: 43200
 ui_cookie_secure: false
 ui_login_max_attempts: 5
 ui_login_window_seconds: 900
+ingest_concurrency: 2
+ingest_visibility_timeout_milliseconds: 1800000
+worker_heartbeat_interval_seconds: 10.0
+sweep_interval_seconds: 600.0
+upload_sweep_grace_seconds: 300
+work_dir: /tmp/ragx-work
+ocr_base_url: https://www.datalab.to
+datalab_mode: balanced
+datalab_retry_mode: accurate
+datalab_min_quality: 3.0
+datalab_timeout_seconds: 600.0
+datalab_poll_interval_seconds: 2
+datalab_skip_cache: true

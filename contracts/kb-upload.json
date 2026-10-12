@@ -1,4 +1,4 @@
 {
-  "maxFileBytes": 104857600,
+  "maxFileBytes": 52428800,
   "extensions": [".pdf", ".docx", ".xlsx", ".csv", ".pptx", ".md", ".txt", ".html", ".htm", ".png", ".jpg", ".jpeg"]
 }

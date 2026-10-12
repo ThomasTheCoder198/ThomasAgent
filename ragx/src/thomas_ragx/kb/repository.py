@@ -4,12 +4,14 @@ from uuid import UUID
 from psycopg import AsyncConnection
 from psycopg.rows import DictRow
 
-from thomas_ragx.kb.model import KnowledgeBase, Org
+from thomas_ragx.kb.model import KnowledgeBase, Org, collection_name_for
 from thomas_ragx.registry.model import ModelRecord
 
 type Connection = AsyncConnection[DictRow]
 KB_SELECT: Final = (
-    b"SELECT kb.id, kb.org_id, kb.name, kb.is_default, kb.embedding_dims, kb.created_at, kb.updated_at, "
+    b"SELECT kb.id, kb.org_id, kb.name, kb.is_default, kb.embedding_dims, kb.embedding_model_id, "
+    b"kb.collection_name, "
+    b"kb.created_at, kb.updated_at, "
     b"m.name AS embedding_model, "
     b"(SELECT count(*) FROM kb_files f WHERE f.kb_id = kb.id AND f.deleted_at IS NULL "
     b"AND f.status <> 'uploading') AS file_count "
@@ -25,7 +27,9 @@ def to_kb(row: DictRow) -> KnowledgeBase:
         name=row["name"],
         is_default=row["is_default"],
         embedding_model=row["embedding_model"],
+        embedding_model_id=row["embedding_model_id"],
         embedding_dims=row["embedding_dims"],
+        collection_name=row["collection_name"],
         file_count=row["file_count"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
@@ -58,10 +62,15 @@ async def default_kb_id(conn: Connection, org_id: str) -> UUID | None:
 async def insert_kb(
     conn: Connection, kb_id: UUID, org_id: str, name: str, is_default: bool, model: ModelRecord
 ) -> None:
+    if model.embedding_dims is None:
+        # The registry refuses an embedding role without dims, so this guards a broken caller.
+        raise ValueError("an embedding model without dims cannot back a KB")
+    collection = collection_name_for(model.id, model.embedding_dims)
     await conn.execute(
-        b"INSERT INTO knowledge_bases (id, org_id, name, is_default, embedding_model_id, embedding_dims) "
-        b"VALUES (%s, %s, %s, %s, %s, %s)",
-        (kb_id, org_id, name, is_default, model.id, model.embedding_dims),
+        b"INSERT INTO knowledge_bases "
+        b"(id, org_id, name, is_default, embedding_model_id, embedding_dims, collection_name) "
+        b"VALUES (%s, %s, %s, %s, %s, %s, %s)",
+        (kb_id, org_id, name, is_default, model.id, model.embedding_dims, collection),
     )
 
 

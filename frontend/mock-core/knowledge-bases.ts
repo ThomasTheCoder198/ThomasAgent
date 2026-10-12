@@ -24,7 +24,7 @@ import { DEMO_ORG_ID, DOWN_SUFFIX, findOrg } from "./orgs.ts";
 const HTTP_CREATED = 201;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
-const MAX_UPLOAD_BYTES = 104_857_600;
+const MAX_UPLOAD_BYTES = 52_428_800;
 const UPLOAD_TTL_MS = 900_000;
 const DOWNLOAD_TTL_MS = 60_000;
 const MOCK_SIGNATURE = "mock";

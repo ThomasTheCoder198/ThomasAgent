@@ -13,7 +13,8 @@ POSTGRES_IMAGE = "postgres:18.6-alpine"
 REDIS_IMAGE = "redis:8.10.2"
 MINIO_IMAGE = "pgsty/minio:RELEASE.2026-08-04T00-00-00Z"
 TRUNCATE_ALL = (
-    b"TRUNCATE ui_sessions, admin_users, outbox, idempotency_keys, kb_files, knowledge_bases, "
+    b"TRUNCATE embedding_cache, kb_tables, doc_blocks, doc_nodes, "
+    b"ui_sessions, admin_users, outbox, idempotency_keys, kb_files, knowledge_bases, "
     b"orgs, model_roles, models, providers CASCADE"
 )
 

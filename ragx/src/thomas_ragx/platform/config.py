@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Final, Literal
 from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -17,6 +17,8 @@ DEFAULT_CONFIG_FILE = Path(__file__).with_name("config.yaml")
 PUBLIC_ENDPOINT_SCHEMES: Final = frozenset({"http", "https"})
 PRESIGN_MIN_TTL: Final = timedelta(seconds=1)
 PRESIGN_MAX_TTL: Final = timedelta(days=7)
+MILLISECONDS_PER_SECOND: Final = 1000
+CONVERTS_PER_FILE: Final = 2  # balanced, then accurate when quality is low (ruling A7)
 
 
 class Config(BaseSettings):
@@ -56,6 +58,20 @@ class Config(BaseSettings):
     download_url_ttl: timedelta
     buckets: tuple[str, ...]
     upload_max_bytes: int
+    ingest_concurrency: int
+    ingest_visibility_timeout_milliseconds: int
+    worker_heartbeat_interval_seconds: float
+    sweep_interval_seconds: float
+    upload_sweep_grace_seconds: int
+    work_dir: str
+    datalab_api_key: SecretStr | None = None
+    ocr_base_url: str
+    datalab_mode: str
+    datalab_retry_mode: str
+    datalab_min_quality: float
+    datalab_timeout_seconds: float
+    datalab_poll_interval_seconds: int
+    datalab_skip_cache: bool
     idempotency_ttl_seconds: int
     page_default_limit: int
     page_max_limit: int
@@ -99,6 +115,25 @@ class Config(BaseSettings):
         if not PRESIGN_MIN_TTL <= value <= PRESIGN_MAX_TTL:  # MinIO accepts 1 second to 7 days
             raise ValueError("presigned URL lifetimes must be between 1 second and 7 days")
         return value
+
+    @field_validator("ingest_concurrency")
+    @classmethod
+    def _at_least_one_ingest_consumer(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("RAG_INGEST_CONCURRENCY must be at least 1")
+        return value
+
+    @model_validator(mode="after")
+    def _ingest_lease_outlives_a_job(self) -> "Config":
+        # A reclaim while Datalab still works would run the file twice (ruling A11).
+        bounded_job_ms = CONVERTS_PER_FILE * self.datalab_timeout_seconds * MILLISECONDS_PER_SECOND
+        margin_ms = self.stream_visibility_timeout_milliseconds
+        if self.ingest_visibility_timeout_milliseconds <= bounded_job_ms + margin_ms:
+            raise ValueError(
+                "RAG_INGEST_VISIBILITY_TIMEOUT_MILLISECONDS must exceed two Datalab timeouts plus "
+                "RAG_STREAM_VISIBILITY_TIMEOUT_MILLISECONDS"
+            )
+        return self
 
     @classmethod
     def settings_customise_sources(

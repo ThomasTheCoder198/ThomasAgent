@@ -117,7 +117,7 @@ function toQueueItem(file: File): QueueItem {
   return { id: crypto.randomUUID(), file, state: problem ? "failed" : "queued", loaded: 0, problem };
 }
 
-/** Uploads one file at a time: 100 MB files in parallel would starve each other and the rest of the app. */
+/** Uploads one file at a time: 50 MB files in parallel would starve each other and the rest of the app. */
 export function useUploadQueue(orgId: string, kbId: string, onUploaded: (file: KbFile) => void) {
   const locale = useLocale() as Locale;
   const [items, setItems] = useState<QueueItem[]>([]);

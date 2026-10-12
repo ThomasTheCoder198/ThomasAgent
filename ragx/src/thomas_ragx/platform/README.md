@@ -35,6 +35,13 @@ Presigned URLs use four settings: `RAG_S3_PUBLIC_ENDPOINT` (the origin browsers 
 
 Configuration precedence is constructor > process environment > `.env` > `config.yaml`. `load_config` can read a different dotenv path through `RAG_ENV_FILE`. Compose passes `deploy/ragx/.env` through `env_file` and derives only network endpoints and the MinIO/Phoenix credentials shared with other containers. The environment and dotenv sources disable field-name validation so renamed Python attributes cannot create unplanned environment spellings.
 
+RAG pipeline settings (M1.3, defaults in `config.yaml`):
+- `RAG_UPLOAD_MAX_BYTES` is 52428800 (50 MB since 2026-10-11); `contracts/kb-upload.json` `maxFileBytes` must equal it.
+- `RAG_INGEST_CONCURRENCY` (2, at least 1) is the number of sequential ingest consumers per worker.
+- `RAG_INGEST_VISIBILITY_TIMEOUT_MILLISECONDS` (1800000) is the ingest stream's reclaim time and the file lease length. `Config` rejects a value at or below `2 x RAG_DATALAB_TIMEOUT_SECONDS x 1000 + RAG_STREAM_VISIBILITY_TIMEOUT_MILLISECONDS`: a healthy slow convert (and its quality retry) must never be reclaimed and run twice (ruling A11).
+- `RAG_WORKER_HEARTBEAT_INTERVAL_SECONDS` (10.0), `RAG_SWEEP_INTERVAL_SECONDS` (600.0), `RAG_UPLOAD_SWEEP_GRACE_SECONDS` (300, added to `RAG_UPLOAD_URL_TTL` for the sweep cutoff) and `RAG_WORK_DIR` (`/tmp/ragx-work`, temp copies of raw files).
+- Datalab: `RAG_DATALAB_API_KEY` is optional and secret (`.env` only); without it ingest parses locally and marks files `degraded`. `RAG_OCR_BASE_URL`, `RAG_DATALAB_MODE` (`balanced`), `RAG_DATALAB_RETRY_MODE` (`accurate`), `RAG_DATALAB_MIN_QUALITY` (3.0), `RAG_DATALAB_TIMEOUT_SECONDS` (600.0), `RAG_DATALAB_POLL_INTERVAL_SECONDS` (2) and `RAG_DATALAB_SKIP_CACHE` (true). Ragx never reads the SDK's own `DATALAB_*` variables.
+
 `HTTP_STATUS_CLIENT_ERROR`, `HTTP_STATUS_RATE_LIMITED` and `HTTP_STATUS_SERVER_ERROR` in `constants.py` provide the shared logging, retry and HTTP response thresholds.
 
 Logging recursively copies and redacts dictionaries, lists, and tuples, including secret ancestor keys and bearer/sk values. Usage fields such as input_tokens remain visible, and input containers are not mutated.

@@ -115,3 +115,20 @@ async def test_manifest_lists_no_tools_yet(pool: Pool) -> None:
         response = await client.get("/v1/manifest", headers=bearer("org-alpha", "kb:read"))
     assert response.json()["data"]["tools"] == []
     assert response.json()["data"]["name"] == "ragx"
+
+
+async def test_new_knowledge_base_records_its_collection_name(pool: Pool) -> None:
+    async with api_client(pool) as (client, app):
+        model = await seed_dev_registry(app.state.registry_service)
+        await _provision(client, app, "org-c")
+        created = await client.post(
+            "/v1/knowledge-bases", json={"name": "Second"}, headers=bearer("org-c", "kb:write")
+        )
+    assert created.status_code == 201
+    async with pool.connection() as conn:
+        row = await (
+            await conn.execute(
+                b"SELECT collection_name FROM knowledge_bases WHERE id = %s", (created.json()["data"]["id"],)
+            )
+        ).fetchone()
+    assert row is not None and row["collection_name"] == f"kb_{model.id.hex}_{model.embedding_dims}"

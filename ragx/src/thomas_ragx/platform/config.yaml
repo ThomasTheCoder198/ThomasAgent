@@ -55,4 +55,4 @@ datalab_retry_mode: accurate
 datalab_min_quality: 3.0
 datalab_timeout_seconds: 600.0
 datalab_poll_interval_seconds: 2
-datalab_skip_cache: true
+datalab_skip_cache: false

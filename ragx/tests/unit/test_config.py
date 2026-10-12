@@ -111,7 +111,7 @@ def test_config_defaults_for_the_rag_pipeline() -> None:
     assert config.ocr_base_url == "https://www.datalab.to"
     assert (config.datalab_mode, config.datalab_retry_mode) == ("balanced", "accurate")
     assert config.datalab_min_quality == 3.0
-    assert config.datalab_skip_cache is True
+    assert config.datalab_skip_cache is False
 
 
 def test_config_rejects_a_visibility_timeout_shorter_than_two_converts() -> None:

@@ -1,8 +1,10 @@
 import asyncio
 import hashlib
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Final
 from uuid import UUID
 
@@ -77,6 +79,33 @@ class ObjectStorage:
     async def sha256_of(self, bucket: str, key: str) -> str | None:
         """Streams the object in chunks; None if it vanished meanwhile (a concurrent dedupe)."""
         return await asyncio.to_thread(self._sha256_of, bucket, key)
+
+    def _download_to(self, bucket: str, key: str, path: Path) -> str | None:
+        try:
+            response = self._client.get_object(bucket, key)
+        except S3Error as exc:
+            if exc.code in MISSING_OBJECT_CODES:
+                return None
+            raise
+        digest = hashlib.sha256()
+        try:
+            with path.open("wb") as sink:
+                while chunk := response.read(STREAM_CHUNK_BYTES):
+                    digest.update(chunk)
+                    sink.write(chunk)
+        except BaseException:
+            # The writer has closed before unlink; cleanup must not hide the read/write failure.
+            with suppress(OSError):
+                path.unlink(missing_ok=True)
+            raise
+        finally:
+            response.close()
+            response.release_conn()
+        return digest.hexdigest()
+
+    async def download_to(self, bucket: str, key: str, path: Path) -> str | None:
+        """One pass: the copy that gets parsed is exactly the bytes that were hashed (ruling A15)."""
+        return await asyncio.to_thread(self._download_to, bucket, key, path)
 
     async def exists(self, bucket: str, key: str) -> bool:
         try:

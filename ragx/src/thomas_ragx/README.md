@@ -29,3 +29,6 @@ CLI bootstrap initializes logging with Config's service and `environment` before
 ## Common failures
 - Missing credentials: supply the required RAG_ environment variables.
 - Bootstrap connection failure: start MinIO and Qdrant.
+
+- `parsing/`: local parsers and Datalab policy normalize blocks and locators.
+- `ingest/`: claims uploads, verifies hashes, builds outlines and persists blocks and tables.

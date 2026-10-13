@@ -1,0 +1,27 @@
+# Ingest
+
+## Purpose
+Turns confirmed uploads into stored document outlines, normalized blocks and table grids. M1.3a stops at stored blocks; ready does not yet mean vector indexed.
+
+## Entry points
+- `IngestPipeline.run` is invoked by the worker handler.
+- `IngestJob.from_message` validates the stream payload.
+
+## Dependencies
+Uses Postgres, object storage, parsing and injected tracing/metrics. Used by the ingest worker.
+
+## Run & test
+```bash
+uv run pytest -q tests/unit/test_outline.py tests/integration/test_ingest.py
+```
+
+## Conventions
+Pending or failed files are claimed as parsing with a bounded lease; duplicate, finished, deleted or superseded jobs are skipped. Expired leases permit recovery. Failed attempts release the claim for stream retries; the dead letter hook records final failures. SHA256 is calculated while downloading the exact copy parsed. Temporary copies are removed after parsing. UUIDv5 heading nodes and transactional replacement make replay idempotent. Completion records ready or degraded with provider, quality and pages and clears the lease.
+
+`rag.ingest.fetch`, `rag.ingest.parse`, `rag.ingest.persist` and parser spans carry request_id, org_id, kb_id and file_id. Step durations and file outcomes use bounded metric labels; no tenant or request labels.
+
+## Common failures
+- Changed object bytes produce INGEST_CONTENT_CHANGED before parsing.
+- Corrupt documents produce INGEST_PARSE_FAILED; absent text produces INGEST_NO_TEXT.
+
+Step duration metrics include unsuccessful fetch, parse and persist attempts; only successful steps emit completion logs.

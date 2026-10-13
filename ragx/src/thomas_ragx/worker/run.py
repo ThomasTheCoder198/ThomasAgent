@@ -9,6 +9,11 @@ import structlog
 from opentelemetry.trace import Tracer
 
 from thomas_ragx.db.outbox import STREAM_INGEST_REQUESTED, STREAM_KB_PURGE_REQUESTED
+from thomas_ragx.ingest.job import FIELD_FILE_ID, FIELD_KB_ID
+from thomas_ragx.ingest.pipeline import IngestPipeline
+from thomas_ragx.parsing.datalab import create_converter
+from thomas_ragx.parsing.registry import local_registry
+from thomas_ragx.parsing.service import ParseService
 from thomas_ragx.platform.config import Config
 from thomas_ragx.platform.retry import backoff_seconds
 from thomas_ragx.platform.tracing import ATTR_ORG_ID, ATTR_REQUEST_ID
@@ -20,17 +25,27 @@ from thomas_ragx.worker.plan import consumer_plan
 from thomas_ragx.worker.relay import OutboxRelay
 from thomas_ragx.worker.sweeper import Sweeper
 
-SPAN_NAMES = {STREAM_INGEST_REQUESTED: "rag.ingest.receive", STREAM_KB_PURGE_REQUESTED: "rag.kb.purge"}
+SPAN_NAMES = {STREAM_INGEST_REQUESTED: "rag.ingest.run", STREAM_KB_PURGE_REQUESTED: "rag.kb.purge"}
+MILLISECONDS_PER_SECOND = 1000
 log = structlog.get_logger(__name__)
 
 
 def _traced(tracer: Tracer, stream: str, handler: Handler) -> Handler:
     async def run(message: StreamMessage) -> None:
+        attributes = {ATTR_REQUEST_ID: message.request_id, ATTR_ORG_ID: message.org_id}
+        if stream == STREAM_INGEST_REQUESTED:
+            attributes.update(
+                {
+                    key: str(message.payload[key])
+                    for key in (FIELD_KB_ID, FIELD_FILE_ID)
+                    if key in message.payload
+                }
+            )
         with tracer.start_as_current_span(
             SPAN_NAMES[stream],
             record_exception=False,
             set_status_on_exception=False,
-            attributes={ATTR_REQUEST_ID: message.request_id, ATTR_ORG_ID: message.org_id},
+            attributes=attributes,
         ):
             await handler(message)
 
@@ -65,9 +80,28 @@ async def run_worker(config: Config, resources: Resources, tracer: Tracer, stop:
 async def _run_worker(
     config: Config, resources: Resources, tracer: Tracer, stop: asyncio.Event, metrics: WorkerMetrics
 ) -> None:
+    parser = ParseService(
+        local_registry(),
+        create_converter(config),
+        mode=config.datalab_mode,
+        retry_mode=config.datalab_retry_mode,
+        local_first_extensions=config.local_first_extensions,
+        min_quality=config.datalab_min_quality,
+        tracer=tracer,
+    )
+    pipeline = IngestPipeline(
+        resources.pool,
+        resources.storage,
+        parser,
+        tracer,
+        work_dir=Path(config.work_dir),
+        lease_seconds=config.ingest_visibility_timeout_milliseconds / MILLISECONDS_PER_SECOND,
+        metrics=metrics,
+    )
+
     name = f"{socket.gethostname()}-{os.getpid()}"
     handlers: dict[str, Handler] = {
-        STREAM_INGEST_REQUESTED: IngestHandler(resources.pool, resources.storage),
+        STREAM_INGEST_REQUESTED: IngestHandler(pipeline),
         STREAM_KB_PURGE_REQUESTED: PurgeHandler(resources.pool, resources.storage),
     }
     dead_letter_hooks = {STREAM_INGEST_REQUESTED: IngestDeadLetter(resources.pool)}

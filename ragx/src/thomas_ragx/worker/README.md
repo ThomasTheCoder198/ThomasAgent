@@ -44,3 +44,5 @@ OpenTelemetry metrics `ragx_worker_jobs_total` and `ragx_worker_job_duration_sec
 - `outbox relay batch failed` means ragx Redis is down. Rows remain unpublished until Redis returns.
 - Entries in `*.dlq` need inspection by error code, then replay: `ragx dlq replay <stream> --all` or `--entry-id <id> [--entry-id <id> ...]` (run it in the worker container; streams are `thomas.ingest.requested` and `thomas.kb.purge.requested`). It moves entries back with their original `payload`, `request_id`, `org_id` and `outbox_id`, and the delivery count starts again at 1; the claim in the handler keeps a rerun safe (ruling A14).
 - `sweep failed` means MinIO or Postgres was unreachable; the next period retries.
+
+IngestHandler now invokes the ingest pipeline; its enclosing span is `rag.ingest.run`. Step duration and file outcome metrics are `ragx_ingest_step_duration_seconds` and `ragx_ingest_files_total`.

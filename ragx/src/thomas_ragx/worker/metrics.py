@@ -13,6 +13,9 @@ from opentelemetry.sdk.resources import Resource
 
 from thomas_ragx.platform.config import Config
 
+INGEST_STEP_DURATION_NAME: Final = "ragx_ingest_step_duration_seconds"
+INGEST_FILES_NAME: Final = "ragx_ingest_files_total"
+INGEST_DURATION_BUCKETS_SECONDS: Final = (120.0, 300.0, 600.0)
 JOB_COUNT_NAME: Final = "ragx_worker_jobs_total"
 JOB_DURATION_NAME: Final = "ragx_worker_job_duration_seconds"
 RELAY_BATCH_COUNT_NAME: Final = "ragx_worker_relay_batches_total"
@@ -33,6 +36,8 @@ class WorkerMetrics:
     """Record bounded job outcomes and duration without request or tenant labels."""
 
     def __init__(self, meter: Meter) -> None:
+        self._ingest_steps = meter.create_histogram(INGEST_STEP_DURATION_NAME, unit="s")
+        self._ingest_files = meter.create_counter(INGEST_FILES_NAME)
         self._jobs = meter.create_counter(JOB_COUNT_NAME, description="Worker job delivery attempts")
         self._duration = meter.create_histogram(
             JOB_DURATION_NAME, unit="s", description="Worker job delivery duration"
@@ -43,6 +48,12 @@ class WorkerMetrics:
         )
         self._relay_rows = meter.create_counter(RELAY_ROWS_NAME, description="Outbox rows published")
         self._sweeps = meter.create_counter(SWEEP_COUNT_NAME, description="Items the sweeper deleted")
+
+    def observe_ingest_step(self, step: str, duration_seconds: float) -> None:
+        self._ingest_steps.record(duration_seconds, {"step": step})
+
+    def observe_ingest_file(self, outcome: str) -> None:
+        self._ingest_files.add(1, {"outcome": outcome})
 
     def observe_job(self, stream: str, outcome: str, duration_seconds: float) -> None:
         attributes = {"stream": stream, "outcome": outcome}
@@ -78,6 +89,12 @@ def configure_worker_metrics(config: Config) -> tuple[MeterProvider, WorkerMetri
             {"service.name": config.service_name, "deployment.environment": config.environment}
         ),
         views=[
+            View(
+                instrument_name=INGEST_STEP_DURATION_NAME,
+                aggregation=ExplicitBucketHistogramAggregation(
+                    JOB_DURATION_BUCKETS_SECONDS + INGEST_DURATION_BUCKETS_SECONDS
+                ),
+            ),
             View(
                 instrument_name=JOB_DURATION_NAME,
                 aggregation=ExplicitBucketHistogramAggregation(JOB_DURATION_BUCKETS_SECONDS),

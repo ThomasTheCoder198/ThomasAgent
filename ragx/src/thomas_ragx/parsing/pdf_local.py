@@ -38,7 +38,8 @@ class PdfParser:
     """Fallback parser (degraded): text layer only, headings guessed from font size, no tables, no OCR."""
 
     def parse(self, path: Path) -> ParsedDocument:
-        with pymupdf.open(path) as document:  # type: ignore[no-untyped-call]  # pymupdf ships partial types
+        # A failed MuPDF filename open can retain its Windows handle through the exception traceback.
+        with pymupdf.open(stream=path.read_bytes(), filetype="pdf") as document:  # type: ignore[no-untyped-call]  # pymupdf ships partial types
             if document.needs_pass:
                 raise ValueError("encrypted PDF")  # ParseService maps it to INGEST_PARSE_FAILED
             blocks = _text_blocks(document)

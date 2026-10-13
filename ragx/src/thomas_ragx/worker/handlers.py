@@ -5,6 +5,8 @@ import structlog
 
 from thomas_ragx.db.outbox import PURGE_KIND_FILE, PURGE_KIND_KB
 from thomas_ragx.db.pool import Pool
+from thomas_ragx.ingest.job import IngestJob
+from thomas_ragx.ingest.pipeline import IngestPipeline
 from thomas_ragx.kb import file_repository as files
 from thomas_ragx.kb.storage import PREVIEW_BUCKET, RAW_BUCKET, ObjectStorage, kb_prefix, preview_key, raw_key
 from thomas_ragx.platform.error_codes_gen import ErrorCode
@@ -33,7 +35,7 @@ def _catalog_code(code: str) -> str:
 
 
 class IngestDeadLetter:
-    """After the last delivery the file is failed with a reason (spec §13), unless it already finished."""
+    """After the last delivery the file is failed with a reason (spec Â§13), unless it already finished."""
 
     def __init__(self, pool: Pool) -> None:
         self._pool = pool
@@ -50,22 +52,11 @@ class IngestDeadLetter:
 
 
 class IngestHandler:
-    """M1.1 proves outbox → stream → consumer end to end; M1.3 replaces it with parse → index."""
-
-    def __init__(self, pool: Pool, storage: ObjectStorage) -> None:
-        self._pool = pool
-        self._storage = storage
+    def __init__(self, pipeline: IngestPipeline) -> None:
+        self._pipeline = pipeline
 
     async def __call__(self, message: StreamMessage) -> None:
-        kb_id, file_id = _uuid_field(message, FIELD_KB_ID), _uuid_field(message, FIELD_FILE_ID)
-        async with self._pool.connection() as conn:
-            file = await files.get_file(conn, message.org_id, kb_id, file_id)
-        if file is None:
-            log.info("ingest skipped, file deleted", kb_id=str(kb_id), file_id=str(file_id))
-            return
-        if not await self._storage.exists(RAW_BUCKET, raw_key(message.org_id, kb_id, file_id)):
-            raise AppError(ErrorCode.KB_FILE_NOT_FOUND)
-        log.info("ingest received", kb_id=str(kb_id), file_id=str(file_id), version=file.version)
+        await self._pipeline.run(IngestJob.from_message(message))
 
 
 class PurgeHandler:

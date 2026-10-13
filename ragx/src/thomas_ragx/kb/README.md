@@ -37,3 +37,7 @@ The signing client takes `RAG_S3_REGION` explicitly (ruling P11): minio would ot
 ## Common failures
 - `ORG_NOT_PROVISIONED` → core has not provisioned the org yet.
 - `LLM_ROLE_NOT_ASSIGNED` → set the embedding role in `/ui` (dev: `ragx seed-dev`).
+
+ObjectStorage.download_to streams a raw object to a temporary path and calculates its SHA256 in the same pass for ingest integrity.
+
+Failed streaming downloads remove the incomplete file after the writer closes and preserve the original read/write error.

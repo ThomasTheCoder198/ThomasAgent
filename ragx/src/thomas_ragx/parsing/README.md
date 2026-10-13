@@ -75,3 +75,5 @@ Datalab heading levels are layout-guessed (the `<hN>` tag is kept as is): in the
 - A Datalab citation has a page but no box → the source page size was unreadable (check the file opens locally).
 - A DOCX citation points at the wrong paragraph → the index counts tables and empty paragraphs too (python-docx body order).
 - A formula cell in an `.xlsx` is empty → the file has no cached result (never calculated by Excel); openpyxl `data_only` reads none.
+
+The local PDF parser opens the verified bytes as a MuPDF stream so corrupt input cannot retain a Windows filename handle and mask the parse error during ingest cleanup. This requires at most one upload-sized byte buffer.

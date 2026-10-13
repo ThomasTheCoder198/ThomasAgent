@@ -10,6 +10,7 @@ from minio import Minio
 from redis.asyncio import Redis
 
 from tests.integration.api_client import api_client, bearer, confirm, post_to_storage, presign, upload
+from tests.integration.ingest_support import _pipeline
 from thomas_ragx.db.outbox import STREAM_INGEST_REQUESTED, STREAM_KB_PURGE_REQUESTED
 from thomas_ragx.db.pool import Pool
 from thomas_ragx.kb import file_repository
@@ -117,16 +118,19 @@ async def test_relay_publishes_after_redis_recovers(
 
 
 async def test_ingest_handler_acks_a_received_file(
-    pool: Pool, minio_config: dict[str, Any], minio: Minio, redis: Redis, redis_url: str
+    pool: Pool, minio_config: dict[str, Any], minio: Minio, redis: Redis, redis_url: str, tmp_path: Any
 ) -> None:
-    await _uploaded_file(pool, minio_config, redis_url)
+    _, file_id = await _uploaded_file(pool, minio_config, redis_url)
     await OutboxRelay(pool, redis, batch_size=10, poll_interval_seconds=0.01).publish_batch()
     consumer = _consumer(redis, STREAM_INGEST_REQUESTED)
     await consumer.ensure_group()
     await consumer.ensure_group()  # idempotent (BUSYGROUP)
-    await consumer.poll_once(IngestHandler(pool, ObjectStorage(minio)))
+    await consumer.poll_once(IngestHandler(_pipeline(pool, minio, tmp_path)))
     pending = await redis.xpending(STREAM_INGEST_REQUESTED, CONSUMER_GROUP)
     assert pending["pending"] == 0
+    async with pool.connection() as conn:
+        row = await (await conn.execute(b"SELECT status FROM kb_files WHERE id = %s", (file_id,))).fetchone()
+    assert row is not None and row["status"] == "ready"
 
 
 async def test_failing_job_moves_to_the_dlq_with_its_request_id(redis: Redis) -> None:

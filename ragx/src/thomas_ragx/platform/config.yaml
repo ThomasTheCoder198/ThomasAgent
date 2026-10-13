@@ -56,3 +56,4 @@ datalab_min_quality: 3.0
 datalab_timeout_seconds: 600.0
 datalab_poll_interval_seconds: 2
 datalab_skip_cache: false
+local_first_extensions: [.docx, .pptx]

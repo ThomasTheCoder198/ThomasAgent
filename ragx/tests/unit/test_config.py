@@ -135,3 +135,47 @@ def test_datalab_key_comes_only_from_the_rag_variable(monkeypatch: pytest.Monkey
     monkeypatch.setenv("RAG_DATALAB_API_KEY", "dl-key")
     key = Config(minio_access_key="a", minio_secret_key="s").datalab_api_key
     assert key is not None and key.get_secret_value() == "dl-key"
+
+
+def test_blank_datalab_key_counts_as_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert Config(minio_access_key="a", minio_secret_key="s", datalab_api_key="").datalab_api_key is None
+    assert Config(minio_access_key="a", minio_secret_key="s", datalab_api_key="  ").datalab_api_key is None
+    monkeypatch.setenv("RAG_DATALAB_API_KEY", "")
+    assert Config(minio_access_key="a", minio_secret_key="s").datalab_api_key is None
+
+
+@pytest.mark.parametrize("interval", [0, -2])
+def test_config_rejects_a_non_positive_datalab_poll_interval(interval: int) -> None:
+    with pytest.raises(ValidationError):
+        Config(minio_access_key="a", minio_secret_key="s", datalab_poll_interval_seconds=interval)
+
+
+def test_local_first_extensions_default_and_environment_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert Config(minio_access_key="a", minio_secret_key="s").local_first_extensions == (".docx", ".pptx")
+    monkeypatch.setenv("RAG_LOCAL_FIRST_EXTENSIONS", '[".DOCX"]')
+    assert Config(minio_access_key="a", minio_secret_key="s").local_first_extensions == (".docx",)
+    monkeypatch.setenv("RAG_LOCAL_FIRST_EXTENSIONS", "[]")
+    assert Config(minio_access_key="a", minio_secret_key="s").local_first_extensions == ()
+
+
+@pytest.mark.parametrize("entry", ["docx", "."])
+def test_local_first_extensions_must_look_like_extensions(entry: str) -> None:
+    with pytest.raises(ValidationError):
+        Config(minio_access_key="a", minio_secret_key="s", local_first_extensions=(entry,))
+
+
+def test_config_rejects_a_datalab_timeout_shorter_than_one_poll() -> None:
+    with pytest.raises(ValidationError):
+        Config(
+            minio_access_key="a",
+            minio_secret_key="s",
+            datalab_timeout_seconds=1.0,
+            datalab_poll_interval_seconds=2,
+        )
+    config = Config(
+        minio_access_key="a",
+        minio_secret_key="s",
+        datalab_timeout_seconds=2.0,
+        datalab_poll_interval_seconds=2,
+    )
+    assert config.datalab_timeout_seconds == 2.0

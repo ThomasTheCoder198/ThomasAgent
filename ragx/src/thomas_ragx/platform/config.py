@@ -18,6 +18,7 @@ PUBLIC_ENDPOINT_SCHEMES: Final = frozenset({"http", "https"})
 PRESIGN_MIN_TTL: Final = timedelta(seconds=1)
 PRESIGN_MAX_TTL: Final = timedelta(days=7)
 MILLISECONDS_PER_SECOND: Final = 1000
+MIN_EXTENSION_LENGTH: Final = 2  # a dot and at least one character
 CONVERTS_PER_FILE: Final = 2  # balanced, then accurate when quality is low (ruling A7)
 
 
@@ -72,6 +73,7 @@ class Config(BaseSettings):
     datalab_timeout_seconds: float
     datalab_poll_interval_seconds: int
     datalab_skip_cache: bool
+    local_first_extensions: tuple[str, ...]
     idempotency_ttl_seconds: int
     page_default_limit: int
     page_max_limit: int
@@ -122,6 +124,34 @@ class Config(BaseSettings):
         if value < 1:
             raise ValueError("RAG_INGEST_CONCURRENCY must be at least 1")
         return value
+
+    @field_validator("datalab_api_key")
+    @classmethod
+    def _blank_datalab_key_is_no_key(cls, value: SecretStr | None) -> SecretStr | None:
+        # An empty `RAG_DATALAB_API_KEY=` line in .env must mean "no key", not an auth failure at Datalab.
+        return None if value is None or not value.get_secret_value().strip() else value
+
+    @field_validator("datalab_poll_interval_seconds")
+    @classmethod
+    def _poll_interval_is_positive(cls, value: int) -> int:
+        if value <= 0:  # the SDK's max_polls is timeout // interval
+            raise ValueError("RAG_DATALAB_POLL_INTERVAL_SECONDS must be greater than 0")
+        return value
+
+    @field_validator("local_first_extensions")
+    @classmethod
+    def _local_first_extensions_are_dotted_lowercase(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        normalized = tuple(item.strip().lower() for item in value)
+        if any(not item.startswith(".") or len(item) < MIN_EXTENSION_LENGTH for item in normalized):
+            raise ValueError("RAG_LOCAL_FIRST_EXTENSIONS entries must look like '.docx'")
+        return normalized
+
+    @model_validator(mode="after")
+    def _datalab_timeout_covers_a_poll(self) -> "Config":
+        # A timeout under one interval gives max_polls 0: the job is submitted, billed, and never polled.
+        if self.datalab_timeout_seconds < self.datalab_poll_interval_seconds:
+            raise ValueError("RAG_DATALAB_TIMEOUT_SECONDS must be at least RAG_DATALAB_POLL_INTERVAL_SECONDS")
+        return self
 
     @model_validator(mode="after")
     def _ingest_lease_outlives_a_job(self) -> "Config":

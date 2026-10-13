@@ -7,6 +7,7 @@ Coordinates API startup and idempotent storage bootstrap.
 - `cli.py`: serve and bootstrap commands.
 - `bootstrap.py`: migrations, the one-time admin account (`admin/`), buckets and the Qdrant check.
 - `ui/`: the `/ui` admin pages for providers, models and roles.
+- `parsing/`: block model, locators, parser registry and local parsers ([README](parsing/README.md)).
 - `resources.py`: Postgres pool, Redis client and MinIO storage lifecycle and readiness.
 
 ## Dependencies

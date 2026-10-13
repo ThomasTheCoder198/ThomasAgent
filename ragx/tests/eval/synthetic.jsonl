@@ -1,0 +1,34 @@
+{"id": "vi-01", "lang": "vi", "category": "A2", "question": "Được đổi trả hàng trong bao lâu?", "expected": [{"file": "chinh-sach-doi-tra.md", "quote": "trong vòng 7 ngày kể từ ngày nhận hàng"}]}
+{"id": "vi-02", "lang": "vi", "category": "A2", "question": "Đồ điện tử bị lỗi thì đổi trong mấy ngày?", "expected": [{"file": "chinh-sach-doi-tra.md", "quote": "thời hạn đổi trả là 3 ngày"}]}
+{"id": "vi-03", "lang": "vi", "category": "A2", "question": "Thẻ quà tặng có đổi trả được không?", "expected": [{"file": "chinh-sach-doi-tra.md", "quote": "Thẻ quà tặng và phiếu mua hàng"}]}
+{"id": "vi-04", "lang": "vi", "category": "A2", "question": "Bao lâu thì nhận được tiền hoàn?", "expected": [{"file": "chinh-sach-doi-tra.md", "quote": "trong 5 đến 10 ngày làm việc"}]}
+{"id": "vi-05", "lang": "vi", "category": "A2", "question": "Phí ship ban đầu có được hoàn không?", "expected": [{"file": "chinh-sach-doi-tra.md", "quote": "Phí vận chuyển ban đầu không được hoàn lại"}]}
+{"id": "vi-06", "lang": "vi", "category": "A2", "question": "Số tổng đài chăm sóc khách hàng là gì?", "expected": [{"file": "chinh-sach-doi-tra.md", "quote": "Gọi tổng đài 1900 6868"}]}
+{"id": "vi-07", "lang": "vi", "category": "A2", "question": "Máy lọc nước được bảo hành bao lâu?", "expected": [{"file": "huong-dan-bao-hanh.txt", "quote": "bảo hành máy lọc nước là 24 tháng"}]}
+{"id": "vi-08", "lang": "vi", "category": "A2", "question": "Lõi lọc bảo hành mấy tháng?", "expected": [{"file": "huong-dan-bao-hanh.txt", "quote": "lõi lọc được bảo hành 6 tháng"}]}
+{"id": "vi-09", "lang": "vi", "category": "A2", "question": "Sản phẩm bị rơi vỡ có được bảo hành không?", "expected": [{"file": "huong-dan-bao-hanh.txt", "quote": "sản phẩm bị rơi vỡ, vào nước"}]}
+{"id": "vi-10", "lang": "vi", "category": "A2", "question": "Kỹ thuật viên báo kết quả kiểm tra trong bao lâu?", "expected": [{"file": "huong-dan-bao-hanh.txt", "quote": "báo kết quả trong vòng 48 giờ"}]}
+{"id": "vi-11", "lang": "vi", "category": "A2", "question": "Khách ở tỉnh xa bảo hành thế nào?", "expected": [{"file": "huong-dan-bao-hanh.txt", "quote": "gửi sản phẩm qua đường bưu điện"}]}
+{"id": "vi-12", "lang": "vi", "category": "A2", "question": "Giá vệ sinh máy lạnh là bao nhiêu?", "expected": [{"file": "bang-gia-dich-vu.csv", "quote": "Vệ sinh máy lạnh"}]}
+{"id": "vi-13", "lang": "vi", "category": "A2", "question": "Thay lõi lọc nước giá bao nhiêu?", "expected": [{"file": "bang-gia-dich-vu.csv", "quote": "Thay lõi lọc nước"}]}
+{"id": "vi-14", "lang": "vi", "category": "A2", "question": "Phí kiểm tra tại nhà là bao nhiêu?", "expected": [{"file": "bang-gia-dich-vu.csv", "quote": "Kiểm tra tại nhà"}]}
+{"id": "vi-15", "lang": "vi", "category": "A2", "question": "Giờ làm việc buổi chiều bắt đầu lúc mấy giờ?", "expected": [{"file": "quy-che-nhan-su.md", "quote": "buổi chiều từ 13 giờ 30"}]}
+{"id": "vi-16", "lang": "vi", "category": "A2", "question": "Nhân viên có bao nhiêu ngày nghỉ phép năm?", "expected": [{"file": "quy-che-nhan-su.md", "quote": "12 ngày nghỉ phép năm"}]}
+{"id": "vi-17", "lang": "vi", "category": "A2", "question": "Làm trên 5 năm có được thêm ngày phép không?", "expected": [{"file": "quy-che-nhan-su.md", "quote": "cộng thêm 1 ngày phép"}]}
+{"id": "vi-18", "lang": "vi", "category": "A2", "question": "Xin nghỉ phép phải báo trước mấy ngày?", "expected": [{"file": "quy-che-nhan-su.md", "quote": "trước ít nhất 3 ngày làm việc"}]}
+{"id": "vi-19", "lang": "vi", "category": "A2", "question": "Làm thêm vào ngày lễ được trả bao nhiêu?", "expected": [{"file": "quy-che-nhan-su.md", "quote": "ngày lễ, tết được trả 300%"}]}
+{"id": "vi-20", "lang": "vi", "category": "A2", "question": "Đi công tác được hỗ trợ tiền ăn bao nhiêu?", "expected": [{"file": "quy-che-nhan-su.md", "quote": "300.000 đồng mỗi ngày tiền ăn"}]}
+{"id": "vi-21", "lang": "vi", "category": "A2", "question": "Làm thêm giờ ngày thường tính lương thế nào?", "expected": [{"file": "quy-che-nhan-su.md", "quote": "Làm thêm giờ ngày thường được trả 150% lương giờ"}]}
+{"id": "vi-22", "lang": "vi", "category": "A6", "question": "So sánh thời gian bảo hành máy lọc nước và lõi lọc.", "expected": [{"file": "huong-dan-bao-hanh.txt", "quote": "bảo hành máy lọc nước là 24 tháng"}, {"file": "huong-dan-bao-hanh.txt", "quote": "lõi lọc được bảo hành 6 tháng"}]}
+{"id": "vi-23", "lang": "vi", "category": "A2", "question": "Mỹ phẩm đã mở có đổi được không?", "expected": [{"file": "chinh-sach-doi-tra.md", "quote": "mỹ phẩm đã mở nắp"}]}
+{"id": "vi-24", "lang": "vi", "category": "A2", "question": "Lắp đặt máy lọc nước tốn bao nhiêu tiền?", "expected": [{"file": "bang-gia-dich-vu.csv", "quote": "Lắp đặt máy lọc nước"}]}
+{"id": "en-01", "lang": "en", "category": "A2", "question": "Where do new employees get their laptop?", "expected": [{"file": "onboarding-guide.md", "quote": "receive a laptop and an access badge from the IT desk"}]}
+{"id": "en-02", "lang": "en", "category": "A2", "question": "When does the temporary password expire?", "expected": [{"file": "onboarding-guide.md", "quote": "expires after 24 hours"}]}
+{"id": "en-03", "lang": "en", "category": "A2", "question": "How long do I have to finish security training?", "expected": [{"file": "onboarding-guide.md", "quote": "within 14 days of joining"}]}
+{"id": "en-04", "lang": "en", "category": "A2", "question": "What is the deadline for expense claims?", "expected": [{"file": "onboarding-guide.md", "quote": "before the 5th of the following month"}]}
+{"id": "en-05", "lang": "en", "category": "A2", "question": "When are receipts required?", "expected": [{"file": "onboarding-guide.md", "quote": "Receipts are required for any amount above 200,000 VND"}]}
+{"id": "en-06", "lang": "en", "category": "A2", "question": "How many days of annual leave do employees get?", "expected": [{"file": "quy-che-nhan-su.md", "quote": "12 ngày nghỉ phép năm"}]}
+{"id": "a1-01", "lang": "vi", "category": "A1", "question": "Xin chào", "expected": []}
+{"id": "a1-02", "lang": "en", "category": "A1", "question": "Hello, who are you?", "expected": []}
+{"id": "a4-01", "lang": "vi", "category": "A4", "question": "Thời tiết Hà Nội hôm nay thế nào?", "expected": []}
+{"id": "a5-01", "lang": "vi", "category": "A5", "question": "Chính sách đổi trả cho khách hàng doanh nghiệp là gì?", "expected": []}

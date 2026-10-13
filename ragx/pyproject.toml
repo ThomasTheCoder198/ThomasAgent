@@ -8,6 +8,7 @@ dependencies = [
   "cryptography==50.0.1",
   "datalab-python-sdk==0.5.0",
   "fastapi==0.142.2",
+  "fastembed==0.8.1",
   "httpx==0.28.1",
   "jinja2==3.1.6",
   "litellm==1.101.2",
@@ -15,6 +16,10 @@ dependencies = [
   "markdown-it-py==4.2.0",
   "minio==7.2.20",
   "openai==2.54.0",
+  "openinference-instrumentation==0.1.66",
+  "openinference-instrumentation-litellm==0.1.46",
+  "openinference-semantic-conventions==0.1.39",
+  "onnxruntime==1.30.0",
   "openpyxl==3.1.5",
   "opentelemetry-api==1.45.0",
   "opentelemetry-exporter-otlp-proto-http==1.45.0",
@@ -34,13 +39,15 @@ dependencies = [
   "tenacity==9.1.4",
   "typer==0.27.2",
   "uvicorn[standard]==0.54.0",
+  "underthesea==9.5.0",
 ]
 
 [project.scripts]
 ragx = "thomas_ragx.cli:app"
 
 [dependency-groups]
-dev = ["pytest==9.1.1", "pytest-asyncio==1.4.0", "ruff==0.16.10", "mypy==2.4.0", "testcontainers[minio,redis]==4.15.0"]
+dev = ["pytest==9.1.1", "pytest-asyncio==1.4.0", "ruff==0.16.10", "mypy==2.4.0", "testcontainers[minio,redis,qdrant]==4.15.0"]
+spike = ["pyvi==0.1.1"]
 
 [build-system]
 requires = ["hatchling"]
@@ -70,7 +77,7 @@ python_version = "3.13"
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["pymupdf.*", "pptx.*", "openpyxl.*", "datalab_sdk.*"]
+module = ["pymupdf.*", "pptx.*", "openpyxl.*", "datalab_sdk.*", "fastembed.*", "underthesea.*", "pyvi.*", "openinference.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

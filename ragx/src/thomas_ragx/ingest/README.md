@@ -25,3 +25,9 @@ Pending or failed files are claimed as parsing with a bounded lease; duplicate, 
 - Corrupt documents produce INGEST_PARSE_FAILED; absent text produces INGEST_NO_TEXT.
 
 Step duration metrics include unsuccessful fetch, parse and persist attempts; only successful steps emit completion logs.
+
+Chunker.chunk converts blocks and their outline into deterministic chunks. Word counts use whitespace tokens (Vietnamese syllables). A section node is a hard boundary; blocks join until the target is reached or the next block would exceed the maximum. Tables occupy their own chunks; oversized tables split by complete rows with repeated headers and narrowed sheet ranges. Oversized text uses maximum-size windows with configured overlap. Block offsets index the chunk body with exclusive ends. Embedding text adds document, optional section and page metadata.
+
+Chunk ids are sha256("{file_id}:{version}:{index}")[:32]; point ids are UUIDv5 using the fixed CHUNK_NAMESPACE. Never `hash()`. Language is vi when Vietnamese letters occur, otherwise en.
+
+Tables with only a header stay intact even when that header exceeds the chunk maximum, because no body-row boundary exists to split at.

@@ -74,6 +74,9 @@ class Config(BaseSettings):
     datalab_poll_interval_seconds: int
     datalab_skip_cache: bool
     local_first_extensions: tuple[str, ...]
+    chunk_target_words: int = Field(gt=0)
+    chunk_max_words: int = Field(gt=0)
+    chunk_overlap_words: int = Field(ge=0)
     idempotency_ttl_seconds: int
     page_default_limit: int
     page_max_limit: int
@@ -163,6 +166,12 @@ class Config(BaseSettings):
                 "RAG_INGEST_VISIBILITY_TIMEOUT_MILLISECONDS must exceed two Datalab timeouts plus "
                 "RAG_STREAM_VISIBILITY_TIMEOUT_MILLISECONDS"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _chunk_word_limits_are_ordered(self) -> "Config":
+        if not self.chunk_overlap_words < self.chunk_target_words <= self.chunk_max_words:
+            raise ValueError("chunk words must satisfy overlap < target <= max")
         return self
 
     @classmethod

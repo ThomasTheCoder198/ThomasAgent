@@ -57,3 +57,6 @@ datalab_timeout_seconds: 600.0
 datalab_poll_interval_seconds: 2
 datalab_skip_cache: false
 local_first_extensions: [.docx, .pptx]
+chunk_target_words: 350
+chunk_max_words: 700
+chunk_overlap_words: 50

@@ -56,3 +56,5 @@ When tracing is configured, Phoenix keys containing whitespace, control characte
 ## Common failures
 - Missing credentials: supply the required RAG_ environment variables.
 - Bootstrap connection failure: start MinIO and Qdrant.
+
+Chunking uses `RAG_CHUNK_TARGET_WORDS` (350), `RAG_CHUNK_MAX_WORDS` (700), and `RAG_CHUNK_OVERLAP_WORDS` (50). Counts are whitespace tokens. Config requires non-negative overlap, positive target and maximum, and overlap < target <= maximum.

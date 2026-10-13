@@ -179,3 +179,28 @@ def test_config_rejects_a_datalab_timeout_shorter_than_one_poll() -> None:
         datalab_poll_interval_seconds=2,
     )
     assert config.datalab_timeout_seconds == 2.0
+
+
+def test_config_rejects_overlap_not_below_target() -> None:
+    with pytest.raises(ValidationError):
+        Config(minio_access_key="a", minio_secret_key="s", chunk_overlap_words=400, chunk_target_words=350)
+
+
+@pytest.mark.parametrize(
+    ("target", "maximum", "overlap"),
+    [(0, 700, 0), (350, 0, 50), (350, 700, -1), (701, 700, 50), (350, 700, 350)],
+)
+def test_config_rejects_invalid_chunk_limits(target: int, maximum: int, overlap: int) -> None:
+    with pytest.raises(ValidationError):
+        Config(
+            minio_access_key="a",
+            minio_secret_key="s",
+            chunk_target_words=target,
+            chunk_max_words=maximum,
+            chunk_overlap_words=overlap,
+        )
+
+
+def test_config_chunk_defaults() -> None:
+    config = Config(minio_access_key="a", minio_secret_key="s")
+    assert (config.chunk_target_words, config.chunk_max_words, config.chunk_overlap_words) == (350, 700, 50)

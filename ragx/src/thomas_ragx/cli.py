@@ -1,8 +1,12 @@
 import asyncio
 import contextlib
+import json
 import os
 import signal
-from typing import Annotated, Final
+from pathlib import Path
+from time import perf_counter
+from typing import Annotated, Any, Final
+from uuid import UUID
 
 import structlog
 import typer
@@ -13,7 +17,12 @@ from thomas_ragx import bootstrap as bootstrap_module
 from thomas_ragx.api.app import create_app
 from thomas_ragx.db.migrate import migrate_down, migrate_up
 from thomas_ragx.db.outbox import KNOWN_STREAMS
+from thomas_ragx.eval.golden import load_golden
+from thomas_ragx.eval.runner import EvalRunner
+from thomas_ragx.kb import repository as kbs
 from thomas_ragx.platform.config import Config, load_config
+from thomas_ragx.platform.error_codes_gen import ErrorCode
+from thomas_ragx.platform.errors import AppError
 from thomas_ragx.platform.litellm_policy import apply_litellm_policy
 from thomas_ragx.platform.logging import configure_logging
 from thomas_ragx.platform.request_id import new_job_id
@@ -26,10 +35,13 @@ from thomas_ragx.platform.tracing import (
 from thomas_ragx.registry.dev_seed import seed_dev_registry
 from thomas_ragx.registry.factory import create_registry_service
 from thomas_ragx.resources import REDIS_PROTOCOL, Resources
+from thomas_ragx.retrieval.factory import create_search_service
 from thomas_ragx.worker.dlq import DeadLetterReplayer
+from thomas_ragx.worker.metrics import configure_worker_metrics
 from thomas_ragx.worker.run import run_worker
 
 DEV_ENVIRONMENT: Final = "dev"
+MILLISECONDS_PER_SECOND: Final = 1000
 log = structlog.get_logger(__name__)
 
 app = typer.Typer(no_args_is_help=True)
@@ -37,6 +49,8 @@ migrate_app = typer.Typer(no_args_is_help=True)
 app.add_typer(migrate_app, name="migrate")
 dlq_app = typer.Typer(no_args_is_help=True)
 app.add_typer(dlq_app, name="dlq")
+eval_app = typer.Typer(no_args_is_help=True)
+app.add_typer(eval_app, name="eval")
 
 
 @migrate_app.command("up")
@@ -154,3 +168,60 @@ def dlq_replay(
         log.error("dlq replay needs a known stream and --entry-id or --all", stream=stream)
         raise typer.Exit(code=1)
     asyncio.run(_replay(config, stream, entry_id or None))
+
+
+async def _eval(config: Config, golden: Path, org_id: str, kb_id: UUID) -> dict[str, Any]:
+    resources = Resources.from_config(config)
+    provider = configure_tracing(config)
+    install_global_tracer_provider(provider)
+    instrument_litellm(provider)
+    metrics_provider, metrics = configure_worker_metrics(config)
+    try:
+        await resources.open()
+        async with resources.pool.connection() as conn:
+            kb = await kbs.get_kb(conn, org_id, kb_id)
+        if kb is None:
+            raise AppError(ErrorCode.KB_NOT_FOUND)
+        registry = create_registry_service(config, resources.pool)
+        search = create_search_service(config, resources, registry, provider.get_tracer(__name__), metrics)
+        return (await EvalRunner(resources.pool, search).run(org_id, kb, load_golden(golden))).to_json()
+    finally:
+        await resources.close()
+        provider.shutdown()
+        metrics_provider.shutdown()
+
+
+@eval_app.command("run")
+def eval_run(
+    golden: Annotated[Path, typer.Option("--set", exists=True, dir_okay=False, help="Golden set JSONL")],
+    org: Annotated[str, typer.Option("--org")],
+    kb: Annotated[str, typer.Option("--kb")],
+    out: Annotated[Path | None, typer.Option("--out", help="Write the JSON report here")] = None,
+) -> None:
+    """Score retrieval of a golden set against a live KB; run it inside the worker container."""
+    apply_litellm_policy(os.environ)
+    config = load_config()
+    apply_trace_content_policy(config, os.environ)
+    configure_logging(config.log_level, config.service_name, config.environment)
+    started = perf_counter()
+    # Bound here so the context is copied into asyncio.run and covers the completion line too (rule 6).
+    with structlog.contextvars.bound_contextvars(request_id=new_job_id(), org_id=org):
+        try:
+            report = asyncio.run(_eval(config, golden, org, UUID(kb)))
+        except AppError as exc:
+            # log.exception would attach the traceback; the code alone is the boundary record (rule 4).
+            log.error("eval failed", error_code=exc.code.value, duration_ms=_elapsed_ms(started))  # noqa: TRY400
+            raise typer.Exit(code=1) from None
+        if out is not None:
+            out.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+        log.info(
+            "eval finished",
+            scored=report["scored"],
+            recall_at_5=report["recall"]["5"],
+            mrr=report["mrr"],
+            duration_ms=_elapsed_ms(started),
+        )
+
+
+def _elapsed_ms(started: float) -> int:
+    return round((perf_counter() - started) * MILLISECONDS_PER_SECOND)

@@ -7,3 +7,5 @@ Each line of `synthetic.jsonl` is a UTF-8 JSON object with `id`, `lang` (`vi` or
 Categories A1–A6 cover greeting and identity (A1), factual retrieval (A2), document summary (A3), out-of-scope questions (A4), unsupported answers (A5), and comparison across evidence (A6). This set includes A1, A2, A4, A5, and A6; it does not claim full category coverage.
 
 Expected quotes are matched against their source after NFC normalization, lowercasing, and whitespace collapsing. The corpus consistency test enforces this relationship.
+
+The eval harness (`ragx eval run`, [README](../../src/thomas_ragx/eval/README.md)) reads this format and defines the metrics.

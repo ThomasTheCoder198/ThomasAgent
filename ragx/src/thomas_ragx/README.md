@@ -4,7 +4,8 @@
 Coordinates API startup and idempotent storage bootstrap.
 
 ## Entry points
-- `cli.py`: serve and bootstrap commands.
+- `cli.py`: serve, bootstrap, worker, migrate, dlq replay and eval run commands.
+- `eval/`: eval harness behind `ragx eval run` ([README](eval/README.md)).
 - `bootstrap.py`: migrations, the one-time admin account (`admin/`), buckets and the Qdrant check.
 - `ui/`: the `/ui` admin pages for providers, models and roles.
 - `parsing/`: block model, locators, parser registry and local parsers ([README](parsing/README.md)).

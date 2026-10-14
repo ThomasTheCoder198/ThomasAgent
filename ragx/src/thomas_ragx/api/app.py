@@ -1,6 +1,5 @@
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from pathlib import Path
 from time import perf_counter
 from typing import Any, Final
 
@@ -19,7 +18,6 @@ from thomas_ragx.api.manifest import router as manifest_router
 from thomas_ragx.api.orgs import router as orgs_router
 from thomas_ragx.api.tools import router as tools_router
 from thomas_ragx.auth.app_token import AppTokenVerifier, load_public_keys
-from thomas_ragx.ingest.indexing import BM25_DIR_NAME
 from thomas_ragx.kb.file_service import FileService
 from thomas_ragx.kb.presign import create_url_signer
 from thomas_ragx.kb.service import KnowledgeBaseService
@@ -35,7 +33,6 @@ from thomas_ragx.platform.request_id import (
     accept_request_id,
 )
 from thomas_ragx.platform.request_state import STATE_JTI, STATE_ORG_ID, STATE_TOOL
-from thomas_ragx.platform.retry import retrying
 from thomas_ragx.platform.tracing import (
     ATTR_ORG_ID,
     ATTR_REQUEST_ID,
@@ -46,14 +43,9 @@ from thomas_ragx.platform.tracing import (
     configure_tracing,
     format_trace_id,
 )
-from thomas_ragx.providers.embedding import LiteLLMEmbedder
 from thomas_ragx.registry.factory import create_registry_service
 from thomas_ragx.resources import Resources
-from thomas_ragx.retrieval.qdrant_store import QdrantStore
-from thomas_ragx.retrieval.rerank import LiteLLMReranker
-from thomas_ragx.retrieval.search_service import SearchService
-from thomas_ragx.retrieval.segmenter import create_segmenter
-from thomas_ragx.retrieval.sparse import SparseEncoder
+from thomas_ragx.retrieval.factory import create_search_service
 from thomas_ragx.retrieval.tool_catalog import manifest_tools
 from thomas_ragx.retrieval.tool_service import KbToolService
 from thomas_ragx.ui.routes import install_ui
@@ -155,27 +147,7 @@ def create_app(config: Config | None = None, resources: Resources | None = None)
     app.state.file_service = file_service
     app.state.tracer_provider = provider
     app.state.metrics_provider = metrics_provider
-    search_service = SearchService(
-        resources.pool,
-        registry_service,
-        LiteLLMEmbedder(lambda: retrying(config), metrics=metrics),
-        SparseEncoder(
-            create_segmenter(config.vi_tokenizer),
-            Path(config.work_dir) / BM25_DIR_NAME,
-            k=config.bm25_k,
-            b=config.bm25_b,
-            avg_len=config.bm25_avg_len,
-        ),
-        QdrantStore(resources.qdrant, upsert_batch_size=config.qdrant_upsert_batch_size),
-        LiteLLMReranker(lambda: retrying(config), metrics=metrics),
-        tracer,
-        dense_limit=config.search_dense_limit,
-        sparse_limit=config.search_sparse_limit,
-        fused_limit=config.search_fused_limit,
-        result_limit=config.search_result_limit,
-        min_score=config.search_min_rerank_score,
-        trace_content=config.trace_content,
-    )
+    search_service = create_search_service(config, resources, registry_service, tracer, metrics)
     app.state.tool_service = KbToolService(
         resources.pool,
         search_service,

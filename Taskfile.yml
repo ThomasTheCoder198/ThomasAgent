@@ -90,6 +90,14 @@ tasks:
   ragx:seed-dev:
     desc: Seed an offline embedding model and role into a running dev ragx stack
     cmds: ["{{.RAGX_COMPOSE}} exec -T ragx-api ragx seed-dev"]
+  ragx:eval:
+    desc: "Score retrieval of a golden set against a live KB: task ragx:eval SET=... ORG=... KB=... [OUT=...]"
+    requires:
+      vars: [SET, ORG, KB]
+    cmds:
+      - '{{.RAGX_COMPOSE}} cp "{{.SET}}" ragx-worker:/tmp/golden.jsonl'
+      - '{{.RAGX_COMPOSE}} exec -T ragx-worker ragx eval run --set /tmp/golden.jsonl --org "{{.ORG}}" --kb "{{.KB}}" --out /tmp/eval.json'
+      - '{{.RAGX_COMPOSE}} cp ragx-worker:/tmp/eval.json "{{.OUT | default "docs/superpowers/reports/m1-3-eval.json"}}"'
   migrate:
     desc: Run database migrations
     cmds: ["{{.COMPOSE}} run --rm migrate"]

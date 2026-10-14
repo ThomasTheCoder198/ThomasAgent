@@ -7,6 +7,7 @@ Owns the Python RAG service foundations, API startup, and storage bootstrap.
 - `ragx serve`: starts the API.
 - `ragx bootstrap`: creates storage buckets.
 - `ragx migrate up|down`: applies or reverts database migrations.
+- `ragx eval run --set PATH --org ORG --kb KB_ID`: scores retrieval on a golden set ([eval harness](src/thomas_ragx/eval/README.md); `task ragx:eval` runs it in the worker container).
 
 ## Dependencies
 - Uses: FastAPI, Typer, uvicorn, structlog, OpenTelemetry, Postgres, Redis, MinIO, and Qdrant.

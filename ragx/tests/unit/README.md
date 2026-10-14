@@ -10,6 +10,9 @@ Checks config, errors, logging redaction, tracing, retries, API responses, and b
 - `test_health.py`: response format and HTTP handler/access log correlation.
 - `test_readiness.py`: dependency readiness and health separation using fake resources.
 - `test_tracing.py`: Phoenix bearer export and project resource, malformed-key rejection without credential leakage in standard-library logs, content policy, isolated app providers, direct root-span/request-ID correlation, error-response trace headers, and exporter outage tolerance. CLI wiring checks content policy and global installation before startup plus provider shutdown on both normal and failed startup.
+- `test_eval_report.py`: percentile, text normalization and golden-set loading for the eval harness.
+- `test_cli_eval.py`: `ragx eval run` exit codes, `error_code` logging, provider shutdown and completion log fields.
+- `test_search_factory.py`: `create_search_service` hands the metrics recorder to the embedder and reranker.
 - `test_worker_metrics.py`: worker job counter and duration export to stdout with bounded labels.
 
 ## Dependencies

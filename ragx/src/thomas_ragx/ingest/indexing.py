@@ -13,12 +13,11 @@ from thomas_ragx.providers.embedding import LiteLLMEmbedder
 from thomas_ragx.registry.model import ModelHandle, Role
 from thomas_ragx.registry.service import LLMProviderService
 from thomas_ragx.resources import Resources
+from thomas_ragx.retrieval.factory import BM25_DIR_NAME
 from thomas_ragx.retrieval.qdrant_store import QdrantStore
 from thomas_ragx.retrieval.segmenter import create_segmenter
 from thomas_ragx.retrieval.sparse import SparseEncoder
 from thomas_ragx.worker.metrics import WorkerMetrics
-
-BM25_DIR_NAME = "bm25"
 
 
 @dataclass(frozen=True)

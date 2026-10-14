@@ -44,6 +44,8 @@ and uses platform retries including `Retry-After`. The required recorder impleme
 meter. Completion logs include request ID, duration and bounded outcome without query, documents,
 credentials or provider exception text. API tool assembly must pass its configured exported recorder.
 
+`create_search_service(config, resources, registry, tracer, metrics)` in `factory.py` is the single production construction of `SearchService`, used by the API and `ragx eval run`. It passes the configured `WorkerMetrics` recorder to the embedder and the reranker, so each entry point exports provider RED metrics. `BM25_DIR_NAME` lives there and ingest imports it, so queries and ingest share one BM25 directory.
+
 Run `uv run pytest -q tests/integration/test_search.py tests/unit/test_rerank.py` from `ragx/`.
 Missing rerank roles require an operator role assignment; deleted-file points are harmless while purge waits.
 

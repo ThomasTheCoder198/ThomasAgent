@@ -4,3 +4,5 @@ from typing import Final
 # contextvars cannot carry them because the middleware runs downstream code in a copied context.
 STATE_ORG_ID: Final = "org_id"
 STATE_JTI: Final = "jti"
+
+STATE_TOOL: Final = "tool"

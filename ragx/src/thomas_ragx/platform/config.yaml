@@ -80,3 +80,7 @@ search_sparse_limit: 40
 search_fused_limit: 30
 search_result_limit: 8
 search_min_rerank_score: 0.1
+
+tool_timeout_ms: 20000
+section_max_chars: 8000
+outline_max_nodes: 500

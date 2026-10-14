@@ -10,6 +10,8 @@ from thomas_ragx.api.app import create_app
 from thomas_ragx.platform.config import Config
 from thomas_ragx.platform.http_response import request_id_of, success_body
 
+METRICS_EXPORT_KEY = "resource_metrics"
+
 
 def test_healthz_returns_response_with_request_id() -> None:
     app = create_app(Config(minio_access_key="a", minio_secret_key="s"), resources=FakeResources())
@@ -54,7 +56,12 @@ def test_app_logs_environment_and_correlates_handler_with_response(
         else:
             assert response_request_id.startswith("req_")
             assert response_request_id != incoming_request_id
-        records = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+        # Lifespan shutdown flushes the API metrics provider, whose stdout export is not a log record.
+        records = [
+            record
+            for record in map(json.loads, capsys.readouterr().out.splitlines())
+            if METRICS_EXPORT_KEY not in record
+        ]
         assert {record["msg"] for record in records} == {"handler completed", "request completed"}
         for record in records:
             assert record["env"] == config.environment

@@ -5,7 +5,7 @@ info:
   description: >
     Called only by core. Every /v1 operation needs an App token: a 60-second EdDSA JWT signed by core
     (typ thomas-app+jwt; claims iss, aud, oid, optional kb, scp, rid, jti, iat, exp). Ragx takes the organization
-    from oid and never from the body. Tool routes are added in M1.3.
+    from oid and never from the body. Tool routes need scope tool:<name> and the claim kb.
 servers:
   - url: http://localhost:8090
     description: Local ragx stack
@@ -16,6 +16,7 @@ tags:
   - name: orgs
   - name: knowledge-bases
   - name: files
+  - name: tools
   - name: manifest
 paths:
   /healthz:
@@ -296,7 +297,7 @@ paths:
     get:
       tags: [manifest]
       operationId: getManifest
-      summary: App manifest (scope kb:read); tools are added in M1.3
+      summary: App manifest (scope kb:read) with the KB tools
       parameters:
         - $ref: "#/components/parameters/RequestId"
       responses:
@@ -312,6 +313,126 @@ paths:
                   meta: { $ref: "#/components/schemas/Meta" }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+  /v1/tools/kb_search:
+    post:
+      tags: [tools]
+      operationId: kbSearch
+      summary: Hybrid search in the token's KB (scope tool:kb_search; KB from the kb claim)
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KbSearchInput" }
+      responses:
+        "200":
+          description: Labelled passages
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: "#/components/schemas/KbSearchOutput" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "504": { $ref: "#/components/responses/Error" }
+  /v1/tools/kb_outline:
+    post:
+      tags: [tools]
+      operationId: kbOutline
+      summary: Read from the token's KB (scope tool:kb_outline; KB from the kb claim)
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KbOutlineInput" }
+      responses:
+        "200":
+          description: Tool result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: "#/components/schemas/KbOutlineOutput" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "504": { $ref: "#/components/responses/Error" }
+  /v1/tools/kb_read_section:
+    post:
+      tags: [tools]
+      operationId: kbReadSection
+      summary: Read from the token's KB (scope tool:kb_read_section; KB from the kb claim)
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KbReadSectionInput" }
+      responses:
+        "200":
+          description: Tool result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: "#/components/schemas/KbReadSectionOutput" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "504": { $ref: "#/components/responses/Error" }
+  /v1/tools/kb_list_documents:
+    post:
+      tags: [tools]
+      operationId: kbListDocuments
+      summary: Read from the token's KB (scope tool:kb_list_documents; KB from the kb claim)
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KbListDocumentsInput" }
+      responses:
+        "200":
+          description: Tool result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/KbDocument" } }
+                  meta: { $ref: "#/components/schemas/PageMeta" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "504": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     appToken:
@@ -467,6 +588,8 @@ components:
       properties:
         url: { type: string, format: uri }
         expiresAt: { type: string, format: date-time }
+    KbFileStatus:
+      { type: string, enum: [pending, parsing, enriching, chunking, embedding, indexing, ready, failed, degraded] }
     KbFile:
       type: object
       required: [id, kbId, name, version, contentType, sizeBytes, sha256, status, errorCode, degraded, createdAt, updatedAt]
@@ -478,7 +601,7 @@ components:
         contentType: { type: string }
         sizeBytes: { type: integer }
         sha256: { type: string }
-        status: { type: string, enum: [pending, parsing, enriching, chunking, embedding, indexing, ready, failed, degraded] }
+        status: { $ref: "#/components/schemas/KbFileStatus" }
         errorCode: { type: string }
         degraded: { type: boolean }
         createdAt: { type: string, format: date-time }
@@ -489,4 +612,134 @@ components:
       properties:
         name: { type: string }
         version: { type: string }
-        tools: { type: array, items: { type: object } }
+        tools: { type: array, items: { $ref: "#/components/schemas/ToolDefinition" } }
+
+    Locator:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [pdf_bbox, sheet_range, text_lines, docx_paragraph] }
+        page: { type: integer, minimum: 1 }
+        bbox: { type: array, items: { type: number }, minItems: 4, maxItems: 4 }
+        sheet: { type: string }
+        range: { type: string }
+        lineStart: { type: integer, minimum: 1 }
+        lineEnd: { type: integer, minimum: 1 }
+        paragraph: { type: integer, minimum: 0 }
+    KbSearchInput:
+      type: object
+      additionalProperties: false
+      required: [query]
+      properties:
+        query: { type: string, minLength: 1, maxLength: 1000 }
+        filters:
+          type: object
+          additionalProperties: false
+          properties:
+            fileIds: { type: array, maxItems: 20, items: { type: string, format: uuid } }
+            docTypes: { type: array, maxItems: 12, items: { type: string, minLength: 1, maxLength: 12 } }
+    LabelledBlock:
+      type: object
+      required: [label, blockId, text, locator]
+      properties:
+        label: { type: string, example: "[1.2]" }
+        blockId: { type: string }
+        text: { type: string }
+        locator: { $ref: "#/components/schemas/Locator" }
+    SearchResult:
+      type: object
+      required: [source, chunkId, fileId, fileName, nodeId, section, pageStart, pageEnd, score, blocks]
+      properties:
+        source: { type: integer, minimum: 1 }
+        chunkId: { type: string }
+        fileId: { type: string, format: uuid }
+        fileName: { type: string }
+        nodeId: { type: string, format: uuid }
+        section: { type: array, items: { type: string } }
+        pageStart: { type: [integer, "null"] }
+        pageEnd: { type: [integer, "null"] }
+        score: { type: number }
+        blocks: { type: array, items: { $ref: "#/components/schemas/LabelledBlock" } }
+    KbSearchOutput:
+      type: object
+      required: [results, insufficientEvidence]
+      properties:
+        results: { type: array, maxItems: 8, items: { $ref: "#/components/schemas/SearchResult" } }
+        insufficientEvidence: { type: boolean }
+    ToolDefinition:
+      type: object
+      required: [name, description, inputSchema, timeoutMs, failureMode, public]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        inputSchema: { type: object }
+        timeoutMs: { type: integer, minimum: 1 }
+        failureMode: { type: string, enum: [skip, abort] }
+        public: { type: boolean }
+    KbOutlineInput:
+      type: object
+      additionalProperties: false
+      required: [fileId]
+      properties:
+        fileId: { type: string, format: uuid }
+    OutlineNode:
+      type: object
+      required: [nodeId, parentId, depth, title, summary]
+      properties:
+        nodeId: { type: string, format: uuid }
+        parentId: { type: [string, "null"], format: uuid }
+        depth: { type: integer }
+        title: { type: string }
+        summary: { type: string }
+    KbOutlineOutput:
+      type: object
+      required: [fileId, fileName, nodes, truncated]
+      properties:
+        fileId: { type: string, format: uuid }
+        fileName: { type: string }
+        nodes: { type: array, items: { $ref: "#/components/schemas/OutlineNode" } }
+        truncated: { type: boolean }
+    KbReadSectionInput:
+      type: object
+      additionalProperties: false
+      required: [nodeId]
+      properties:
+        nodeId: { type: string, format: uuid }
+    SectionBlock:
+      type: object
+      required: [blockId, type, text, locator]
+      properties:
+        blockId: { type: string }
+        type: { type: string }
+        text: { type: string }
+        locator: { $ref: "#/components/schemas/Locator" }
+    KbReadSectionOutput:
+      type: object
+      required: [nodeId, fileId, fileName, title, path, blocks, truncated]
+      properties:
+        nodeId: { type: string, format: uuid }
+        fileId: { type: string, format: uuid }
+        fileName: { type: string }
+        title: { type: string }
+        path: { type: array, items: { type: string } }
+        blocks: { type: array, items: { $ref: "#/components/schemas/SectionBlock" } }
+        truncated: { type: boolean }
+    KbListDocumentsInput:
+      type: object
+      additionalProperties: false
+      properties:
+        nameContains: { type: string, maxLength: 200 }
+        docType: { type: string, minLength: 1, maxLength: 12 }
+        cursor: { type: string }
+        limit: { type: integer, minimum: 1, maximum: 100 }
+    KbDocument:
+      type: object
+      required: [fileId, name, docType, version, status, pageCount, createdAt]
+      properties:
+        fileId: { type: string, format: uuid }
+        name: { type: string }
+        docType: { type: string }
+        version: { type: integer }
+        status: { $ref: "#/components/schemas/KbFileStatus" }
+        pageCount: { type: [integer, "null"] }
+        createdAt: { type: string, format: date-time }

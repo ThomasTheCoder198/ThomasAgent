@@ -57,6 +57,48 @@ func (e KbFileStatus) Valid() bool {
 	}
 }
 
+// Defines values for LocatorKind.
+const (
+	DocxParagraph LocatorKind = "docx_paragraph"
+	PdfBbox       LocatorKind = "pdf_bbox"
+	SheetRange    LocatorKind = "sheet_range"
+	TextLines     LocatorKind = "text_lines"
+)
+
+// Valid indicates whether the value is a known member of the LocatorKind enum.
+func (e LocatorKind) Valid() bool {
+	switch e {
+	case DocxParagraph:
+		return true
+	case PdfBbox:
+		return true
+	case SheetRange:
+		return true
+	case TextLines:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ToolDefinitionFailureMode.
+const (
+	Abort ToolDefinitionFailureMode = "abort"
+	Skip  ToolDefinitionFailureMode = "skip"
+)
+
+// Valid indicates whether the value is a known member of the ToolDefinitionFailureMode enum.
+func (e ToolDefinitionFailureMode) Valid() bool {
+	switch e {
+	case Abort:
+		return true
+	case Skip:
+		return true
+	default:
+		return false
+	}
+}
+
 // DownloadUrl defines model for DownloadUrl.
 type DownloadUrl struct {
 	ExpiresAt time.Time `json:"expiresAt"`
@@ -71,6 +113,17 @@ type ErrorBody struct {
 		Message   string                  `json:"message"`
 		RequestId *string                 `json:"requestId,omitempty"`
 	} `json:"error"`
+}
+
+// KbDocument defines model for KbDocument.
+type KbDocument struct {
+	CreatedAt time.Time          `json:"createdAt"`
+	DocType   string             `json:"docType"`
+	FileId    openapi_types.UUID `json:"fileId"`
+	Name      string             `json:"name"`
+	PageCount *int               `json:"pageCount"`
+	Status    KbFileStatus       `json:"status"`
+	Version   int                `json:"version"`
 }
 
 // KbFile defines model for KbFile.
@@ -89,8 +142,60 @@ type KbFile struct {
 	Version     int                `json:"version"`
 }
 
-// KbFileStatus defines model for KbFile.Status.
+// KbFileStatus defines model for KbFileStatus.
 type KbFileStatus string
+
+// KbListDocumentsInput defines model for KbListDocumentsInput.
+type KbListDocumentsInput struct {
+	Cursor       *string `json:"cursor,omitempty"`
+	DocType      *string `json:"docType,omitempty"`
+	Limit        *int    `json:"limit,omitempty"`
+	NameContains *string `json:"nameContains,omitempty"`
+}
+
+// KbOutlineInput defines model for KbOutlineInput.
+type KbOutlineInput struct {
+	FileId openapi_types.UUID `json:"fileId"`
+}
+
+// KbOutlineOutput defines model for KbOutlineOutput.
+type KbOutlineOutput struct {
+	FileId    openapi_types.UUID `json:"fileId"`
+	FileName  string             `json:"fileName"`
+	Nodes     []OutlineNode      `json:"nodes"`
+	Truncated bool               `json:"truncated"`
+}
+
+// KbReadSectionInput defines model for KbReadSectionInput.
+type KbReadSectionInput struct {
+	NodeId openapi_types.UUID `json:"nodeId"`
+}
+
+// KbReadSectionOutput defines model for KbReadSectionOutput.
+type KbReadSectionOutput struct {
+	Blocks    []SectionBlock     `json:"blocks"`
+	FileId    openapi_types.UUID `json:"fileId"`
+	FileName  string             `json:"fileName"`
+	NodeId    openapi_types.UUID `json:"nodeId"`
+	Path      []string           `json:"path"`
+	Title     string             `json:"title"`
+	Truncated bool               `json:"truncated"`
+}
+
+// KbSearchInput defines model for KbSearchInput.
+type KbSearchInput struct {
+	Filters *struct {
+		DocTypes *[]string             `json:"docTypes,omitempty"`
+		FileIds  *[]openapi_types.UUID `json:"fileIds,omitempty"`
+	} `json:"filters,omitempty"`
+	Query string `json:"query"`
+}
+
+// KbSearchOutput defines model for KbSearchOutput.
+type KbSearchOutput struct {
+	InsufficientEvidence bool           `json:"insufficientEvidence"`
+	Results              []SearchResult `json:"results"`
+}
 
 // KnowledgeBase defines model for KnowledgeBase.
 type KnowledgeBase struct {
@@ -109,11 +214,34 @@ type KnowledgeBaseWrite struct {
 	Name string `json:"name"`
 }
 
+// LabelledBlock defines model for LabelledBlock.
+type LabelledBlock struct {
+	BlockId string  `json:"blockId"`
+	Label   string  `json:"label"`
+	Locator Locator `json:"locator"`
+	Text    string  `json:"text"`
+}
+
+// Locator defines model for Locator.
+type Locator struct {
+	Bbox      *[]float32  `json:"bbox,omitempty"`
+	Kind      LocatorKind `json:"kind"`
+	LineEnd   *int        `json:"lineEnd,omitempty"`
+	LineStart *int        `json:"lineStart,omitempty"`
+	Page      *int        `json:"page,omitempty"`
+	Paragraph *int        `json:"paragraph,omitempty"`
+	Range     *string     `json:"range,omitempty"`
+	Sheet     *string     `json:"sheet,omitempty"`
+}
+
+// LocatorKind defines model for Locator.Kind.
+type LocatorKind string
+
 // Manifest defines model for Manifest.
 type Manifest struct {
-	Name    string                   `json:"name"`
-	Tools   []map[string]interface{} `json:"tools"`
-	Version string                   `json:"version"`
+	Name    string           `json:"name"`
+	Tools   []ToolDefinition `json:"tools"`
+	Version string           `json:"version"`
 }
 
 // Meta defines model for Meta.
@@ -136,6 +264,15 @@ type OrgProvision struct {
 	Name            string `json:"name"`
 }
 
+// OutlineNode defines model for OutlineNode.
+type OutlineNode struct {
+	Depth    int                 `json:"depth"`
+	NodeId   openapi_types.UUID  `json:"nodeId"`
+	ParentId *openapi_types.UUID `json:"parentId"`
+	Summary  string              `json:"summary"`
+	Title    string              `json:"title"`
+}
+
 // PageMeta defines model for PageMeta.
 type PageMeta struct {
 	Page struct {
@@ -145,6 +282,41 @@ type PageMeta struct {
 	} `json:"page"`
 	RequestId string `json:"requestId"`
 }
+
+// SearchResult defines model for SearchResult.
+type SearchResult struct {
+	Blocks    []LabelledBlock    `json:"blocks"`
+	ChunkId   string             `json:"chunkId"`
+	FileId    openapi_types.UUID `json:"fileId"`
+	FileName  string             `json:"fileName"`
+	NodeId    openapi_types.UUID `json:"nodeId"`
+	PageEnd   *int               `json:"pageEnd"`
+	PageStart *int               `json:"pageStart"`
+	Score     float32            `json:"score"`
+	Section   []string           `json:"section"`
+	Source    int                `json:"source"`
+}
+
+// SectionBlock defines model for SectionBlock.
+type SectionBlock struct {
+	BlockId string  `json:"blockId"`
+	Locator Locator `json:"locator"`
+	Text    string  `json:"text"`
+	Type    string  `json:"type"`
+}
+
+// ToolDefinition defines model for ToolDefinition.
+type ToolDefinition struct {
+	Description string                    `json:"description"`
+	FailureMode ToolDefinitionFailureMode `json:"failureMode"`
+	InputSchema map[string]interface{}    `json:"inputSchema"`
+	Name        string                    `json:"name"`
+	Public      bool                      `json:"public"`
+	TimeoutMs   int                       `json:"timeoutMs"`
+}
+
+// ToolDefinitionFailureMode defines model for ToolDefinition.FailureMode.
+type ToolDefinitionFailureMode string
 
 // UploadRequest defines model for UploadRequest.
 type UploadRequest struct {
@@ -273,6 +445,26 @@ type ProvisionOrgParams struct {
 	XRequestId *RequestId `json:"X-Request-Id,omitempty"`
 }
 
+// KbListDocumentsParams defines parameters for KbListDocuments.
+type KbListDocumentsParams struct {
+	XRequestId *RequestId `json:"X-Request-Id,omitempty"`
+}
+
+// KbOutlineParams defines parameters for KbOutline.
+type KbOutlineParams struct {
+	XRequestId *RequestId `json:"X-Request-Id,omitempty"`
+}
+
+// KbReadSectionParams defines parameters for KbReadSection.
+type KbReadSectionParams struct {
+	XRequestId *RequestId `json:"X-Request-Id,omitempty"`
+}
+
+// KbSearchParams defines parameters for KbSearch.
+type KbSearchParams struct {
+	XRequestId *RequestId `json:"X-Request-Id,omitempty"`
+}
+
 // CreateKnowledgeBaseJSONRequestBody defines body for CreateKnowledgeBase for application/json ContentType.
 type CreateKnowledgeBaseJSONRequestBody = KnowledgeBaseWrite
 
@@ -284,6 +476,18 @@ type CreateUploadJSONRequestBody = UploadRequest
 
 // ProvisionOrgJSONRequestBody defines body for ProvisionOrg for application/json ContentType.
 type ProvisionOrgJSONRequestBody = OrgProvision
+
+// KbListDocumentsJSONRequestBody defines body for KbListDocuments for application/json ContentType.
+type KbListDocumentsJSONRequestBody = KbListDocumentsInput
+
+// KbOutlineJSONRequestBody defines body for KbOutline for application/json ContentType.
+type KbOutlineJSONRequestBody = KbOutlineInput
+
+// KbReadSectionJSONRequestBody defines body for KbReadSection for application/json ContentType.
+type KbReadSectionJSONRequestBody = KbReadSectionInput
+
+// KbSearchJSONRequestBody defines body for KbSearch for application/json ContentType.
+type KbSearchJSONRequestBody = KbSearchInput
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -456,7 +660,7 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/knowledge-bases/{kbId}/uploads (the `CreateUpload` operationId).
 	CreateUpload(ctx context.Context, kbId KbId, params *CreateUploadParams, body CreateUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetManifest App manifest (scope kb:read); tools are added in M1.3
+	// GetManifest App manifest (scope kb:read) with the KB tools
 	//
 	// Corresponds with GET /v1/manifest (the `GetManifest` operationId).
 	GetManifest(ctx context.Context, params *GetManifestParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -474,6 +678,62 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /v1/orgs/{orgId} (the `ProvisionOrg` operationId).
 	ProvisionOrg(ctx context.Context, orgId OrgId, params *ProvisionOrgParams, body ProvisionOrgJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// KbListDocumentsWithBody Read from the token's KB (scope tool:kb_list_documents; KB from the kb claim)
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/tools/kb_list_documents (the `KbListDocuments` operationId).
+	KbListDocumentsWithBody(ctx context.Context, params *KbListDocumentsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// KbListDocuments Read from the token's KB (scope tool:kb_list_documents; KB from the kb claim)
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/tools/kb_list_documents (the `KbListDocuments` operationId).
+	KbListDocuments(ctx context.Context, params *KbListDocumentsParams, body KbListDocumentsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// KbOutlineWithBody Read from the token's KB (scope tool:kb_outline; KB from the kb claim)
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/tools/kb_outline (the `KbOutline` operationId).
+	KbOutlineWithBody(ctx context.Context, params *KbOutlineParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// KbOutline Read from the token's KB (scope tool:kb_outline; KB from the kb claim)
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/tools/kb_outline (the `KbOutline` operationId).
+	KbOutline(ctx context.Context, params *KbOutlineParams, body KbOutlineJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// KbReadSectionWithBody Read from the token's KB (scope tool:kb_read_section; KB from the kb claim)
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/tools/kb_read_section (the `KbReadSection` operationId).
+	KbReadSectionWithBody(ctx context.Context, params *KbReadSectionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// KbReadSection Read from the token's KB (scope tool:kb_read_section; KB from the kb claim)
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/tools/kb_read_section (the `KbReadSection` operationId).
+	KbReadSection(ctx context.Context, params *KbReadSectionParams, body KbReadSectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// KbSearchWithBody Hybrid search in the token's KB (scope tool:kb_search; KB from the kb claim)
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/tools/kb_search (the `KbSearch` operationId).
+	KbSearchWithBody(ctx context.Context, params *KbSearchParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// KbSearch Hybrid search in the token's KB (scope tool:kb_search; KB from the kb claim)
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/tools/kb_search (the `KbSearch` operationId).
+	KbSearch(ctx context.Context, params *KbSearchParams, body KbSearchJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // GetLiveness Liveness
@@ -743,7 +1003,7 @@ func (c *Client) CreateUpload(ctx context.Context, kbId KbId, params *CreateUplo
 	return c.Client.Do(req)
 }
 
-// GetManifest App manifest (scope kb:read); tools are added in M1.3
+// GetManifest App manifest (scope kb:read) with the KB tools
 //
 // Corresponds with GET /v1/manifest (the `GetManifest` operationId).
 func (c *Client) GetManifest(ctx context.Context, params *GetManifestParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -782,6 +1042,142 @@ func (c *Client) ProvisionOrgWithBody(ctx context.Context, orgId OrgId, params *
 // Corresponds with PUT /v1/orgs/{orgId} (the `ProvisionOrg` operationId).
 func (c *Client) ProvisionOrg(ctx context.Context, orgId OrgId, params *ProvisionOrgParams, body ProvisionOrgJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewProvisionOrgRequest(c.Server, orgId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// KbListDocumentsWithBody Read from the token's KB (scope tool:kb_list_documents; KB from the kb claim)
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/tools/kb_list_documents (the `KbListDocuments` operationId).
+func (c *Client) KbListDocumentsWithBody(ctx context.Context, params *KbListDocumentsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewKbListDocumentsRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// KbListDocuments Read from the token's KB (scope tool:kb_list_documents; KB from the kb claim)
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/tools/kb_list_documents (the `KbListDocuments` operationId).
+func (c *Client) KbListDocuments(ctx context.Context, params *KbListDocumentsParams, body KbListDocumentsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewKbListDocumentsRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// KbOutlineWithBody Read from the token's KB (scope tool:kb_outline; KB from the kb claim)
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/tools/kb_outline (the `KbOutline` operationId).
+func (c *Client) KbOutlineWithBody(ctx context.Context, params *KbOutlineParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewKbOutlineRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// KbOutline Read from the token's KB (scope tool:kb_outline; KB from the kb claim)
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/tools/kb_outline (the `KbOutline` operationId).
+func (c *Client) KbOutline(ctx context.Context, params *KbOutlineParams, body KbOutlineJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewKbOutlineRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// KbReadSectionWithBody Read from the token's KB (scope tool:kb_read_section; KB from the kb claim)
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/tools/kb_read_section (the `KbReadSection` operationId).
+func (c *Client) KbReadSectionWithBody(ctx context.Context, params *KbReadSectionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewKbReadSectionRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// KbReadSection Read from the token's KB (scope tool:kb_read_section; KB from the kb claim)
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/tools/kb_read_section (the `KbReadSection` operationId).
+func (c *Client) KbReadSection(ctx context.Context, params *KbReadSectionParams, body KbReadSectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewKbReadSectionRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// KbSearchWithBody Hybrid search in the token's KB (scope tool:kb_search; KB from the kb claim)
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/tools/kb_search (the `KbSearch` operationId).
+func (c *Client) KbSearchWithBody(ctx context.Context, params *KbSearchParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewKbSearchRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// KbSearch Hybrid search in the token's KB (scope tool:kb_search; KB from the kb claim)
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/tools/kb_search (the `KbSearch` operationId).
+func (c *Client) KbSearch(ctx context.Context, params *KbSearchParams, body KbSearchJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewKbSearchRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1648,6 +2044,226 @@ func NewProvisionOrgRequestWithBody(server string, orgId OrgId, params *Provisio
 	return req, nil
 }
 
+// NewKbListDocumentsRequest calls the generic KbListDocuments builder with application/json body
+func NewKbListDocumentsRequest(server string, params *KbListDocumentsParams, body KbListDocumentsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewKbListDocumentsRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewKbListDocumentsRequestWithBody constructs an http.Request for the KbListDocuments method, with any body, and a specified content type
+func NewKbListDocumentsRequestWithBody(server string, params *KbListDocumentsParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/tools/kb_list_documents")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.XRequestId != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Request-Id", *params.XRequestId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("X-Request-Id", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewKbOutlineRequest calls the generic KbOutline builder with application/json body
+func NewKbOutlineRequest(server string, params *KbOutlineParams, body KbOutlineJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewKbOutlineRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewKbOutlineRequestWithBody constructs an http.Request for the KbOutline method, with any body, and a specified content type
+func NewKbOutlineRequestWithBody(server string, params *KbOutlineParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/tools/kb_outline")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.XRequestId != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Request-Id", *params.XRequestId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("X-Request-Id", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewKbReadSectionRequest calls the generic KbReadSection builder with application/json body
+func NewKbReadSectionRequest(server string, params *KbReadSectionParams, body KbReadSectionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewKbReadSectionRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewKbReadSectionRequestWithBody constructs an http.Request for the KbReadSection method, with any body, and a specified content type
+func NewKbReadSectionRequestWithBody(server string, params *KbReadSectionParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/tools/kb_read_section")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.XRequestId != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Request-Id", *params.XRequestId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("X-Request-Id", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewKbSearchRequest calls the generic KbSearch builder with application/json body
+func NewKbSearchRequest(server string, params *KbSearchParams, body KbSearchJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewKbSearchRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewKbSearchRequestWithBody constructs an http.Request for the KbSearch method, with any body, and a specified content type
+func NewKbSearchRequestWithBody(server string, params *KbSearchParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/tools/kb_search")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.XRequestId != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Request-Id", *params.XRequestId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("X-Request-Id", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -1811,7 +2427,7 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/knowledge-bases/{kbId}/uploads (the `CreateUpload` operationId).
 	CreateUploadWithResponse(ctx context.Context, kbId KbId, params *CreateUploadParams, body CreateUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateUploadResponse, error)
 
-	// GetManifestWithResponse App manifest (scope kb:read); tools are added in M1.3
+	// GetManifestWithResponse App manifest (scope kb:read) with the KB tools
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -1831,6 +2447,62 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PUT /v1/orgs/{orgId} (the `ProvisionOrg` operationId).
 	ProvisionOrgWithResponse(ctx context.Context, orgId OrgId, params *ProvisionOrgParams, body ProvisionOrgJSONRequestBody, reqEditors ...RequestEditorFn) (*ProvisionOrgResponse, error)
+
+	// KbListDocumentsWithBodyWithResponse Read from the token's KB (scope tool:kb_list_documents; KB from the kb claim)
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/tools/kb_list_documents (the `KbListDocuments` operationId).
+	KbListDocumentsWithBodyWithResponse(ctx context.Context, params *KbListDocumentsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*KbListDocumentsResponse, error)
+
+	// KbListDocumentsWithResponse Read from the token's KB (scope tool:kb_list_documents; KB from the kb claim)
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/tools/kb_list_documents (the `KbListDocuments` operationId).
+	KbListDocumentsWithResponse(ctx context.Context, params *KbListDocumentsParams, body KbListDocumentsJSONRequestBody, reqEditors ...RequestEditorFn) (*KbListDocumentsResponse, error)
+
+	// KbOutlineWithBodyWithResponse Read from the token's KB (scope tool:kb_outline; KB from the kb claim)
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/tools/kb_outline (the `KbOutline` operationId).
+	KbOutlineWithBodyWithResponse(ctx context.Context, params *KbOutlineParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*KbOutlineResponse, error)
+
+	// KbOutlineWithResponse Read from the token's KB (scope tool:kb_outline; KB from the kb claim)
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/tools/kb_outline (the `KbOutline` operationId).
+	KbOutlineWithResponse(ctx context.Context, params *KbOutlineParams, body KbOutlineJSONRequestBody, reqEditors ...RequestEditorFn) (*KbOutlineResponse, error)
+
+	// KbReadSectionWithBodyWithResponse Read from the token's KB (scope tool:kb_read_section; KB from the kb claim)
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/tools/kb_read_section (the `KbReadSection` operationId).
+	KbReadSectionWithBodyWithResponse(ctx context.Context, params *KbReadSectionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*KbReadSectionResponse, error)
+
+	// KbReadSectionWithResponse Read from the token's KB (scope tool:kb_read_section; KB from the kb claim)
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/tools/kb_read_section (the `KbReadSection` operationId).
+	KbReadSectionWithResponse(ctx context.Context, params *KbReadSectionParams, body KbReadSectionJSONRequestBody, reqEditors ...RequestEditorFn) (*KbReadSectionResponse, error)
+
+	// KbSearchWithBodyWithResponse Hybrid search in the token's KB (scope tool:kb_search; KB from the kb claim)
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/tools/kb_search (the `KbSearch` operationId).
+	KbSearchWithBodyWithResponse(ctx context.Context, params *KbSearchParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*KbSearchResponse, error)
+
+	// KbSearchWithResponse Hybrid search in the token's KB (scope tool:kb_search; KB from the kb claim)
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/tools/kb_search (the `KbSearch` operationId).
+	KbSearchWithResponse(ctx context.Context, params *KbSearchParams, body KbSearchJSONRequestBody, reqEditors ...RequestEditorFn) (*KbSearchResponse, error)
 }
 
 type GetLivenessResponse struct {
@@ -2917,6 +3589,390 @@ func (r ProvisionOrgResponse) ContentType() string {
 	return ""
 }
 
+type KbListDocumentsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Data []KbDocument `json:"data"`
+		Meta PageMeta     `json:"meta"`
+	}
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Error
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Error
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Error
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Error
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Error
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *Error
+	// JSON504 the response for an HTTP 504 `application/json` response
+	JSON504 *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r KbListDocumentsResponse) GetJSON200() *struct {
+	Data []KbDocument `json:"data"`
+	Meta PageMeta     `json:"meta"`
+} {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r KbListDocumentsResponse) GetJSON400() *Error {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r KbListDocumentsResponse) GetJSON401() *Error {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r KbListDocumentsResponse) GetJSON403() *Error {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r KbListDocumentsResponse) GetJSON404() *Error {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r KbListDocumentsResponse) GetJSON409() *Error {
+	return r.JSON409
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r KbListDocumentsResponse) GetJSON422() *Error {
+	return r.JSON422
+}
+
+// GetJSON504 returns the response for an HTTP 504 `application/json` response
+func (r KbListDocumentsResponse) GetJSON504() *Error {
+	return r.JSON504
+}
+
+// GetBody returns the raw response body bytes
+func (r KbListDocumentsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r KbListDocumentsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r KbListDocumentsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r KbListDocumentsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type KbOutlineResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Data KbOutlineOutput `json:"data"`
+		Meta Meta            `json:"meta"`
+	}
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Error
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Error
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Error
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Error
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Error
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *Error
+	// JSON504 the response for an HTTP 504 `application/json` response
+	JSON504 *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r KbOutlineResponse) GetJSON200() *struct {
+	Data KbOutlineOutput `json:"data"`
+	Meta Meta            `json:"meta"`
+} {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r KbOutlineResponse) GetJSON400() *Error {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r KbOutlineResponse) GetJSON401() *Error {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r KbOutlineResponse) GetJSON403() *Error {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r KbOutlineResponse) GetJSON404() *Error {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r KbOutlineResponse) GetJSON409() *Error {
+	return r.JSON409
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r KbOutlineResponse) GetJSON422() *Error {
+	return r.JSON422
+}
+
+// GetJSON504 returns the response for an HTTP 504 `application/json` response
+func (r KbOutlineResponse) GetJSON504() *Error {
+	return r.JSON504
+}
+
+// GetBody returns the raw response body bytes
+func (r KbOutlineResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r KbOutlineResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r KbOutlineResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r KbOutlineResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type KbReadSectionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Data KbReadSectionOutput `json:"data"`
+		Meta Meta                `json:"meta"`
+	}
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Error
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Error
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Error
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Error
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Error
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *Error
+	// JSON504 the response for an HTTP 504 `application/json` response
+	JSON504 *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r KbReadSectionResponse) GetJSON200() *struct {
+	Data KbReadSectionOutput `json:"data"`
+	Meta Meta                `json:"meta"`
+} {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r KbReadSectionResponse) GetJSON400() *Error {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r KbReadSectionResponse) GetJSON401() *Error {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r KbReadSectionResponse) GetJSON403() *Error {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r KbReadSectionResponse) GetJSON404() *Error {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r KbReadSectionResponse) GetJSON409() *Error {
+	return r.JSON409
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r KbReadSectionResponse) GetJSON422() *Error {
+	return r.JSON422
+}
+
+// GetJSON504 returns the response for an HTTP 504 `application/json` response
+func (r KbReadSectionResponse) GetJSON504() *Error {
+	return r.JSON504
+}
+
+// GetBody returns the raw response body bytes
+func (r KbReadSectionResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r KbReadSectionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r KbReadSectionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r KbReadSectionResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type KbSearchResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Data KbSearchOutput `json:"data"`
+		Meta Meta           `json:"meta"`
+	}
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Error
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Error
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Error
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Error
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Error
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *Error
+	// JSON504 the response for an HTTP 504 `application/json` response
+	JSON504 *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r KbSearchResponse) GetJSON200() *struct {
+	Data KbSearchOutput `json:"data"`
+	Meta Meta           `json:"meta"`
+} {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r KbSearchResponse) GetJSON400() *Error {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r KbSearchResponse) GetJSON401() *Error {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r KbSearchResponse) GetJSON403() *Error {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r KbSearchResponse) GetJSON404() *Error {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r KbSearchResponse) GetJSON409() *Error {
+	return r.JSON409
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r KbSearchResponse) GetJSON422() *Error {
+	return r.JSON422
+}
+
+// GetJSON504 returns the response for an HTTP 504 `application/json` response
+func (r KbSearchResponse) GetJSON504() *Error {
+	return r.JSON504
+}
+
+// GetBody returns the raw response body bytes
+func (r KbSearchResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r KbSearchResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r KbSearchResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r KbSearchResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // GetLivenessWithResponse Liveness
 //
 // Returns a wrapper object for the known response body format(s).
@@ -3138,7 +4194,7 @@ func (c *ClientWithResponses) CreateUploadWithResponse(ctx context.Context, kbId
 	return ParseCreateUploadResponse(rsp)
 }
 
-// GetManifestWithResponse App manifest (scope kb:read); tools are added in M1.3
+// GetManifestWithResponse App manifest (scope kb:read) with the KB tools
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -3175,6 +4231,110 @@ func (c *ClientWithResponses) ProvisionOrgWithResponse(ctx context.Context, orgI
 		return nil, err
 	}
 	return ParseProvisionOrgResponse(rsp)
+}
+
+// KbListDocumentsWithBodyWithResponse Read from the token's KB (scope tool:kb_list_documents; KB from the kb claim)
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/tools/kb_list_documents (the `KbListDocuments` operationId).
+func (c *ClientWithResponses) KbListDocumentsWithBodyWithResponse(ctx context.Context, params *KbListDocumentsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*KbListDocumentsResponse, error) {
+	rsp, err := c.KbListDocumentsWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseKbListDocumentsResponse(rsp)
+}
+
+// KbListDocumentsWithResponse Read from the token's KB (scope tool:kb_list_documents; KB from the kb claim)
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/tools/kb_list_documents (the `KbListDocuments` operationId).
+func (c *ClientWithResponses) KbListDocumentsWithResponse(ctx context.Context, params *KbListDocumentsParams, body KbListDocumentsJSONRequestBody, reqEditors ...RequestEditorFn) (*KbListDocumentsResponse, error) {
+	rsp, err := c.KbListDocuments(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseKbListDocumentsResponse(rsp)
+}
+
+// KbOutlineWithBodyWithResponse Read from the token's KB (scope tool:kb_outline; KB from the kb claim)
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/tools/kb_outline (the `KbOutline` operationId).
+func (c *ClientWithResponses) KbOutlineWithBodyWithResponse(ctx context.Context, params *KbOutlineParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*KbOutlineResponse, error) {
+	rsp, err := c.KbOutlineWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseKbOutlineResponse(rsp)
+}
+
+// KbOutlineWithResponse Read from the token's KB (scope tool:kb_outline; KB from the kb claim)
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/tools/kb_outline (the `KbOutline` operationId).
+func (c *ClientWithResponses) KbOutlineWithResponse(ctx context.Context, params *KbOutlineParams, body KbOutlineJSONRequestBody, reqEditors ...RequestEditorFn) (*KbOutlineResponse, error) {
+	rsp, err := c.KbOutline(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseKbOutlineResponse(rsp)
+}
+
+// KbReadSectionWithBodyWithResponse Read from the token's KB (scope tool:kb_read_section; KB from the kb claim)
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/tools/kb_read_section (the `KbReadSection` operationId).
+func (c *ClientWithResponses) KbReadSectionWithBodyWithResponse(ctx context.Context, params *KbReadSectionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*KbReadSectionResponse, error) {
+	rsp, err := c.KbReadSectionWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseKbReadSectionResponse(rsp)
+}
+
+// KbReadSectionWithResponse Read from the token's KB (scope tool:kb_read_section; KB from the kb claim)
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/tools/kb_read_section (the `KbReadSection` operationId).
+func (c *ClientWithResponses) KbReadSectionWithResponse(ctx context.Context, params *KbReadSectionParams, body KbReadSectionJSONRequestBody, reqEditors ...RequestEditorFn) (*KbReadSectionResponse, error) {
+	rsp, err := c.KbReadSection(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseKbReadSectionResponse(rsp)
+}
+
+// KbSearchWithBodyWithResponse Hybrid search in the token's KB (scope tool:kb_search; KB from the kb claim)
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/tools/kb_search (the `KbSearch` operationId).
+func (c *ClientWithResponses) KbSearchWithBodyWithResponse(ctx context.Context, params *KbSearchParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*KbSearchResponse, error) {
+	rsp, err := c.KbSearchWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseKbSearchResponse(rsp)
+}
+
+// KbSearchWithResponse Hybrid search in the token's KB (scope tool:kb_search; KB from the kb claim)
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/tools/kb_search (the `KbSearch` operationId).
+func (c *ClientWithResponses) KbSearchWithResponse(ctx context.Context, params *KbSearchParams, body KbSearchJSONRequestBody, reqEditors ...RequestEditorFn) (*KbSearchResponse, error) {
+	rsp, err := c.KbSearch(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseKbSearchResponse(rsp)
 }
 
 // ParseGetLivenessResponse parses an HTTP response from a GetLivenessWithResponse call
@@ -4003,6 +5163,318 @@ func ParseProvisionOrgResponse(rsp *http.Response) (*ProvisionOrgResponse, error
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseKbListDocumentsResponse parses an HTTP response from a KbListDocumentsWithResponse call
+func ParseKbListDocumentsResponse(rsp *http.Response) (*KbListDocumentsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &KbListDocumentsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data []KbDocument `json:"data"`
+			Meta PageMeta     `json:"meta"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseKbOutlineResponse parses an HTTP response from a KbOutlineWithResponse call
+func ParseKbOutlineResponse(rsp *http.Response) (*KbOutlineResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &KbOutlineResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data KbOutlineOutput `json:"data"`
+			Meta Meta            `json:"meta"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseKbReadSectionResponse parses an HTTP response from a KbReadSectionWithResponse call
+func ParseKbReadSectionResponse(rsp *http.Response) (*KbReadSectionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &KbReadSectionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data KbReadSectionOutput `json:"data"`
+			Meta Meta                `json:"meta"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseKbSearchResponse parses an HTTP response from a KbSearchWithResponse call
+func ParseKbSearchResponse(rsp *http.Response) (*KbSearchResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &KbSearchResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data KbSearchOutput `json:"data"`
+			Meta Meta           `json:"meta"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
 
 	}
 

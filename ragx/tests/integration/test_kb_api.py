@@ -110,10 +110,15 @@ async def test_org_a_token_cannot_reach_org_b_kb(pool: Pool) -> None:
     assert smuggled.json()["error"]["code"] == "VALIDATION_FAILED"
 
 
-async def test_manifest_lists_no_tools_yet(pool: Pool) -> None:
+async def test_manifest_lists_the_four_kb_tools(pool: Pool) -> None:
     async with api_client(pool) as (client, _):
         response = await client.get("/v1/manifest", headers=bearer("org-alpha", "kb:read"))
-    assert response.json()["data"]["tools"] == []
+    assert [tool["name"] for tool in response.json()["data"]["tools"]] == [
+        "kb_search",
+        "kb_outline",
+        "kb_read_section",
+        "kb_list_documents",
+    ]
     assert response.json()["data"]["name"] == "ragx"
 
 

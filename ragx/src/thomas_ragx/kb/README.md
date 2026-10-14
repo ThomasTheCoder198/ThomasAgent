@@ -45,3 +45,5 @@ Failed streaming downloads remove the incomplete file after the writer closes an
 ObjectStorage.put_bytes writes generated preview JSON through a worker thread; ingestion publishes the preview before marking a file ready.
 
 The repository lock_collection includes deleted KB rows and locks before file/node mutations. Ingest publication and purge retain this lock through external point/object writes and row finalization, preventing a completed purge from being followed by orphaned vectors.
+
+`encode_cursor_values(created_at, file_id)` shares the stable file pagination cursor with KB tool document listings.

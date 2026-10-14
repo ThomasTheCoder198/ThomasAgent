@@ -14,7 +14,7 @@ router = api_router("/v1")
 
 @router.get("/manifest")
 async def get_manifest(_: KbReadCaller, request: Request) -> dict[str, Any]:
-    # Tool entries (closed input schemas, timeoutMs, failure_mode) arrive with the tool routes in M1.3.
     return success_body(
-        {"name": APP_NAME, "version": version(DISTRIBUTION), "tools": []}, request_id_of(request)
+        {"name": APP_NAME, "version": version(DISTRIBUTION), "tools": request.app.state.manifest_tools},
+        request_id_of(request),
     )

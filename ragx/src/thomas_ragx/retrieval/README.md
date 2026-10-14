@@ -53,3 +53,7 @@ scores. Booleans, coerced strings/fractional indices, duplicates and malformed r
 as `LLM_PROVIDER_REJECTED` without retry or provider content in errors/logs. Search spans record ERROR
 status without exception text, traceback events or status descriptions, so dependency errors cannot
 export query/document/credential content through those fields.
+
+The four KB tools use closed camelCase DTOs and `KbToolService`; the repository scopes every lookup and recursive step by org and KB. Outline and section reads require live ready/degraded files. Lists include confirmed statuses and use the shared file cursor encoding. Tool spans have bounded deadlines and suppress exception details.
+
+Section output preserves whole blocks where possible. An oversized first block is clipped to `section_max_chars` and marked `truncated`, so the configured character bound holds even for a single large block.

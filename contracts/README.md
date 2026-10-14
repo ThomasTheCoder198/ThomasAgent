@@ -14,7 +14,7 @@ Single source for error codes and shared schemas used by the Go core, Python RAG
   reason). Built by `cmd/apptokengen` from `internal/apptoken`; ragx's verifier and core's signer test against it.
 - `kb-upload.json` — Knowledge Base upload limits and accepted extensions (`maxFileBytes`, 50 MB since 2026-10-11, and `extensions`). Ragx enforces them; the frontend validates
   with them. Each side has a test that fails when it drifts.
-- `openapi/ragx.v1.yaml` — the ragx `/v1` API that only core calls (App token per request). File bytes never pass through it: upload is presign (`createUpload`), a browser POST to MinIO, then `confirmUpload`; download is `getDownloadUrl`. `HEAD` on a GET route is served but not documented. Tool routes are added in M1.3.
+- `openapi/ragx.v1.yaml` — the ragx `/v1` API that only core calls (App token per request). File bytes never pass through it: upload is presign (`createUpload`), a browser POST to MinIO, then `confirmUpload`; download is `getDownloadUrl`. `HEAD` on a GET route is served but not documented. The four KB tools are documented below.
 - `npm run gen:ragx-types` — `openapi-typescript` turns `openapi/ragx.v1.yaml` into `frontend/lib/ragx/api.gen.ts` (run by `task gen`, never edited). It lives here, not in `frontend/`, because its peer dependency `typescript ^5` conflicts with the frontend's TypeScript 6; `typescript@5.9.3` is pinned in this package only.
 - `cmd/errorcodegen` — command invoked by `task gen`.
 - `internal/errorcodegen` — catalog parser and Go, Python, and TypeScript renderers.
@@ -63,6 +63,8 @@ maps codes to `ErrorDefinition{HTTPStatus, Retryable, MessageVI, MessageEN}` thr
 There is no second Go message catalog or mutable global error instance.
 Python exposes `ErrorDefinition.http_status` and `ERROR_DEFINITIONS`; TypeScript exposes
 `errorDefinitions` with `httpStatus`. See the [glossary](../docs/glossary.md) for shared terminology.
+
+The four M1.3 tool operations are POST `/v1/tools/kb_search`, `/kb_outline`, `/kb_read_section`, and `/kb_list_documents`. Tokens require the matching `tool:<name>` scope and `kb` claim. Requests are closed and camelCase. Manifest entries contain `name`, `description`, `inputSchema`, `timeoutMs`, `failureMode`, and `public`; schemas are generated from the DTOs and timeouts use runtime config.
 
 ## Common failures
 - Invalid catalog → malformed YAML, duplicate code, unsupported version, invalid status, or missing message → correct `errors.yaml` and rerun generation.

@@ -47,6 +47,7 @@ async def api_client(
     redis_url: str | None = None,
     minio_config: dict[str, Any] | None = None,
     qdrant_url: str | None = None,
+    tool_service_override: Any = None,
     **overrides: Any,
 ) -> AsyncIterator[tuple[httpx.AsyncClient, FastAPI]]:
     storage_settings: dict[str, Any] = {}
@@ -71,6 +72,8 @@ async def api_client(
         readiness_timeout_seconds=1.0,
     )
     app = create_app(config, resources=resources)
+    if tool_service_override is not None:
+        app.state.tool_service = tool_service_override
     try:
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://ragx"

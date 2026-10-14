@@ -40,6 +40,7 @@ CODE_EMPTY: Final = "EMPTY"
 CODE_MISSING: Final = "MISSING"
 CODE_SIZE_MISMATCH: Final = "SIZE_MISMATCH"
 CODE_INVALID: Final = "INVALID"
+CODE_OUT_OF_RANGE: Final = "OUT_OF_RANGE"
 log = structlog.get_logger(__name__)
 
 
@@ -48,7 +49,11 @@ def utc_now() -> datetime:
 
 
 def encode_cursor(file: KbFile) -> str:
-    raw = json.dumps([file.created_at.isoformat(), str(file.id)]).encode()
+    return encode_cursor_values(file.created_at, file.id)
+
+
+def encode_cursor_values(created_at: datetime, file_id: UUID) -> str:
+    raw = json.dumps([created_at.isoformat(), str(file_id)]).encode()
     return base64.urlsafe_b64encode(raw).decode()
 
 
@@ -210,7 +215,7 @@ class FileService:
     ) -> tuple[list[KbFile], str | None, int]:
         size = self._page_default if limit is None else limit
         if size < 1 or size > self._page_max:
-            raise field_error("limit", "OUT_OF_RANGE")
+            raise field_error("limit", CODE_OUT_OF_RANGE)
         after = decode_cursor(cursor) if cursor else None
         async with self._pool.connection() as conn:
             await self._require_kb(conn, caller, kb_id)

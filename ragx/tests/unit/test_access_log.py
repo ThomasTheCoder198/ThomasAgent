@@ -30,6 +30,7 @@ def _client_and_exporter() -> tuple[TestClient, InMemorySpanExporter]:
             raise RuntimeError("boom")
         request.state.org_id = "org-alpha"
         request.state.jti = "jti-0001"
+        request.state.tool = "kb_search"
         return success_body({"id": item_id}, request_id_of(request))
 
     return TestClient(app, raise_server_exceptions=False), exporter
@@ -71,9 +72,11 @@ def test_access_log_and_root_span_carry_org_and_jti_set_by_the_handler(
     record = _completed(capsys)
     assert record["org_id"] == "org-alpha"
     assert record["jti"] == "jti-0001"
+    assert record["tool"] == "kb_search"
     root = next(span for span in exporter.get_finished_spans() if span.name == "rag.http.request")
     assert root.attributes is not None
     assert root.attributes["org_id"] == "org-alpha"
+    assert root.attributes["tool"] == "kb_search"
 
 
 def test_requests_without_app_token_log_no_org(capsys: pytest.CaptureFixture[str]) -> None:

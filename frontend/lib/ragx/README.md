@@ -10,3 +10,5 @@ Ragx's API types for the frontend.
 
 The browser never calls ragx directly: requests go through core at `/api/v1/orgs/{orgId}/apps/ragx/...`. File bytes go
 straight to MinIO with the presigned URL from `UploadTicket`.
+
+The generated schema includes all four M1.3 KB tools and typed manifest definitions. These generated types also describe the claim-scoped tool API; browser access continues through core.

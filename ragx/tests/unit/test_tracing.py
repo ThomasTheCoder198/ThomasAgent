@@ -27,6 +27,8 @@ from thomas_ragx.platform.tracing import (
 
 PHOENIX_KEY = "phoenix-admin-secret-0123456789abcdefghij"
 
+METRICS_EXPORT_KEY = "resource_metrics"
+
 
 class _Recorder(BaseHTTPRequestHandler):
     received: ClassVar[list[tuple[str, str]]] = []
@@ -166,7 +168,12 @@ def test_root_span_carries_validated_request_id_and_returns_trace_id(
             assert span.attributes["request_id"] == response.headers["X-Request-Id"]
             assert span.attributes["openinference.span.kind"] == "CHAIN"
             assert "org_id" not in span.attributes
-        records = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+        # Lifespan shutdown flushes the API metrics provider, whose stdout export is not a log record.
+        records = [
+            record
+            for record in map(json.loads, capsys.readouterr().out.splitlines())
+            if METRICS_EXPORT_KEY not in record
+        ]
         completed = [record for record in records if record["msg"] == "request completed"]
         assert completed[0]["trace_id"] == forged.headers[RAGX_TRACE_ID_HEADER]
         assert completed[0]["request_id"] == forged.headers["X-Request-Id"]

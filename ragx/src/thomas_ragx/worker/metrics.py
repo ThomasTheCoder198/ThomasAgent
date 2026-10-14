@@ -29,6 +29,8 @@ RELAY_BATCH_COUNT_NAME: Final = "ragx_worker_relay_batches_total"
 RELAY_DURATION_NAME: Final = "ragx_worker_relay_duration_seconds"
 RELAY_ROWS_NAME: Final = "ragx_worker_relay_rows_total"
 SWEEP_COUNT_NAME: Final = "ragx_worker_sweep_total"
+HTTP_REQUESTS_NAME: Final = "ragx_http_requests_total"
+HTTP_DURATION_NAME: Final = "ragx_http_request_duration_seconds"
 SWEEP_KIND_SLOT: Final = "slot"
 SWEEP_KIND_OBJECT: Final = "object"
 OUTCOME_SUCCESS: Final = "success"
@@ -111,7 +113,8 @@ def _one_line(data: MetricsData) -> str:
 
 
 def configure_worker_metrics(config: Config) -> tuple[MeterProvider, WorkerMetrics]:
-    # The worker has no HTTP server; periodic stdout export makes metrics visible in container logs.
+    # Shared by the worker and the API process: neither exposes a scrape endpoint, so periodic stdout export
+    # makes metrics visible in container logs.
     reader = PeriodicExportingMetricReader(
         ConsoleMetricExporter(out=sys.stdout, formatter=_one_line),
         export_interval_millis=config.worker_metrics_export_interval_milliseconds,
@@ -134,6 +137,11 @@ def configure_worker_metrics(config: Config) -> tuple[MeterProvider, WorkerMetri
             ),
             View(
                 instrument_name=RELAY_DURATION_NAME,
+                aggregation=ExplicitBucketHistogramAggregation(JOB_DURATION_BUCKETS_SECONDS),
+            ),
+            # The SDK default boundaries are millisecond-scale; this histogram is recorded in seconds.
+            View(
+                instrument_name=HTTP_DURATION_NAME,
                 aggregation=ExplicitBucketHistogramAggregation(JOB_DURATION_BUCKETS_SECONDS),
             ),
         ],

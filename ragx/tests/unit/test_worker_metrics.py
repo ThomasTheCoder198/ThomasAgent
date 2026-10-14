@@ -1,8 +1,12 @@
+import json
+
 import pytest
 
 from thomas_ragx.platform.config import Config
 from thomas_ragx.worker.metrics import (
+    HTTP_DURATION_NAME,
     JOB_COUNT_NAME,
+    JOB_DURATION_BUCKETS_SECONDS,
     JOB_DURATION_NAME,
     OUTCOME_RETRY,
     RELAY_BATCH_COUNT_NAME,
@@ -33,3 +37,22 @@ def test_worker_metrics_export_to_stdout_with_bounded_labels(capfd: pytest.Captu
     assert "thomas.ingest.requested" in output
     assert OUTCOME_RETRY in output
     assert "request_id" not in output
+
+
+def test_http_latency_histogram_uses_second_scale_buckets(capfd: pytest.CaptureFixture[str]) -> None:
+    config = Config(minio_access_key="a", minio_secret_key="s")
+    provider, _ = configure_worker_metrics(config)
+    provider.get_meter("http").create_histogram(HTTP_DURATION_NAME, unit="s").record(0.2)
+    provider.force_flush()
+    output = capfd.readouterr().out
+    provider.shutdown()
+
+    bounds = [
+        point["explicit_bounds"]
+        for line in output.splitlines()
+        for scope in json.loads(line)["resource_metrics"][0]["scope_metrics"]
+        for metric in scope["metrics"]
+        if metric["name"] == HTTP_DURATION_NAME
+        for point in metric["data"]["data_points"]
+    ]
+    assert bounds == [list(JOB_DURATION_BUCKETS_SECONDS)]

@@ -255,10 +255,78 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** App manifest (scope kb:read); tools are added in M1.3 */
+        /** App manifest (scope kb:read) with the KB tools */
         get: operations["getManifest"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tools/kb_search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Hybrid search in the token's KB (scope tool:kb_search; KB from the kb claim) */
+        post: operations["kbSearch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tools/kb_outline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read from the token's KB (scope tool:kb_outline; KB from the kb claim) */
+        post: operations["kbOutline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tools/kb_read_section": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read from the token's KB (scope tool:kb_read_section; KB from the kb claim) */
+        post: operations["kbReadSection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tools/kb_list_documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read from the token's KB (scope tool:kb_list_documents; KB from the kb claim) */
+        post: operations["kbListDocuments"];
         delete?: never;
         options?: never;
         head?: never;
@@ -344,6 +412,8 @@ export interface components {
             /** Format: date-time */
             expiresAt: string;
         };
+        /** @enum {string} */
+        KbFileStatus: "pending" | "parsing" | "enriching" | "chunking" | "embedding" | "indexing" | "ready" | "failed" | "degraded";
         KbFile: {
             /** Format: uuid */
             id: string;
@@ -354,8 +424,7 @@ export interface components {
             contentType: string;
             sizeBytes: number;
             sha256: string;
-            /** @enum {string} */
-            status: "pending" | "parsing" | "enriching" | "chunking" | "embedding" | "indexing" | "ready" | "failed" | "degraded";
+            status: components["schemas"]["KbFileStatus"];
             errorCode: string;
             degraded: boolean;
             /** Format: date-time */
@@ -366,7 +435,117 @@ export interface components {
         Manifest: {
             name: string;
             version: string;
-            tools: Record<string, never>[];
+            tools: components["schemas"]["ToolDefinition"][];
+        };
+        Locator: {
+            /** @enum {string} */
+            kind: "pdf_bbox" | "sheet_range" | "text_lines" | "docx_paragraph";
+            page?: number;
+            bbox?: number[];
+            sheet?: string;
+            range?: string;
+            lineStart?: number;
+            lineEnd?: number;
+            paragraph?: number;
+        };
+        KbSearchInput: {
+            query: string;
+            filters?: {
+                fileIds?: string[];
+                docTypes?: string[];
+            };
+        };
+        LabelledBlock: {
+            /** @example [1.2] */
+            label: string;
+            blockId: string;
+            text: string;
+            locator: components["schemas"]["Locator"];
+        };
+        SearchResult: {
+            source: number;
+            chunkId: string;
+            /** Format: uuid */
+            fileId: string;
+            fileName: string;
+            /** Format: uuid */
+            nodeId: string;
+            section: string[];
+            pageStart: number | null;
+            pageEnd: number | null;
+            score: number;
+            blocks: components["schemas"]["LabelledBlock"][];
+        };
+        KbSearchOutput: {
+            results: components["schemas"]["SearchResult"][];
+            insufficientEvidence: boolean;
+        };
+        ToolDefinition: {
+            name: string;
+            description: string;
+            inputSchema: Record<string, never>;
+            timeoutMs: number;
+            /** @enum {string} */
+            failureMode: "skip" | "abort";
+            public: boolean;
+        };
+        KbOutlineInput: {
+            /** Format: uuid */
+            fileId: string;
+        };
+        OutlineNode: {
+            /** Format: uuid */
+            nodeId: string;
+            /** Format: uuid */
+            parentId: string | null;
+            depth: number;
+            title: string;
+            summary: string;
+        };
+        KbOutlineOutput: {
+            /** Format: uuid */
+            fileId: string;
+            fileName: string;
+            nodes: components["schemas"]["OutlineNode"][];
+            truncated: boolean;
+        };
+        KbReadSectionInput: {
+            /** Format: uuid */
+            nodeId: string;
+        };
+        SectionBlock: {
+            blockId: string;
+            type: string;
+            text: string;
+            locator: components["schemas"]["Locator"];
+        };
+        KbReadSectionOutput: {
+            /** Format: uuid */
+            nodeId: string;
+            /** Format: uuid */
+            fileId: string;
+            fileName: string;
+            title: string;
+            path: string[];
+            blocks: components["schemas"]["SectionBlock"][];
+            truncated: boolean;
+        };
+        KbListDocumentsInput: {
+            nameContains?: string;
+            docType?: string;
+            cursor?: string;
+            limit?: number;
+        };
+        KbDocument: {
+            /** Format: uuid */
+            fileId: string;
+            name: string;
+            docType: string;
+            version: number;
+            status: components["schemas"]["KbFileStatus"];
+            pageCount: number | null;
+            /** Format: date-time */
+            createdAt: string;
         };
     };
     responses: {
@@ -839,6 +1018,150 @@ export interface operations {
             };
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+        };
+    };
+    kbSearch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Request-Id"?: components["parameters"]["RequestId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KbSearchInput"];
+            };
+        };
+        responses: {
+            /** @description Labelled passages */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["KbSearchOutput"];
+                        meta: components["schemas"]["Meta"];
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            504: components["responses"]["Error"];
+        };
+    };
+    kbOutline: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Request-Id"?: components["parameters"]["RequestId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KbOutlineInput"];
+            };
+        };
+        responses: {
+            /** @description Tool result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["KbOutlineOutput"];
+                        meta: components["schemas"]["Meta"];
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            504: components["responses"]["Error"];
+        };
+    };
+    kbReadSection: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Request-Id"?: components["parameters"]["RequestId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KbReadSectionInput"];
+            };
+        };
+        responses: {
+            /** @description Tool result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["KbReadSectionOutput"];
+                        meta: components["schemas"]["Meta"];
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            504: components["responses"]["Error"];
+        };
+    };
+    kbListDocuments: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Request-Id"?: components["parameters"]["RequestId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KbListDocumentsInput"];
+            };
+        };
+        responses: {
+            /** @description Tool result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["KbDocument"][];
+                        meta: components["schemas"]["PageMeta"];
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            504: components["responses"]["Error"];
         };
     };
 }

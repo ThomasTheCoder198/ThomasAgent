@@ -38,3 +38,5 @@ go test ./internal/platform/ragx/... -count=1
 - `client_gen.go` stale or missing → `task gen`.
 - `RAGX_UNAVAILABLE` with cause "401 APP_TOKEN_INVALID" → `CORE_APP_SIGNING_KEY_ID` or the key does not match ragx's `RAG_CORE_PUBLIC_KEYS`.
 - `RAGX_UNAVAILABLE` with cause "403" → the token scope does not cover the route; check the scope used by the method.
+
+The generated client includes M1.3 `KbSearch`, `KbOutline`, `KbReadSection`, and `KbListDocuments` operations plus manifest tool definitions. Core agent invocation and signed tool KB claims are wired in M2.

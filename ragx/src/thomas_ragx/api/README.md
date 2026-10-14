@@ -38,6 +38,12 @@ The access log is one `request completed` line per request: method, route (FastA
 
 The root span `rag.http.request` carries `request_id` and `openinference.span.kind=CHAIN`. Every response, including errors, carries `X-Ragx-Trace-Id` (32 lowercase hex characters) so core can log it on `tool.call` and Grafana can open the trace in Phoenix (`/redirects/traces/<id>`). `org_id` comes from the authenticated caller state, never from parameters. The app uses its own tracer provider; only the serve CLI installs it globally. Phoenix export failures do not block requests.
 
+### KB tools
+
+POST `/v1/tools/kb_search`, `/kb_outline`, `/kb_read_section`, and `/kb_list_documents` require their own `tool:<name>` scope and a `kb` claim. Organization comes only from `oid`, KB only from `kb`; closed bodies reject identity overrides. The manifest advertises closed JSON schemas, the configured `timeoutMs` (default 20000), `failureMode: skip`, and `public: false`. All tool work has the same configured deadline; expiry raises the catalog `DEPENDENCY_TIMEOUT`, which reaches the wire as HTTP 504 with an `INTERNAL_ERROR` body and the `requestId` (5xx bodies are masked, rule 4). Access logs and root spans carry `tool`; tool spans suppress exception content and are marked ERROR only for deadline expiry, unexpected exceptions and 5xx `AppError`s, not for ordinary 4xx answers such as `KB_FILE_NOT_FOUND`. `kb_search` `docTypes` entries are normalised (trimmed, leading dot dropped, lowercased) to the stored form and must be alphanumeric. Embedding and reranking receive the explicit periodic stdout metrics recorder; its provider is shut down with the app.
+
+HTTP RED metrics use `ragx_http_requests_total` and `ragx_http_request_duration_seconds`, with bounded method, route pattern, and status attributes; request and tenant IDs are excluded. The latency histogram uses the second-scale buckets of `JOB_DURATION_BUCKETS_SECONDS` through a view in `configure_worker_metrics`.
+
 ## Common failures
 - Missing credentials: supply the required RAG_ environment variables.
 - Bootstrap connection failure: start MinIO and Qdrant.

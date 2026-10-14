@@ -10,11 +10,21 @@ from thomas_ragx.auth.app_token import (
     AppTokenVerifier,
     TokenRejectedError,
 )
-from thomas_ragx.auth.caller import SCOPE_KB_READ, SCOPE_KB_WRITE, SCOPE_ORG_PROVISION, Caller
+from thomas_ragx.auth.caller import (
+    SCOPE_KB_READ,
+    SCOPE_KB_WRITE,
+    SCOPE_ORG_PROVISION,
+    TOOL_KB_LIST_DOCUMENTS,
+    TOOL_KB_OUTLINE,
+    TOOL_KB_READ_SECTION,
+    TOOL_KB_SEARCH,
+    TOOL_SCOPE_PREFIX,
+    Caller,
+)
 from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
 from thomas_ragx.platform.http_response import request_id_of
-from thomas_ragx.platform.request_state import STATE_JTI, STATE_ORG_ID
+from thomas_ragx.platform.request_state import STATE_JTI, STATE_ORG_ID, STATE_TOOL
 
 AUTHORIZATION_HEADER: Final = "authorization"
 BEARER_PREFIX: Final = "bearer "
@@ -55,3 +65,23 @@ def require_scope(scope: str) -> Callable[[Request], Awaitable[Caller]]:
 ProvisionCaller = Annotated[Caller, Depends(require_scope(SCOPE_ORG_PROVISION))]
 KbReadCaller = Annotated[Caller, Depends(require_scope(SCOPE_KB_READ))]
 KbWriteCaller = Annotated[Caller, Depends(require_scope(SCOPE_KB_WRITE))]
+
+
+def require_tool(name: str) -> Callable[[Request], Awaitable[Caller]]:
+    scoped = require_scope(TOOL_SCOPE_PREFIX + name)
+
+    async def dependency(request: Request) -> Caller:
+        setattr(request.state, STATE_TOOL, name)
+        caller = await scoped(request)
+        if caller.kb_id is None:  # a tool call is always for one Agent's KB (ruling C2)
+            log.warning("tool token without kb", tool=name)
+            raise AppError(ErrorCode.FORBIDDEN)
+        return caller
+
+    return dependency
+
+
+KbSearchCaller = Annotated[Caller, Depends(require_tool(TOOL_KB_SEARCH))]
+KbOutlineCaller = Annotated[Caller, Depends(require_tool(TOOL_KB_OUTLINE))]
+KbReadSectionCaller = Annotated[Caller, Depends(require_tool(TOOL_KB_READ_SECTION))]
+KbListDocumentsCaller = Annotated[Caller, Depends(require_tool(TOOL_KB_LIST_DOCUMENTS))]

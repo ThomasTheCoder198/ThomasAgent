@@ -80,3 +80,5 @@ and `RAG_SEARCH_MIN_RERANK_SCORE=0.1`. Limits must be positive and the score flo
 Normal constructor > process environment > dotenv > YAML precedence applies.
 Tracing also exports `SPAN_KIND_RETRIEVER`, `SPAN_KIND_RERANKER`, `SPAN_KIND_TOOL` and
 `ATTR_INPUT_VALUE`; retrieval query attributes follow `RAG_TRACE_CONTENT`.
+
+KB tools use typed YAML defaults `tool_timeout_ms: 20000`, `section_max_chars: 8000`, and `outline_max_nodes: 500`, each strictly positive; the corresponding environment overrides use the `RAG_` prefix. `STATE_TOOL` carries the tool name for request logging and root traces.

@@ -51,3 +51,5 @@ IngestHandler now invokes the ingest pipeline; its enclosing span is `rag.ingest
 `WorkerMetrics.observe_embedding_cache(result, count)` increments `ragx_embedding_cache_total` for positive counts with bounded `result=hit|miss` labels.
 
 `WorkerMetrics.observe_embedding_call(kind, outcome, duration_seconds)` records embedding outbound counts and durations through the worker's configured meter/exporter. Pass this recorder explicitly to `LiteLLMEmbedder(..., metrics=metrics)` when constructing the indexing pipeline.
+
+`WorkerMetrics.observe_chat_call(kind, outcome, duration_seconds)` records `ragx_chat_calls_total` and `ragx_chat_call_duration_seconds` through the configured worker exporter. Only bounded kind and success/error outcome labels are used. Task 3b-6 supplies this recorder to `LiteLLMChat` when assembling the summary pipeline.

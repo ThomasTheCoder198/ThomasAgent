@@ -204,3 +204,16 @@ def test_config_rejects_invalid_chunk_limits(target: int, maximum: int, overlap:
 def test_config_chunk_defaults() -> None:
     config = Config(minio_access_key="a", minio_secret_key="s")
     assert (config.chunk_target_words, config.chunk_max_words, config.chunk_overlap_words) == (350, 700, 50)
+
+
+@pytest.mark.parametrize(
+    ("field", "default"),
+    [("node_summary_max_nodes", 200), ("node_summary_input_chars", 4000), ("node_summary_max_tokens", 120)],
+)
+def test_summary_config_defaults_and_positive_limits(field: str, default: int) -> None:
+    config = Config(minio_access_key="a", minio_secret_key="s")
+    assert config.node_summaries_enabled is True
+    assert getattr(config, field) == default
+    for invalid in (0, -1):
+        with pytest.raises(ValidationError):
+            Config(**{field: invalid}, minio_access_key="a", minio_secret_key="s")

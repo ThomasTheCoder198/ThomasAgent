@@ -80,6 +80,10 @@ class Config(BaseSettings):
     datalab_poll_interval_seconds: int
     datalab_skip_cache: bool
     local_first_extensions: tuple[str, ...]
+    node_summaries_enabled: bool
+    node_summary_max_nodes: int = Field(gt=0)
+    node_summary_input_chars: int = Field(gt=0)
+    node_summary_max_tokens: int = Field(gt=0)
     chunk_target_words: int = Field(gt=0)
     chunk_max_words: int = Field(gt=0)
     chunk_overlap_words: int = Field(ge=0)

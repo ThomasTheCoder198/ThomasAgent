@@ -25,3 +25,6 @@ Keys and base URLs are passed on each call; never assign LiteLLM global credenti
 
 ## Configured metrics and response validation
 `LiteLLMEmbedder(retrying_factory, metrics=recorder)` requires an injected `EmbeddingRecorder`; worker wiring supplies its configured `WorkerMetrics`. No global meter is used. Each response must contain exactly one index for every input position; duplicate, missing or out-of-range indices raise non-retryable `INGEST_EMBEDDING_MISMATCH`.
+
+## Optional section summaries
+`chat.ChatModel` defines completion; `chat.LiteLLMChat(retrying_factory, metrics=recorder)` calls the module-level `litellm.acompletion` with per-call model access, maps provider errors and uses platform retry including Retry-After. Completion logs contain kind, outcome and duration; worker context supplies request_id. No prompts, responses or provider error messages are logged. Inject the configured `WorkerMetrics` recorder when wiring the summarizer in Task 3b-6. Run `uv run pytest -q tests/unit/test_chat.py tests/unit/test_summaries.py`.

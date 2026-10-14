@@ -67,3 +67,8 @@ bm25_b: 0.75
 bm25_avg_len: 256.0
 qdrant_upsert_batch_size: 128
 qdrant_timeout_seconds: 30
+
+node_summaries_enabled: true
+node_summary_max_nodes: 200
+node_summary_input_chars: 4000
+node_summary_max_tokens: 120

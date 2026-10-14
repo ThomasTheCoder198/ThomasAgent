@@ -29,3 +29,15 @@ class HashEmbedder:
             norm = math.sqrt(sum(v * v for v in vector)) or 1.0
             vectors.append([v / norm for v in vector])
         return vectors
+
+
+class FakeChat:
+    def __init__(self, fail_on: str | None = None) -> None:
+        self.prompts: list[str] = []
+        self.fail_on = fail_on
+
+    async def complete(self, model: ModelHandle, prompt: str, max_tokens: int) -> str:
+        self.prompts.append(prompt)
+        if self.fail_on is not None and self.fail_on in prompt:
+            raise RuntimeError("provider down")
+        return f"Tóm tắt {len(self.prompts)}"

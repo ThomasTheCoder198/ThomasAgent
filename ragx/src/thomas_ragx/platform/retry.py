@@ -42,9 +42,12 @@ def retrying(config: Config) -> AsyncRetrying:
     def wait(state: RetryCallState) -> float:
         delay = backoff(state)
         exc = state.outcome.exception() if state.outcome else None
-        if not isinstance(exc, httpx.HTTPStatusError):
+        if isinstance(exc, AppError):
+            value = exc.retry_after
+        elif isinstance(exc, httpx.HTTPStatusError):
+            value = exc.response.headers.get(RETRY_AFTER_HEADER)
+        else:
             return delay
-        value = exc.response.headers.get(RETRY_AFTER_HEADER)
         if value is None:
             return delay
         try:

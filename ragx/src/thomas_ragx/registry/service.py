@@ -16,6 +16,7 @@ from thomas_ragx.registry.model import (
     ROLE_CAPABILITIES,
     Capability,
     ModelFacts,
+    ModelHandle,
     ModelRecord,
     Provider,
     ProviderAccess,
@@ -226,3 +227,15 @@ class LLMProviderService:
         if model is None:
             raise AppError(ErrorCode.LLM_ROLE_NOT_ASSIGNED)
         return model
+
+    async def model_handle(self, model_id: UUID) -> ModelHandle:
+        async with self._pool.connection() as conn:
+            model = await repository.get_model(conn, model_id)
+            if model is None:
+                raise AppError(ErrorCode.LLM_MODEL_NOT_FOUND)
+            return ModelHandle(model, await self._access(conn, model.provider_id))
+
+    async def role_handle(self, role: Role) -> ModelHandle:
+        async with self._pool.connection() as conn:
+            model = await self.role_model(conn, role)
+            return ModelHandle(model, await self._access(conn, model.provider_id))

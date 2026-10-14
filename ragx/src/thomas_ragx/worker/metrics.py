@@ -13,6 +13,9 @@ from opentelemetry.sdk.resources import Resource
 
 from thomas_ragx.platform.config import Config
 
+EMBEDDING_CALLS_NAME: Final = "ragx_embedding_calls_total"
+EMBEDDING_DURATION_NAME: Final = "ragx_embedding_call_duration_seconds"
+EMBEDDING_CACHE_NAME: Final = "ragx_embedding_cache_total"
 INGEST_STEP_DURATION_NAME: Final = "ragx_ingest_step_duration_seconds"
 INGEST_FILES_NAME: Final = "ragx_ingest_files_total"
 INGEST_DURATION_BUCKETS_SECONDS: Final = (120.0, 300.0, 600.0)
@@ -36,6 +39,9 @@ class WorkerMetrics:
     """Record bounded job outcomes and duration without request or tenant labels."""
 
     def __init__(self, meter: Meter) -> None:
+        self._embedding_calls = meter.create_counter(EMBEDDING_CALLS_NAME)
+        self._embedding_duration = meter.create_histogram(EMBEDDING_DURATION_NAME, unit="s")
+        self._embedding_cache = meter.create_counter(EMBEDDING_CACHE_NAME)
         self._ingest_steps = meter.create_histogram(INGEST_STEP_DURATION_NAME, unit="s")
         self._ingest_files = meter.create_counter(INGEST_FILES_NAME)
         self._jobs = meter.create_counter(JOB_COUNT_NAME, description="Worker job delivery attempts")
@@ -48,6 +54,15 @@ class WorkerMetrics:
         )
         self._relay_rows = meter.create_counter(RELAY_ROWS_NAME, description="Outbox rows published")
         self._sweeps = meter.create_counter(SWEEP_COUNT_NAME, description="Items the sweeper deleted")
+
+    def observe_embedding_call(self, kind: str, outcome: str, duration_seconds: float) -> None:
+        attributes = {"kind": kind, "outcome": outcome}
+        self._embedding_calls.add(1, attributes)
+        self._embedding_duration.record(duration_seconds, attributes)
+
+    def observe_embedding_cache(self, result: str, count: int) -> None:
+        if count > 0:
+            self._embedding_cache.add(count, {"result": result})
 
     def observe_ingest_step(self, step: str, duration_seconds: float) -> None:
         self._ingest_steps.record(duration_seconds, {"step": step})

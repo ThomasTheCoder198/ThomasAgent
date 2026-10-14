@@ -46,3 +46,8 @@ OpenTelemetry metrics `ragx_worker_jobs_total` and `ragx_worker_job_duration_sec
 - `sweep failed` means MinIO or Postgres was unreachable; the next period retries.
 
 IngestHandler now invokes the ingest pipeline; its enclosing span is `rag.ingest.run`. Step duration and file outcome metrics are `ragx_ingest_step_duration_seconds` and `ragx_ingest_files_total`.
+
+## Embedding cache metrics
+`WorkerMetrics.observe_embedding_cache(result, count)` increments `ragx_embedding_cache_total` for positive counts with bounded `result=hit|miss` labels.
+
+`WorkerMetrics.observe_embedding_call(kind, outcome, duration_seconds)` records embedding outbound counts and durations through the worker's configured meter/exporter. Pass this recorder explicitly to `LiteLLMEmbedder(..., metrics=metrics)` when constructing the indexing pipeline.

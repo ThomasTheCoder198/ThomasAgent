@@ -15,12 +15,18 @@ def lang_from_header(value: str | None) -> Lang:
 
 class AppError(Exception):
     def __init__(
-        self, code: ErrorCode, message: str | None = None, details: dict[str, Any] | None = None
+        self,
+        code: ErrorCode,
+        message: str | None = None,
+        details: dict[str, Any] | None = None,
+        *,
+        retry_after: str | None = None,
     ) -> None:
         super().__init__(code.value)
         self.code = code
         self.message = message
         self.details = details
+        self.retry_after = retry_after
 
     def http_status(self) -> int:
         return ERROR_DEFINITIONS[self.code].http_status

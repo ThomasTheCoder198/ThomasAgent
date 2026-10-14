@@ -26,3 +26,6 @@ Keys are write-only. `Provider` exposes only `has_api_key`; `ProviderAccess` hol
 ## Common failures
 - `INTERNAL_ERROR` on Sync or Test with `vault decrypt failed` in logs → `RAG_VAULT_MASTER_KEY` changed; restore it or re-enter the provider key.
 - `LLM_PROVIDER_REJECTED` → check the provider key or base URL.
+
+## Model handles
+`LLMProviderService.model_handle(model_id)` resolves the KB-selected model and decrypts provider access for one call. Missing IDs raise `LLM_MODEL_NOT_FOUND`. `role_handle(role)` resolves the current role or raises `LLM_ROLE_NOT_ASSIGNED`. `ModelHandle.litellm_model` uses the shared provider-name mapping. Handles contain `SecretStr` credentials and must never be logged.

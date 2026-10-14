@@ -261,3 +261,77 @@ def test_error_responses_keep_trace_header_and_safe_error_body(path: str, status
             assert response.json()["error"]["code"] == "INTERNAL_ERROR"
     finally:
         app.state.tracer_provider.shutdown()
+
+
+async def test_instrument_litellm_patches_the_module(monkeypatch: pytest.MonkeyPatch) -> None:
+    import litellm
+    from openinference.instrumentation.litellm import LiteLLMInstrumentor
+    from opentelemetry.sdk.trace import TracerProvider
+
+    from thomas_ragx.platform.tracing import instrument_litellm
+
+    monkeypatch.setenv("OPENINFERENCE_HIDE_INPUTS", "true")
+    monkeypatch.setenv("OPENINFERENCE_HIDE_OUTPUTS", "true")
+    provider = TracerProvider()
+    exporter = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    instrumentor = LiteLLMInstrumentor()
+    instrumentor.uninstrument()
+
+    async def fake(**kwargs: object) -> litellm.EmbeddingResponse:
+        return litellm.EmbeddingResponse(
+            model="openai/test", data=[{"embedding": [0.1], "index": 0, "object": "embedding"}]
+        )
+
+    monkeypatch.setattr(litellm, "aembedding", fake)
+    try:
+        instrument_litellm(provider)
+        await litellm.aembedding(model="openai/test", input=["private input"])
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        assert spans[0].attributes["openinference.span.kind"] == "EMBEDDING"
+        assert "input.value" not in spans[0].attributes
+        assert "private input" not in str(spans[0].attributes)
+    finally:
+        instrumentor.uninstrument()
+        provider.shutdown()
+
+
+async def test_provider_exception_trace_never_exports_private_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import litellm
+    from openinference.instrumentation.litellm import LiteLLMInstrumentor
+    from opentelemetry.sdk.trace import TracerProvider
+
+    from thomas_ragx.platform.tracing import instrument_litellm
+
+    monkeypatch.setenv("OPENINFERENCE_HIDE_INPUTS", "true")
+    monkeypatch.setenv("OPENINFERENCE_HIDE_OUTPUTS", "true")
+    provider = TracerProvider()
+    exporter = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    instrumentor = LiteLLMInstrumentor()
+    instrumentor.uninstrument()
+    private_text = "synthetic-private-document-marker"
+    private_key = "synthetic-private-key-marker"
+
+    async def down(**kwargs: object) -> object:
+        raise litellm.APIConnectionError(private_text + private_key, "openai", "m")
+
+    monkeypatch.setattr(litellm, "aembedding", down)
+    try:
+        instrument_litellm(provider)
+        with pytest.raises(litellm.APIConnectionError):
+            await litellm.aembedding(model="openai/test", input=[private_text], api_key=private_key)
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        span = spans[0]
+        assert span.status.status_code is trace.StatusCode.ERROR
+        assert len(span.events) == 1
+        assert span.events[0].attributes["exception.type"] == "APIConnectionError"
+        for payload in (str(span.attributes), str(span.status.description), str(span.events)):
+            assert not any(marker in payload for marker in (private_text, private_key))
+    finally:
+        instrumentor.uninstrument()
+        provider.shutdown()

@@ -32,3 +32,6 @@ CLI bootstrap initializes logging with Config's service and `environment` before
 
 - `parsing/`: local parsers and Datalab policy normalize blocks and locators.
 - `ingest/`: claims uploads, verifies hashes, builds outlines and persists blocks and tables.
+
+## Provider tracing startup
+The `serve` and worker process entry points install LiteLLM OpenInference instrumentation after applying the trace content policy and installing the process tracer provider. Hidden content omits embedding text/vectors as well as generic input/output values.

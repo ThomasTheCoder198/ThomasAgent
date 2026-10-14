@@ -21,6 +21,7 @@ from thomas_ragx.platform.tracing import (
     apply_trace_content_policy,
     configure_tracing,
     install_global_tracer_provider,
+    instrument_litellm,
 )
 from thomas_ragx.registry.dev_seed import seed_dev_registry
 from thomas_ragx.registry.factory import create_registry_service
@@ -61,6 +62,7 @@ def serve() -> None:
     apply_trace_content_policy(config, os.environ)
     api = create_app(config)
     install_global_tracer_provider(api.state.tracer_provider)
+    instrument_litellm(api.state.tracer_provider)
     try:
         uvicorn.run(api, host=config.http_host, port=config.http_port, log_config=None)
     finally:
@@ -80,6 +82,7 @@ async def _run_worker_process(config: Config) -> None:
     resources = Resources.from_config(config)
     provider = configure_tracing(config)
     install_global_tracer_provider(provider)
+    instrument_litellm(provider)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for signum in (signal.SIGTERM, signal.SIGINT):

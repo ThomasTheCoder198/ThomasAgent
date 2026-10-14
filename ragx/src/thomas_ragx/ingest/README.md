@@ -31,3 +31,8 @@ Chunker.chunk converts blocks and their outline into deterministic chunks. Word 
 Chunk ids are sha256("{file_id}:{version}:{index}")[:32]; point ids are UUIDv5 using the fixed CHUNK_NAMESPACE. Never `hash()`. Language is vi when Vietnamese letters occur, otherwise en.
 
 Tables with only a header stay intact even when that header exceeds the chunk maximum, because no body-row boundary exists to split at.
+
+## Embedding cache
+`embedding_cache.CachedEmbedder` embeds missing content in configured batches and stores little-endian float32 vectors keyed by `(model_id, sha256(embed_text))`. The cache is shared across orgs; callers pass the KB-selected handle and dimensions. Input order is preserved, duplicate misses are embedded once per call, and per-input hit/miss counts are returned and recorded. Wrong vector lengths raise non-retryable `INGEST_EMBEDDING_MISMATCH`. Run `uv run pytest -q tests/integration/test_embedding_cache.py`.
+
+Warm embedding cache reads validate both persisted dimension metadata and decoded vector lengths against the KB dimensions before returning any vectors. Hit counting uses a set of missing keys to stay linear in input size.

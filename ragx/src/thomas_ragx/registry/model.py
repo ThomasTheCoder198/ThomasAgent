@@ -96,3 +96,17 @@ class ProviderAccess:
     kind: ProviderKind
     base_url: str
     api_key: SecretStr | None
+
+
+@dataclass(frozen=True)
+class ModelHandle:
+    """A model plus decrypted access for one call; never logged (SecretStr inside)."""
+
+    record: ModelRecord
+    access: ProviderAccess
+
+    @property
+    def litellm_model(self) -> str:
+        from thomas_ragx.registry.model_info import litellm_model_name
+
+        return litellm_model_name(self.access.kind, self.record.name)

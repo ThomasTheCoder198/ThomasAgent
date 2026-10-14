@@ -58,3 +58,10 @@ When tracing is configured, Phoenix keys containing whitespace, control characte
 - Bootstrap connection failure: start MinIO and Qdrant.
 
 Chunking uses `RAG_CHUNK_TARGET_WORDS` (350), `RAG_CHUNK_MAX_WORDS` (700), and `RAG_CHUNK_OVERLAP_WORDS` (50). Counts are whitespace tokens. Config requires non-negative overlap, positive target and maximum, and overlap < target <= maximum.
+
+## LiteLLM instrumentation
+`instrument_litellm(provider)` installs OpenInference wrappers for LiteLLM module calls. API and worker entry points call it after installing their tracer provider and applying `RAG_TRACE_CONTENT`; inputs and outputs stay hidden by default.
+
+`AppError.retry_after` keeps only the provider Retry-After header, separate from public response details. The retry policy honors it after SDK errors are mapped. A content-aware OpenInference config omits input/output values and embedding text/vectors when hidden; the pinned upstream mask alone leaves embedding text visible.
+
+LiteLLM setup installs a span processor that replaces each new SDK span's public exception/status recording methods before provider calls run. Only exception class and error status survive; raw provider messages, stack traces, supplied exception attributes and status descriptions are discarded before any exporter sees the span. This policy always protects provider secrets, including when content tracing is enabled.

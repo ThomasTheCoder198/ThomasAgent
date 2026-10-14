@@ -9,6 +9,7 @@ import structlog
 from opentelemetry.trace import Tracer
 
 from thomas_ragx.db.outbox import STREAM_INGEST_REQUESTED, STREAM_KB_PURGE_REQUESTED
+from thomas_ragx.ingest.indexing import create_indexing
 from thomas_ragx.ingest.job import FIELD_FILE_ID, FIELD_KB_ID
 from thomas_ragx.ingest.pipeline import IngestPipeline
 from thomas_ragx.parsing.datalab import create_converter
@@ -17,6 +18,7 @@ from thomas_ragx.parsing.service import ParseService
 from thomas_ragx.platform.config import Config
 from thomas_ragx.platform.retry import backoff_seconds
 from thomas_ragx.platform.tracing import ATTR_ORG_ID, ATTR_REQUEST_ID
+from thomas_ragx.registry.factory import create_registry_service
 from thomas_ragx.resources import Resources
 from thomas_ragx.worker.consumer import Handler, StreamConsumer, StreamMessage
 from thomas_ragx.worker.handlers import IngestDeadLetter, IngestHandler, PurgeHandler
@@ -89,11 +91,14 @@ async def _run_worker(
         min_quality=config.datalab_min_quality,
         tracer=tracer,
     )
+    registry = create_registry_service(config, resources.pool)
+    indexing = create_indexing(config, resources, registry, metrics)
     pipeline = IngestPipeline(
         resources.pool,
         resources.storage,
         parser,
         tracer,
+        indexing=indexing,
         work_dir=Path(config.work_dir),
         lease_seconds=config.ingest_visibility_timeout_milliseconds / MILLISECONDS_PER_SECOND,
         metrics=metrics,
@@ -102,7 +107,7 @@ async def _run_worker(
     name = f"{socket.gethostname()}-{os.getpid()}"
     handlers: dict[str, Handler] = {
         STREAM_INGEST_REQUESTED: IngestHandler(pipeline),
-        STREAM_KB_PURGE_REQUESTED: PurgeHandler(resources.pool, resources.storage),
+        STREAM_KB_PURGE_REQUESTED: PurgeHandler(resources.pool, resources.storage, indexing.store),
     }
     dead_letter_hooks = {STREAM_INGEST_REQUESTED: IngestDeadLetter(resources.pool)}
     consumers = [

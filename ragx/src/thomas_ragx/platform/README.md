@@ -69,3 +69,5 @@ LiteLLM setup installs a span processor that replaces each new SDK span's public
 Retrieval config: `RAG_VI_TOKENIZER` selects `underthesea` (default) or `none`; `RAG_BM25_K`, `RAG_BM25_B`, and `RAG_BM25_AVG_LEN` default to 1.2, 0.75, and 256.0. `RAG_QDRANT_UPSERT_BATCH_SIZE` defaults to 128 and `RAG_QDRANT_TIMEOUT_SECONDS` to 30. Positive sizes/timeouts/average length and BM25 b in [0, 1] are validated.
 
 Optional summaries use `RAG_NODE_SUMMARIES_ENABLED` (true), `RAG_NODE_SUMMARY_MAX_NODES` (200), `RAG_NODE_SUMMARY_INPUT_CHARS` (4000), and `RAG_NODE_SUMMARY_MAX_TOKENS` (120). Counts and limits must be positive; YAML supplies defaults and normal constructor/environment/dotenv precedence applies. Missing chat.fast disables summaries for that ingest without failing the file.
+
+`RAG_EMBEDDING_BATCH_SIZE` (`embedding_batch_size` in config.yaml, default 100) bounds provider embedding batches and must be positive.

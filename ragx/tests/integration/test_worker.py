@@ -7,10 +7,11 @@ from unittest.mock import Mock
 
 import pytest
 from minio import Minio
+from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis
 
 from tests.integration.api_client import api_client, bearer, confirm, post_to_storage, presign, upload
-from tests.integration.ingest_support import _pipeline
+from tests.integration.ingest_support import pipeline_for
 from thomas_ragx.db.outbox import STREAM_INGEST_REQUESTED, STREAM_KB_PURGE_REQUESTED
 from thomas_ragx.db.pool import Pool
 from thomas_ragx.kb import file_repository
@@ -18,6 +19,7 @@ from thomas_ragx.kb.storage import PREVIEW_BUCKET, RAW_BUCKET, ObjectStorage
 from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
 from thomas_ragx.registry.dev_seed import seed_dev_registry
+from thomas_ragx.retrieval.qdrant_store import QdrantStore
 from thomas_ragx.worker.consumer import CONSUMER_GROUP, DEAD_LETTER_SUFFIX, StreamConsumer, StreamMessage
 from thomas_ragx.worker.dlq import DeadLetterReplayer
 from thomas_ragx.worker.handlers import IngestDeadLetter, IngestHandler, PurgeHandler
@@ -118,14 +120,20 @@ async def test_relay_publishes_after_redis_recovers(
 
 
 async def test_ingest_handler_acks_a_received_file(
-    pool: Pool, minio_config: dict[str, Any], minio: Minio, redis: Redis, redis_url: str, tmp_path: Any
+    pool: Pool,
+    minio_config: dict[str, Any],
+    minio: Minio,
+    redis: Redis,
+    redis_url: str,
+    qdrant: AsyncQdrantClient,
+    tmp_path: Any,
 ) -> None:
     _, file_id = await _uploaded_file(pool, minio_config, redis_url)
     await OutboxRelay(pool, redis, batch_size=10, poll_interval_seconds=0.01).publish_batch()
     consumer = _consumer(redis, STREAM_INGEST_REQUESTED)
     await consumer.ensure_group()
     await consumer.ensure_group()  # idempotent (BUSYGROUP)
-    await consumer.poll_once(IngestHandler(_pipeline(pool, minio, tmp_path)))
+    await consumer.poll_once(IngestHandler(pipeline_for(pool, minio, qdrant, tmp_path)))
     pending = await redis.xpending(STREAM_INGEST_REQUESTED, CONSUMER_GROUP)
     assert pending["pending"] == 0
     async with pool.connection() as conn:
@@ -193,7 +201,12 @@ async def test_forged_request_id_is_replaced_with_a_job_id(redis: Redis) -> None
 
 
 async def test_purge_handler_removes_objects_and_rows(
-    pool: Pool, minio_config: dict[str, Any], minio: Minio, redis: Redis, redis_url: str
+    pool: Pool,
+    minio_config: dict[str, Any],
+    minio: Minio,
+    redis: Redis,
+    redis_url: str,
+    qdrant: AsyncQdrantClient,
 ) -> None:
     kb_id, file_id = await _uploaded_file(pool, minio_config, redis_url)
     minio.put_object(PREVIEW_BUCKET, f"{ORG}/{kb_id}/{file_id}.json", io.BytesIO(b"{}"), 2)
@@ -205,7 +218,7 @@ async def test_purge_handler_removes_objects_and_rows(
     await OutboxRelay(pool, redis, batch_size=10, poll_interval_seconds=0.01).publish_batch()
     consumer = _consumer(redis, STREAM_KB_PURGE_REQUESTED)
     await consumer.ensure_group()
-    handler = PurgeHandler(pool, ObjectStorage(minio))
+    handler = PurgeHandler(pool, ObjectStorage(minio), QdrantStore(qdrant, upsert_batch_size=64))
     await consumer.poll_once(handler)
     assert list(minio.list_objects(RAW_BUCKET, recursive=True)) == []
     assert list(minio.list_objects(PREVIEW_BUCKET, recursive=True)) == []

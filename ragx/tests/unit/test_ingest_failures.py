@@ -31,6 +31,7 @@ async def test_failed_ingest_step_observes_duration(tmp_path: Path) -> None:
         Mock(),
         Mock(),
         TracerProvider().get_tracer(__name__),
+        indexing=Mock(),
         work_dir=tmp_path,
         lease_seconds=60,
         metrics=metrics,

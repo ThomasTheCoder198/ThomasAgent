@@ -1,10 +1,11 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 from uuid import UUID
 
 from psycopg.types.json import Jsonb
 
+from thomas_ragx.db.outbox import PURGE_KIND_FILE, STREAM_KB_PURGE_REQUESTED, enqueue_outbox
 from thomas_ragx.ingest.job import IngestJob
 from thomas_ragx.ingest.outline import Outline
 from thomas_ragx.kb.model import FileStatus
@@ -88,7 +89,8 @@ async def set_step(conn: Connection, file_id: UUID, status: FileStatus) -> None:
 async def is_live(conn: Connection, file_id: UUID, version: int) -> bool:
     row = await (
         await conn.execute(
-            b"SELECT 1 FROM kb_files WHERE id = %s AND version = %s AND deleted_at IS NULL",
+            b"SELECT 1 FROM kb_files f JOIN knowledge_bases kb ON kb.id = f.kb_id "
+            b"WHERE f.id = %s AND f.version = %s AND f.deleted_at IS NULL AND kb.deleted_at IS NULL",
             (file_id, version),
         )
     ).fetchone()
@@ -192,3 +194,30 @@ async def finish(conn: Connection, target: IngestTarget, parsed: ParsedDocument,
         )
     ).fetchone()
     return row is not None
+
+
+async def set_summaries(conn: Connection, summaries: Mapping[UUID, str]) -> None:
+    if not summaries:
+        return
+    async with conn.cursor() as cursor:
+        await cursor.executemany(
+            b"UPDATE doc_nodes SET summary = %s WHERE id = %s",
+            [(text, node) for node, text in summaries.items()],
+        )
+
+
+async def supersede_older_versions(conn: Connection, target: IngestTarget, request_id: str) -> list[UUID]:
+    """Same name, newer version ready: older versions leave the list and their points go (ruling B15)."""
+    rows = await (
+        await conn.execute(
+            b"UPDATE kb_files SET deleted_at = now(), updated_at = now() "
+            b"WHERE org_id = %s AND kb_id = %s AND name = %s AND version < %s AND deleted_at IS NULL "
+            b"AND status <> 'uploading' RETURNING id",
+            (target.org_id, target.kb_id, target.name, target.version),
+        )
+    ).fetchall()
+    retired = [row["id"] for row in rows]
+    for file_id in retired:
+        payload = {"kind": PURGE_KIND_FILE, "kb_id": str(target.kb_id), "file_id": str(file_id)}
+        await enqueue_outbox(conn, target.org_id, STREAM_KB_PURGE_REQUESTED, payload, request_id)
+    return retired

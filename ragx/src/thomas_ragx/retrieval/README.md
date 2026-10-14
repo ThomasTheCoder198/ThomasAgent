@@ -13,3 +13,5 @@ Vietnamese segmentation (S6/B11), offline BM25 encoding (B12), and tenant scoped
 
 ## Configuration and verification
 Typed config supplies tokenizer, BM25 k/b/average length, Qdrant timeout and upsert batch size. Unit tests block sockets during BM25 construction; integration tests exercise collection idempotence, replacement, tenant isolation and locator payloads against Qdrant 1.19.1.
+
+Indexed points carry org_id, kb_id, file_id, version, chunk_id/index, node_id, section, page_start/end, block offsets and locators, doc_type, file_name, lang, text and created_at. Dense and BM25 vectors share a deterministic UUIDv5 point id.

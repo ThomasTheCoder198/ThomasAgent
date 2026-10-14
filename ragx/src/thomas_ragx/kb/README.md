@@ -41,3 +41,7 @@ The signing client takes `RAG_S3_REGION` explicitly (ruling P11): minio would ot
 ObjectStorage.download_to streams a raw object to a temporary path and calculates its SHA256 in the same pass for ingest integrity.
 
 Failed streaming downloads remove the incomplete file after the writer closes and preserve the original read/write error.
+
+ObjectStorage.put_bytes writes generated preview JSON through a worker thread; ingestion publishes the preview before marking a file ready.
+
+The repository lock_collection includes deleted KB rows and locks before file/node mutations. Ingest publication and purge retain this lock through external point/object writes and row finalization, preventing a completed purge from being followed by orphaned vectors.

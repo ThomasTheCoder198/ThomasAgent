@@ -117,3 +117,21 @@ def to_org(row: DictRow, default_kb: UUID) -> Org:
         default_kb_id=default_kb,
         created_at=row["created_at"],
     )
+
+
+async def lock_collection(conn: Connection, org_id: str, kb_id: UUID) -> str | None:
+    """Include tombstones so publication and purge hold the same lock until external writes finish."""
+    row = await (
+        await conn.execute(
+            b"SELECT collection_name FROM knowledge_bases WHERE id = %s AND org_id = %s FOR UPDATE",
+            (kb_id, org_id),
+        )
+    ).fetchone()
+    return row["collection_name"] if row is not None else None
+
+
+async def delete_kb_row(conn: Connection, org_id: str, kb_id: UUID) -> None:
+    await conn.execute(
+        b"DELETE FROM knowledge_bases WHERE id = %s AND org_id = %s AND deleted_at IS NOT NULL",
+        (kb_id, org_id),
+    )

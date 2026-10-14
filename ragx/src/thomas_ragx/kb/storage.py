@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import io
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass
@@ -46,6 +47,11 @@ class ObjectStorage:
 
     def __init__(self, client: Minio) -> None:
         self._client = client
+
+    async def put_bytes(self, bucket: str, key: str, data: bytes, content_type: str) -> None:
+        await asyncio.to_thread(
+            self._client.put_object, bucket, key, io.BytesIO(data), len(data), content_type=content_type
+        )
 
     async def ready(self) -> bool:
         return await asyncio.to_thread(self._client.bucket_exists, RAW_BUCKET)

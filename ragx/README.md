@@ -32,3 +32,5 @@ Traces go to Phoenix on the ragx server (`deploy/ragx`). Logs stay on stdout as 
 ## Common failures
 - Missing credentials: supply the required RAG_ environment variables.
 - Bootstrap connection failure: start MinIO and Qdrant.
+
+Qdrant is required at API and worker runtime. Indexed readiness includes dense/BM25 vectors and preview JSON. The image sets HF_HUB_OFFLINE=1; BM25 uses a local directory and requires no model download at startup. The offline development embedding seed intentionally fails at the provider boundary and can be replayed from the DLQ.

@@ -38,3 +38,5 @@ Call `enqueue_outbox` before committing the associated business change. The work
 ## Common failures
 - Advisory lock wait → another bootstrap is migrating.
 - Pair missing → add the corresponding `.down.sql`.
+
+Migration 0005 indexes doc_nodes.parent_id and kb_tables.node_id for foreign key cascade traversal during outline replacement and purge. The parent index also supports section traversal. This trades insert/storage overhead for bounded child lookup; its down migration removes both indexes.

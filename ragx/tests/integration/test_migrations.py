@@ -81,16 +81,16 @@ def test_presigned_uploads_down_removes_uploading_rows(postgres_url: str) -> Non
                 b"VALUES (gen_random_uuid(), 'o', %s, 'b.txt', 'text/plain', 1, 'pending')",
                 (kb_id,),
             )
-    assert migrate_down(url, steps=2) == [4, 3]
+    assert migrate_down(url, steps=3) == [5, 4, 3]
     with psycopg.connect(url) as conn:
         assert conn.execute(b"SELECT count(*) FROM kb_files").fetchone() == (0,)
-    assert migrate_up(url) == [3, 4]
+    assert migrate_up(url) == [3, 4, 5]
 
 
 def test_rag_pipeline_up_backfills_collection_names_and_down_drops_the_tables(postgres_url: str) -> None:
     url = _fresh_database(postgres_url, "migrate_pipeline")
     migrate_up(url)
-    assert migrate_down(url, steps=1) == [4]
+    assert migrate_down(url, steps=2) == [5, 4]
     provider_id, model_id, kb_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     with psycopg.connect(url, autocommit=True) as conn:
         conn.execute(b"INSERT INTO orgs (id, name, external_parsing) VALUES ('o', 'O', true)")
@@ -105,11 +105,32 @@ def test_rag_pipeline_up_backfills_collection_names_and_down_drops_the_tables(po
             b"VALUES (%s, 'o', 'kb', true, %s, 8)",
             (kb_id, model_id),
         )
-    assert migrate_up(url) == [4]
+    assert migrate_up(url) == [4, 5]
     with psycopg.connect(url) as conn:
         row = conn.execute(b"SELECT collection_name FROM knowledge_bases WHERE id = %s", (kb_id,)).fetchone()
     assert row == (f"kb_{model_id.hex}_8",)
     pipeline_tables = {"doc_nodes", "doc_blocks", "kb_tables", "embedding_cache"}
     assert pipeline_tables <= _tables(url)
-    migrate_down(url, steps=1)
+    migrate_down(url, steps=2)
     assert not pipeline_tables & _tables(url)
+
+
+def test_purge_cascade_indexes_migrate_up_and_down(postgres_url: str) -> None:
+    url = _fresh_database(postgres_url, "migrate_cascade_indexes")
+    migrate_up(url)
+    expected = {"doc_nodes_parent_id_idx", "kb_tables_node_id_idx"}
+
+    def indexes() -> set[str]:
+        with psycopg.connect(url) as conn:
+            return {
+                row[0]
+                for row in conn.execute(
+                    b"SELECT indexname FROM pg_indexes WHERE schemaname = 'public'"
+                ).fetchall()
+            }
+
+    assert expected <= indexes()
+    assert migrate_down(url, steps=1) == [5]
+    assert not expected & indexes()
+    assert migrate_up(url) == [5]
+    assert expected <= indexes()

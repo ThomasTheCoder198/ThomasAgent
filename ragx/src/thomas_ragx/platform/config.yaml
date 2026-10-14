@@ -72,3 +72,5 @@ node_summaries_enabled: true
 node_summary_max_nodes: 200
 node_summary_input_chars: 4000
 node_summary_max_tokens: 120
+
+embedding_batch_size: 100

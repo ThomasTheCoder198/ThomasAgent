@@ -1,7 +1,7 @@
 # Ingest
 
 ## Purpose
-Turns confirmed uploads into stored document outlines, normalized blocks and table grids. M1.3a stops at stored blocks; ready does not yet mean vector indexed.
+Turns confirmed uploads into stored document outlines, normalized blocks, table grids, searchable Qdrant points and preview JSON. Ready means indexed.
 
 ## Entry points
 - `IngestPipeline.run` is invoked by the worker handler.
@@ -38,4 +38,12 @@ Tables with only a header stay intact even when that header exceeds the chunk ma
 Warm embedding cache reads validate both persisted dimension metadata and decoded vector lengths against the KB dimensions before returning any vectors. Hit counting uses a set of missing keys to stay linear in input size.
 
 ## Optional section summaries
-`summaries.SectionText` carries a node id and section text. `NodeSummarizer` resolves chat.fast only when enabled and given sections, takes the first configured maximum number of nodes, truncates each input by characters and passes the configured output token limit. Successful summaries retain section order and node ids. Missing roles and per-section provider failures leave summaries absent and never fail ingest; later sections continue after a failure. Cancellation still propagates for worker shutdown. Pipeline persistence and constructor wiring follow in Task 3b-6.
+`summaries.SectionText` carries a node id and section text. `NodeSummarizer` resolves chat.fast only when enabled and given sections, takes the first configured maximum number of nodes, truncates each input by characters and passes the configured output token limit. Successful summaries retain section order and node ids. Missing roles and per-section provider failures leave summaries absent and never fail ingest; later sections continue after a failure. Cancellation still propagates for worker shutdown. The pipeline persists successful summaries during enrichment; worker construction injects the configured chat adapter.
+
+## Indexed readiness
+
+The pipeline claims and fetches the verified source, parses, persists the outline, enriches section summaries, chunks, embeds, indexes dense and BM25 points, writes preview JSON, then finishes. Temporary raw copies are removed after parsing. Each step has a CHAIN span and duration metric; embedding/cache/index spans contain counts only.
+
+The embedding model and dimensions come from the KB snapshot, never the current embedding role (B5). Optional chat.fast summaries cannot fail ingest (B14). Finishing retires older versions of the same name and enqueues their purge in the same transaction (B15). Publication validates KB/file liveness under the KB lock; finalization removes points and preview when file deletion wins (B16). Preview JSON contains fileId, version, provider, pageCount and blocks with blockId, nodeId, type, text and locator (B17).
+
+Publication holds the KB row lock across indexing, preview and finish, using the same KB-before-file lock order as purge. Outline replacement also locks the KB first so FK insertion cannot invert this order. Liveness includes the KB tombstone. An indexing/preview failure or lost finalization removes points and preview while the lock is held. Provider calls and chunking remain outside this transaction. Holding a DB connection/KB lock across external storage calls serializes publication per KB and can delay KB deletion.

@@ -1,4 +1,5 @@
 import uuid
+from unittest.mock import AsyncMock
 
 from tests.rag_fakes import FakeChat
 from thomas_ragx.ingest.summaries import NodeSummarizer, SectionText
@@ -46,12 +47,12 @@ async def test_a_failing_summary_never_fails_ingest() -> None:
 
 
 async def test_empty_sections_do_not_resolve_the_model() -> None:
-    async def unexpected() -> ModelHandle:
-        raise AssertionError("empty sections must not resolve chat.fast")
+    unexpected = AsyncMock()
 
     chat = FakeChat()
     summarizer = NodeSummarizer(chat, unexpected, enabled=True, max_nodes=5, input_chars=100, max_tokens=50)
     assert await summarizer.summarize([]) == {}
+    unexpected.assert_not_awaited()
     assert chat.prompts == []
 
 

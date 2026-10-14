@@ -84,6 +84,7 @@ class Config(BaseSettings):
     node_summary_max_nodes: int = Field(gt=0)
     node_summary_input_chars: int = Field(gt=0)
     node_summary_max_tokens: int = Field(gt=0)
+    embedding_batch_size: int = Field(gt=0)
     chunk_target_words: int = Field(gt=0)
     chunk_max_words: int = Field(gt=0)
     chunk_overlap_words: int = Field(ge=0)

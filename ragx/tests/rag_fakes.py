@@ -3,6 +3,7 @@ import math
 from collections.abc import Sequence
 
 from thomas_ragx.registry.model import ModelHandle
+from thomas_ragx.retrieval.rerank import RerankScore
 
 HASH_BYTES = 4
 
@@ -41,3 +42,21 @@ class FakeChat:
         if self.fail_on is not None and self.fail_on in prompt:
             raise RuntimeError("provider down")
         return f"Tóm tắt {len(self.prompts)}"
+
+
+class FakeReranker:
+    """Scores by the share of query words found in the document: deterministic, provider-free."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def rerank(
+        self, model: ModelHandle, query: str, documents: Sequence[str], top_n: int
+    ) -> list[RerankScore]:
+        self.calls += 1
+        words = set(query.lower().split())
+        scores = [
+            RerankScore(i, len(words & set(d.lower().split())) / max(len(words), 1))
+            for i, d in enumerate(documents)
+        ]
+        return sorted(scores, key=lambda s: s.score, reverse=True)[:top_n]

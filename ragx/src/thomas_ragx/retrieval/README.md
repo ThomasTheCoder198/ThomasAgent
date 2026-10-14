@@ -15,3 +15,41 @@ Vietnamese segmentation (S6/B11), offline BM25 encoding (B12), and tenant scoped
 Typed config supplies tokenizer, BM25 k/b/average length, Qdrant timeout and upsert batch size. Unit tests block sockets during BM25 construction; integration tests exercise collection idempotence, replacement, tenant isolation and locator payloads against Qdrant 1.19.1.
 
 Indexed points carry org_id, kb_id, file_id, version, chunk_id/index, node_id, section, page_start/end, block offsets and locators, doc_type, file_name, lang, text and created_at. Dense and BM25 vectors share a deterministic UUIDv5 point id.
+
+
+## Hybrid search
+`SearchService.search(org_id, kb, query, filters)` embeds with the KB's stored embedding model,
+encodes the query with the same BM25 segmenter as ingest, and calls `QdrantStore.hybrid_query`.
+Dense and sparse prefetches (40 each) and the final RRF query all carry `tenant_filter(org_id, kb.id, ...)`.
+Optional file IDs and document types only narrow that filter. A missing collection returns no candidates.
+The 30 fused candidates are checked in Postgres before reranking: only non-deleted files in the org
+with `ready` or `degraded` status remain, excluding superseded files pending purge (C3).
+
+Role `rerank` is required even for an empty KB: an unassigned role raises `LLM_ROLE_NOT_ASSIGNED`.
+A decision-only model raises `LLM_MODEL_CAPABILITY_MISMATCH` until M6 (C1).
+Reranked scores below `RAG_SEARCH_MIN_RERANK_SCORE` (0.1) are removed; at most
+`RAG_SEARCH_RESULT_LIMIT` (8) results remain. An empty answer sets `insufficient_evidence=true` (C4).
+Core owns the corrective query rewrite in M2. Parent/neighbour expansion waits for M6; callers use
+`node_id` to request sections (C5).
+
+Citation labels are `[n.k]`, numbering results and their blocks from 1. Each block carries its
+`block_id`, exact chunk text sliced by stored offsets, and stored locator (C6).
+Spans `rag.retrieval.search` and `rag.retrieval.rerank` use OpenInference `RETRIEVER` and `RERANKER`.
+Candidate/result counts are safe attributes; `input.value` contains the query only with
+`RAG_TRACE_CONTENT=true`. Document content is never attached by these spans (C12).
+
+`LiteLLMReranker(retrying_factory, metrics=recorder)` passes credentials per call, maps provider errors,
+and uses platform retries including `Retry-After`. The required recorder implements
+`observe_rerank_call(kind, outcome, duration_seconds)`; `WorkerMetrics` provides it through an injected
+meter. Completion logs include request ID, duration and bounded outcome without query, documents,
+credentials or provider exception text. API tool assembly must pass its configured exported recorder.
+
+Run `uv run pytest -q tests/integration/test_search.py tests/unit/test_rerank.py` from `ragx/`.
+Missing rerank roles require an operator role assignment; deleted-file points are harmless while purge waits.
+
+
+Rerank responses must contain unique integer indices within the input document bounds and finite numeric
+scores. Booleans, coerced strings/fractional indices, duplicates and malformed result rows are rejected
+as `LLM_PROVIDER_REJECTED` without retry or provider content in errors/logs. Search spans record ERROR
+status without exception text, traceback events or status descriptions, so dependency errors cannot
+export query/document/credential content through those fields.

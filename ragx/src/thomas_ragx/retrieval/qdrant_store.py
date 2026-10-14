@@ -12,11 +12,16 @@ from qdrant_client.models import (
     FieldCondition,
     Filter,
     FilterSelector,
+    Fusion,
+    FusionQuery,
     KeywordIndexParams,
     KeywordIndexType,
+    MatchAny,
     MatchValue,
     Modifier,
     PointStruct,
+    Prefetch,
+    ScoredPoint,
     SparseVector,
     SparseVectorParams,
     VectorParams,
@@ -51,6 +56,10 @@ def tenant_filter(org_id: str, kb_id: UUID | str, *conditions: FieldCondition) -
     if not org_id or not str(kb_id):
         raise ValueError("a Qdrant filter needs both org_id and kb_id")
     return Filter(must=[_match(FIELD_ORG, org_id), _match(FIELD_KB, str(kb_id)), *conditions])
+
+
+def any_condition(field: str, values: Sequence[str]) -> FieldCondition:
+    return FieldCondition(key=field, match=MatchAny(any=list(values)))
 
 
 def file_condition(file_id: UUID | str) -> FieldCondition:
@@ -142,3 +151,30 @@ class QdrantStore:
 
     async def count(self, name: str, flt: Filter) -> int:
         return (await self._client.count(name, count_filter=flt, exact=True)).count
+
+    async def hybrid_query(
+        self,
+        name: str,
+        flt: Filter,
+        dense: Sequence[float],
+        sparse: SparseVector,
+        *,
+        dense_limit: int,
+        sparse_limit: int,
+        limit: int,
+    ) -> list[ScoredPoint]:
+        """Dense + BM25 prefetch fused by RRF (main spec §4.3); both legs carry the tenant filter."""
+        if not await self._client.collection_exists(name):
+            return []  # a KB with nothing indexed yet
+        response = await self._client.query_points(
+            name,
+            prefetch=[
+                Prefetch(query=list(dense), using=DENSE_VECTOR, limit=dense_limit, filter=flt),
+                Prefetch(query=sparse, using=SPARSE_VECTOR, limit=sparse_limit, filter=flt),
+            ],
+            query=FusionQuery(fusion=Fusion.RRF),
+            query_filter=flt,
+            limit=limit,
+            with_payload=True,
+        )
+        return list(response.points)

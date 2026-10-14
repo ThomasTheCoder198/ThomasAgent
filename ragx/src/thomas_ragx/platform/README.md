@@ -71,3 +71,12 @@ Retrieval config: `RAG_VI_TOKENIZER` selects `underthesea` (default) or `none`; 
 Optional summaries use `RAG_NODE_SUMMARIES_ENABLED` (true), `RAG_NODE_SUMMARY_MAX_NODES` (200), `RAG_NODE_SUMMARY_INPUT_CHARS` (4000), and `RAG_NODE_SUMMARY_MAX_TOKENS` (120). Counts and limits must be positive; YAML supplies defaults and normal constructor/environment/dotenv precedence applies. Missing chat.fast disables summaries for that ingest without failing the file.
 
 `RAG_EMBEDDING_BATCH_SIZE` (`embedding_batch_size` in config.yaml, default 100) bounds provider embedding batches and must be positive.
+
+
+## Search settings
+Hybrid retrieval defaults live in `config.yaml`: `RAG_SEARCH_DENSE_LIMIT=40`,
+`RAG_SEARCH_SPARSE_LIMIT=40`, `RAG_SEARCH_FUSED_LIMIT=30`, `RAG_SEARCH_RESULT_LIMIT=8`,
+and `RAG_SEARCH_MIN_RERANK_SCORE=0.1`. Limits must be positive and the score floor is in [0, 1].
+Normal constructor > process environment > dotenv > YAML precedence applies.
+Tracing also exports `SPAN_KIND_RETRIEVER`, `SPAN_KIND_RERANKER`, `SPAN_KIND_TOOL` and
+`ATTR_INPUT_VALUE`; retrieval query attributes follow `RAG_TRACE_CONTENT`.

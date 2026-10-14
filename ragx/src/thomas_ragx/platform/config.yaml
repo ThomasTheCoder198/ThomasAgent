@@ -74,3 +74,9 @@ node_summary_input_chars: 4000
 node_summary_max_tokens: 120
 
 embedding_batch_size: 100
+
+search_dense_limit: 40
+search_sparse_limit: 40
+search_fused_limit: 30
+search_result_limit: 8
+search_min_rerank_score: 0.1

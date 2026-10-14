@@ -32,30 +32,6 @@ REQUEST_ID = "req_8a1f0c2e-1d4a-4b7e-8f21-0c6d5e4a3b21"
 DEAD_REDIS = "redis://127.0.0.1:1/0"
 
 
-@pytest.fixture
-async def redis(redis_url: str) -> Any:
-    client = Redis.from_url(redis_url, decode_responses=True, protocol=2)
-    await client.flushdb()
-    yield client
-    await client.aclose()
-
-
-@pytest.fixture
-def minio(minio_config: dict[str, Any]) -> Minio:
-    client = Minio(
-        minio_config["endpoint"],
-        access_key=minio_config["access_key"],
-        secret_key=minio_config["secret_key"],
-        secure=False,
-    )
-    for bucket in (RAW_BUCKET, PREVIEW_BUCKET):
-        if not client.bucket_exists(bucket):
-            client.make_bucket(bucket)
-        for item in client.list_objects(bucket, recursive=True):
-            client.remove_object(bucket, str(item.object_name))
-    return client
-
-
 async def _uploaded_file(pool: Pool, minio_config: dict[str, Any], redis_url: str) -> tuple[str, str]:
     async with api_client(pool, redis_url=redis_url, minio_config=minio_config) as (client, app):
         await seed_dev_registry(app.state.registry_service)

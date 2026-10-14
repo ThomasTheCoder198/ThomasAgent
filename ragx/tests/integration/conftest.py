@@ -2,7 +2,9 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 import pytest
+from minio import Minio
 from qdrant_client import AsyncQdrantClient
+from redis.asyncio import Redis
 from testcontainers.community.qdrant import QdrantContainer
 from testcontainers.minio import MinioContainer
 from testcontainers.postgres import PostgresContainer
@@ -10,6 +12,7 @@ from testcontainers.redis import RedisContainer
 
 from thomas_ragx.db.migrate import migrate_up
 from thomas_ragx.db.pool import Pool, create_pool
+from thomas_ragx.kb.storage import PREVIEW_BUCKET, RAW_BUCKET
 
 POSTGRES_IMAGE = "postgres:18.6-alpine"
 REDIS_IMAGE = "redis:8.10.2"
@@ -76,3 +79,27 @@ async def qdrant(qdrant_url: str) -> AsyncIterator[AsyncQdrantClient]:
         await client.delete_collection(collection.name)
     yield client
     await client.close()
+
+
+@pytest.fixture
+def minio(minio_config: dict[str, Any]) -> Minio:
+    client = Minio(
+        minio_config["endpoint"],
+        access_key=minio_config["access_key"],
+        secret_key=minio_config["secret_key"],
+        secure=False,
+    )
+    for bucket in (RAW_BUCKET, PREVIEW_BUCKET):
+        if not client.bucket_exists(bucket):
+            client.make_bucket(bucket)
+        for item in client.list_objects(bucket, recursive=True):
+            client.remove_object(bucket, str(item.object_name))
+    return client
+
+
+@pytest.fixture
+async def redis(redis_url: str) -> AsyncIterator[Redis]:
+    client = Redis.from_url(redis_url, decode_responses=True, protocol=2)
+    await client.flushdb()
+    yield client
+    await client.aclose()

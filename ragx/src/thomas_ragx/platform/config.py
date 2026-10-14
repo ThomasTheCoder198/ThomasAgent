@@ -54,6 +54,11 @@ class Config(BaseSettings):
     bm25_avg_len: float = Field(gt=0)
     qdrant_upsert_batch_size: int = Field(gt=0)
     qdrant_timeout_seconds: int = Field(gt=0)
+    search_dense_limit: int = Field(gt=0)
+    search_sparse_limit: int = Field(gt=0)
+    search_fused_limit: int = Field(gt=0)
+    search_result_limit: int = Field(gt=0)
+    search_min_rerank_score: float = Field(ge=0, le=1)
     qdrant_url: str
     minio_endpoint: str
     minio_access_key: str

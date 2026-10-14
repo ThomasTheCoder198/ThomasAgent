@@ -57,3 +57,10 @@ IngestHandler now invokes the ingest pipeline; its enclosing span is `rag.ingest
 Purge resolves the KB collection within the signed org scope, deletes file or KB points using tenant filters, then removes raw/preview objects and database rows. Replayed purges tolerate an already removed KB.
 
 Purge now holds the same KB row lock as ingestion publication until point/object deletion and row deletion finish. Lock order is KB before files/nodes; a missing KB pointer is safe because a publisher must acquire and validate this KB before writing points.
+
+
+`WorkerMetrics.observe_rerank_call(kind, outcome, duration_seconds)` records
+`ragx_rerank_calls_total` and `ragx_rerank_call_duration_seconds` through the injected meter,
+with bounded provider kind and success/error outcome labels. Pass the configured exported recorder
+explicitly to `LiteLLMReranker(..., metrics=metrics)` when assembling API tool services;
+request IDs remain log context and never metric labels.

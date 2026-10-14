@@ -13,6 +13,8 @@ from opentelemetry.sdk.resources import Resource
 
 from thomas_ragx.platform.config import Config
 
+RERANK_CALLS_NAME: Final = "ragx_rerank_calls_total"
+RERANK_DURATION_NAME: Final = "ragx_rerank_call_duration_seconds"
 CHAT_CALLS_NAME: Final = "ragx_chat_calls_total"
 CHAT_DURATION_NAME: Final = "ragx_chat_call_duration_seconds"
 EMBEDDING_CALLS_NAME: Final = "ragx_embedding_calls_total"
@@ -41,6 +43,8 @@ class WorkerMetrics:
     """Record bounded job outcomes and duration without request or tenant labels."""
 
     def __init__(self, meter: Meter) -> None:
+        self._rerank_calls = meter.create_counter(RERANK_CALLS_NAME)
+        self._rerank_duration = meter.create_histogram(RERANK_DURATION_NAME, unit="s")
         self._chat_calls = meter.create_counter(CHAT_CALLS_NAME)
         self._chat_duration = meter.create_histogram(CHAT_DURATION_NAME, unit="s")
         self._embedding_calls = meter.create_counter(EMBEDDING_CALLS_NAME)
@@ -58,6 +62,11 @@ class WorkerMetrics:
         )
         self._relay_rows = meter.create_counter(RELAY_ROWS_NAME, description="Outbox rows published")
         self._sweeps = meter.create_counter(SWEEP_COUNT_NAME, description="Items the sweeper deleted")
+
+    def observe_rerank_call(self, kind: str, outcome: str, duration_seconds: float) -> None:
+        attributes = {"kind": kind, "outcome": outcome}
+        self._rerank_calls.add(1, attributes)
+        self._rerank_duration.record(duration_seconds, attributes)
 
     def observe_chat_call(self, kind: str, outcome: str, duration_seconds: float) -> None:
         attributes = {"kind": kind, "outcome": outcome}

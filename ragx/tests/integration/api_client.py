@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 from fastapi import FastAPI
 from minio import Minio
+from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis
 
 from tests.tokens import mint, public_keys_config
@@ -17,6 +18,7 @@ from thomas_ragx.platform.config import Config
 from thomas_ragx.resources import Resources
 
 UNREACHABLE_REDIS = "redis://127.0.0.1:1/0"
+UNREACHABLE_QDRANT = "http://127.0.0.1:1"
 UNREACHABLE_MINIO = "127.0.0.1:1"
 
 
@@ -41,7 +43,11 @@ def _storage(minio_config: dict[str, Any] | None) -> ObjectStorage:
 
 @asynccontextmanager
 async def api_client(
-    pool: Pool, redis_url: str | None = None, minio_config: dict[str, Any] | None = None, **overrides: Any
+    pool: Pool,
+    redis_url: str | None = None,
+    minio_config: dict[str, Any] | None = None,
+    qdrant_url: str | None = None,
+    **overrides: Any,
 ) -> AsyncIterator[tuple[httpx.AsyncClient, FastAPI]]:
     storage_settings: dict[str, Any] = {}
     if minio_config is not None:
@@ -60,6 +66,7 @@ async def api_client(
         pool=pool,
         redis=Redis.from_url(redis_url or UNREACHABLE_REDIS, decode_responses=True, protocol=2),
         storage=_storage(minio_config),
+        qdrant=AsyncQdrantClient(url=qdrant_url or UNREACHABLE_QDRANT),
         connect_timeout_seconds=1.0,
         readiness_timeout_seconds=1.0,
     )
@@ -71,6 +78,7 @@ async def api_client(
             yield client, app
     finally:
         await resources.redis.aclose()
+        await resources.qdrant.close()
 
 
 async def presign(client: httpx.AsyncClient, org_id: str, kb_id: str, name: str, size: int) -> httpx.Response:

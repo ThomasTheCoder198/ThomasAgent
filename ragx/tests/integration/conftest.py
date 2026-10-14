@@ -2,6 +2,8 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 import pytest
+from qdrant_client import AsyncQdrantClient
+from testcontainers.community.qdrant import QdrantContainer
 from testcontainers.minio import MinioContainer
 from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
@@ -53,3 +55,24 @@ def redis_url() -> Iterator[str]:
 def minio_config() -> Iterator[dict[str, Any]]:
     with MinioContainer(MINIO_IMAGE) as container:
         yield container.get_config()
+
+
+QDRANT_REST_PORT = 6333
+QDRANT_TIMEOUT_SECONDS = 30
+QDRANT_IMAGE = "qdrant/qdrant:v1.19.1-unprivileged"
+
+
+@pytest.fixture(scope="session")
+def qdrant_url() -> Iterator[str]:
+    with QdrantContainer(image=QDRANT_IMAGE) as container:
+        host = container.get_container_host_ip()
+        yield f"http://{host}:{container.get_exposed_port(QDRANT_REST_PORT)}"
+
+
+@pytest.fixture
+async def qdrant(qdrant_url: str) -> AsyncIterator[AsyncQdrantClient]:
+    client = AsyncQdrantClient(url=qdrant_url, timeout=QDRANT_TIMEOUT_SECONDS)
+    for collection in (await client.get_collections()).collections:
+        await client.delete_collection(collection.name)
+    yield client
+    await client.close()

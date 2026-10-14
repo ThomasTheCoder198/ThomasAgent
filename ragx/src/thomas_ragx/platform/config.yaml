@@ -60,3 +60,10 @@ local_first_extensions: [.docx, .pptx]
 chunk_target_words: 350
 chunk_max_words: 700
 chunk_overlap_words: 50
+
+vi_tokenizer: underthesea
+bm25_k: 1.2
+bm25_b: 0.75
+bm25_avg_len: 256.0
+qdrant_upsert_batch_size: 128
+qdrant_timeout_seconds: 30

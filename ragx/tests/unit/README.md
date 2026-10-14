@@ -32,3 +32,5 @@ Config alias coverage tests the installed pydantic-settings resolution directly;
 ## Common failures
 - Missing credentials: supply the required RAG_ environment variables.
 - Bootstrap connection failure: start MinIO and Qdrant.
+
+Segmenter tests verify Vietnamese compounds and factory selection. Sparse encoder tests block network access and verify matching query/passage tokens. Readiness tests include Qdrant failure.

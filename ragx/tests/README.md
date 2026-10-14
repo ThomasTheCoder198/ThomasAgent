@@ -25,3 +25,5 @@ Unit regressions exercise Config environment aliases and defaults, JSON logging 
 ## Common failures
 - Missing credentials: supply the required RAG_ environment variables.
 - Bootstrap connection failure: start MinIO and Qdrant.
+
+Retrieval coverage includes offline Vietnamese BM25 unit tests and real Qdrant tenant isolation, payload and replacement integration tests.

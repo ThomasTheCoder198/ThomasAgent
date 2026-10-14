@@ -74,6 +74,8 @@ def test_cli_bootstrap_logs_environment_and_active_trace(
     monkeypatch.setattr(bootstrap_module, "Minio", Mock(return_value=storage))
     monkeypatch.setattr(bootstrap_module, "migrate_up", Mock(return_value=[]))
     monkeypatch.setattr(bootstrap_module, "ensure_admin_account", AsyncMock(return_value=None))
+    ensure_collections = AsyncMock(return_value=2)
+    monkeypatch.setattr(bootstrap_module, "ensure_kb_collections", ensure_collections)
     monkeypatch.setattr(
         bootstrap_module.httpx,
         "get",
@@ -87,6 +89,8 @@ def test_cli_bootstrap_logs_environment_and_active_trace(
     bucket_records = [record for record in records if record["msg"] == "bucket created"]
     assert {record["bucket"] for record in bucket_records} == set(config.buckets)
     assert any(record["msg"] == "bootstrap complete" for record in records)
+    ensure_collections.assert_awaited_once_with(config)
+    assert any(record["msg"] == "collections ready" and record["count"] == 2 for record in records)
     for record in records:
         assert record["env"] == config.environment
         assert record["service"] == config.service_name

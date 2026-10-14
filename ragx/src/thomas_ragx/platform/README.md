@@ -65,3 +65,5 @@ Chunking uses `RAG_CHUNK_TARGET_WORDS` (350), `RAG_CHUNK_MAX_WORDS` (700), and `
 `AppError.retry_after` keeps only the provider Retry-After header, separate from public response details. The retry policy honors it after SDK errors are mapped. A content-aware OpenInference config omits input/output values and embedding text/vectors when hidden; the pinned upstream mask alone leaves embedding text visible.
 
 LiteLLM setup installs a span processor that replaces each new SDK span's public exception/status recording methods before provider calls run. Only exception class and error status survive; raw provider messages, stack traces, supplied exception attributes and status descriptions are discarded before any exporter sees the span. This policy always protects provider secrets, including when content tracing is enabled.
+
+Retrieval config: `RAG_VI_TOKENIZER` selects `underthesea` (default) or `none`; `RAG_BM25_K`, `RAG_BM25_B`, and `RAG_BM25_AVG_LEN` default to 1.2, 0.75, and 256.0. `RAG_QDRANT_UPSERT_BATCH_SIZE` defaults to 128 and `RAG_QDRANT_TIMEOUT_SECONDS` to 30. Positive sizes/timeouts/average length and BM25 b in [0, 1] are validated.

@@ -48,6 +48,12 @@ class Config(BaseSettings):
     app_token_audience: str
     app_token_leeway_seconds: int
     app_token_max_lifetime_seconds: int
+    vi_tokenizer: Literal["underthesea", "none"]
+    bm25_k: float = Field(gt=0)
+    bm25_b: float = Field(ge=0, le=1)
+    bm25_avg_len: float = Field(gt=0)
+    qdrant_upsert_batch_size: int = Field(gt=0)
+    qdrant_timeout_seconds: int = Field(gt=0)
     qdrant_url: str
     minio_endpoint: str
     minio_access_key: str

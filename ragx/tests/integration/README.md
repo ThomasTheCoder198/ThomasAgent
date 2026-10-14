@@ -28,3 +28,5 @@ Images match deploy/ragx; the pool fixture truncates every table before each tes
 ## Common failures
 - Docker not running → start Docker Desktop.
 - Rootless Docker message on Windows → set `DOCKER_HOST` as documented.
+
+The session Qdrant fixture uses `qdrant/qdrant:v1.19.1-unprivileged` and a 30-second client timeout; each test clears collections. `api_client` accepts `qdrant_url`, otherwise its Qdrant endpoint is unreachable.

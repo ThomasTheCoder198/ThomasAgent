@@ -8,12 +8,15 @@ class FakeResources:
     """
 
     def __init__(self, ready: dict[str, bool] | None = None) -> None:
-        self.ready = ready if ready is not None else {"postgres": True, "redis": True, "storage": True}
+        self.ready = (
+            ready if ready is not None else {"postgres": True, "redis": True, "storage": True, "qdrant": True}
+        )
         self.opened = False
         self.closed = False
         self.pool: Any = None
         self.redis: Any = None
         self.storage: Any = None
+        self.qdrant: Any = None
 
     async def open(self) -> None:
         self.opened = True

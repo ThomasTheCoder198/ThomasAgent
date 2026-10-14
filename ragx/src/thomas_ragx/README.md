@@ -35,3 +35,5 @@ CLI bootstrap initializes logging with Config's service and `environment` before
 
 ## Provider tracing startup
 The `serve` and worker process entry points install LiteLLM OpenInference instrumentation after applying the trace content policy and installing the process tracer provider. Hidden content omits embedding text/vectors as well as generic input/output values.
+
+`Resources` owns and closes Qdrant alongside Postgres and Redis. Readiness probes `get_collections`; bootstrap prepares dense/BM25 collections for every live knowledge base.

@@ -16,6 +16,7 @@ def test_readyz_reports_ready_when_every_dependency_answers() -> None:
     assert response.status_code == 200
     assert response.json()["data"] == {"status": "ready"}
     assert resources.opened and resources.closed
+    assert set(resources.ready) == {"postgres", "redis", "storage", "qdrant"}
 
 
 def test_readyz_is_503_without_naming_internals_when_a_dependency_is_down() -> None:
@@ -37,3 +38,12 @@ def test_config_has_no_core_callback_settings() -> None:
     fields = Config.model_fields
     assert "core_internal_url" not in fields
     assert "core_service_token" not in fields
+
+
+def test_readyz_is_unavailable_when_qdrant_is_down() -> None:
+    resources = FakeResources({"postgres": True, "redis": True, "storage": True, "qdrant": False})
+    with TestClient(create_app(_config(), resources=resources)) as client:
+        response = client.get("/readyz")
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "INTERNAL_ERROR"
+    assert "qdrant" not in response.text

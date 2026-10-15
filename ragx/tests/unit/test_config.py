@@ -124,6 +124,25 @@ def test_config_rejects_a_visibility_timeout_shorter_than_two_converts() -> None
         )
 
 
+def test_config_visibility_boundary_is_two_datalab_timeouts_plus_the_stream_visibility_timeout() -> None:
+    # 2 converts x 600 s x 1000 + 60_000 ms stream visibility = 1_260_000 ms: at the sum is rejected (A11).
+    bounds = {"datalab_timeout_seconds": 600.0, "stream_visibility_timeout_milliseconds": 60_000}
+    with pytest.raises(ValidationError):
+        Config(
+            minio_access_key="a",
+            minio_secret_key="s",
+            ingest_visibility_timeout_milliseconds=1_260_000,
+            **bounds,
+        )
+    config = Config(
+        minio_access_key="a",
+        minio_secret_key="s",
+        ingest_visibility_timeout_milliseconds=1_260_001,
+        **bounds,
+    )
+    assert config.ingest_visibility_timeout_milliseconds == 1_260_001
+
+
 def test_config_rejects_zero_ingest_concurrency() -> None:
     with pytest.raises(ValidationError):
         Config(minio_access_key="a", minio_secret_key="s", ingest_concurrency=0)

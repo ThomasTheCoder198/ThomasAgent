@@ -33,6 +33,7 @@ from thomas_ragx.platform.request_id import (
     accept_request_id,
 )
 from thomas_ragx.platform.request_state import STATE_JTI, STATE_ORG_ID, STATE_TOOL
+from thomas_ragx.platform.timing import MILLISECONDS_PER_SECOND, elapsed_ms
 from thomas_ragx.platform.tracing import (
     ATTR_ORG_ID,
     ATTR_REQUEST_ID,
@@ -55,7 +56,6 @@ from thomas_ragx.worker.metrics import (
     configure_worker_metrics,
 )
 
-MILLISECONDS_PER_SECOND: Final = 1000
 ROUTE_UNMATCHED: Final = "unmatched"
 ACCESS_LOG_EVENT: Final = "request completed"
 HTTP_METRIC_METHOD: Final = "method"
@@ -208,7 +208,7 @@ def create_app(config: Config | None = None, resources: Resources | None = None)
                     "method": request.method,
                     "route": _route_pattern(request),
                     "status": response.status_code,
-                    "duration_ms": round((perf_counter() - started) * MILLISECONDS_PER_SECOND),
+                    "duration_ms": elapsed_ms(started),
                     **caller,
                     **_request_id_fields(sent, rejected),
                 },

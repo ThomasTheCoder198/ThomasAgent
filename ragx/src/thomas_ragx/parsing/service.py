@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Final, Protocol
 
 import structlog
-from opentelemetry.trace import Tracer
+from opentelemetry.trace import Span, Status, StatusCode, Tracer
 
 from thomas_ragx.parsing.datalab import ConvertOutcome
 from thomas_ragx.parsing.datalab_blocks import to_parsed_document
@@ -16,6 +16,7 @@ from thomas_ragx.parsing.page_sizes import read_page_sizes
 from thomas_ragx.parsing.registry import ParserRegistry
 from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
+from thomas_ragx.platform.timing import elapsed_ms
 from thomas_ragx.platform.tracing import ATTR_SPAN_KIND, SPAN_KIND_CHAIN
 
 SPAN_DATALAB: Final = "rag.parse.datalab"
@@ -27,7 +28,6 @@ ATTR_QUALITY: Final = "parse.quality"
 ATTR_RUNTIME: Final = "parse.runtime_seconds"
 ATTR_COST: Final = "parse.cost_cents"
 COST_CENTS_KEY: Final = "final_cost_cents"  # Datalab's cost_breakdown field (spike S9)
-MILLISECONDS_PER_SECOND: Final = 1000
 log = structlog.get_logger(__name__)
 
 type SpanAttributes = Mapping[str, str]
@@ -52,6 +52,10 @@ def _status_code(exc: Exception) -> int | None:
     """The HTTP status of a Datalab API error; never its message, which can echo request content."""
     code = getattr(exc, "status_code", None)
     return code if isinstance(code, int) else None
+
+
+def _mark_failed(span: Span, exc: Exception) -> None:
+    span.set_status(Status(StatusCode.ERROR, type(exc).__name__))
 
 
 def _cost_cents(outcome: ConvertOutcome) -> float | None:
@@ -184,7 +188,8 @@ class ParseService:
         self, converter: Converter, path: Path, mode: str, attributes: SpanAttributes
     ) -> ConvertOutcome:
         started = time.perf_counter()
-        # record_exception off: a provider error message could carry request content.
+        # Exception recording and status-on-exception are off: a provider error message could carry request
+        # content, and the SDK would copy it into the status description. The type name is all a span keeps.
         with self._tracer.start_as_current_span(
             SPAN_DATALAB,
             attributes={
@@ -194,8 +199,13 @@ class ParseService:
                 ATTR_MODE: mode,
             },
             record_exception=False,
+            set_status_on_exception=False,
         ) as span:
-            outcome = await converter.convert(path, mode)
+            try:
+                outcome = await converter.convert(path, mode)
+            except Exception as exc:
+                _mark_failed(span, exc)
+                raise
             if outcome.page_count is not None:
                 span.set_attribute(ATTR_PAGES, outcome.page_count)
             if outcome.quality is not None:
@@ -205,11 +215,7 @@ class ParseService:
             cost = _cost_cents(outcome)
             if cost is not None:
                 span.set_attribute(ATTR_COST, cost)
-        log.info(
-            "datalab convert completed",
-            mode=mode,
-            duration_ms=round((time.perf_counter() - started) * MILLISECONDS_PER_SECOND),
-        )
+        log.info("datalab convert completed", mode=mode, duration_ms=elapsed_ms(started))
         return outcome
 
     async def _document(self, outcome: ConvertOutcome, path: Path, extension: str) -> ParsedDocument:
@@ -241,11 +247,14 @@ class ParseService:
                 ATTR_PROVIDER: ParseProvider.LOCAL.value,
             },
             record_exception=False,
-        ):
+            set_status_on_exception=False,
+        ) as span:
             try:
                 parsed = await asyncio.to_thread(parser.parse, path)  # CPU-bound: keep the loop free
-            except AppError:
+            except AppError as exc:
+                _mark_failed(span, exc)
                 raise
-            except Exception:
+            except Exception as exc:
+                _mark_failed(span, exc)
                 raise AppError(ErrorCode.INGEST_PARSE_FAILED) from None
         return dataclasses.replace(parsed, degraded=degraded)

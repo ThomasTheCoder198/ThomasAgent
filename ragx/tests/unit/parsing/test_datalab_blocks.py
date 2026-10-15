@@ -1,6 +1,7 @@
 from typing import Any
 
 import pytest
+import structlog.testing
 
 from tests.unit.parsing.fixtures import A4_POINTS, datalab_tree, grouped_tree
 from thomas_ragx.parsing.datalab_blocks import (
@@ -187,3 +188,22 @@ def test_datalab_locator_kinds_are_page_boxes_for_every_extension() -> None:
         == {".pdf", ".png", ".jpg", ".jpeg", ".docx", ".pptx"}
     )
     assert set(DATALAB_LOCATOR_KINDS.values()) == {LocatorKind.PDF_BBOX}
+
+
+def test_table_cell_cap_that_drops_rows_logs_a_warning_with_counts_only() -> None:
+    row = '<tr><td colspan="1000">secret-looking text</td></tr>'
+    with structlog.testing.capture_logs() as logs:
+        table = table_from_html("<table>" + row * 150 + "</table>")
+    assert table is not None
+    warnings = [entry for entry in logs if entry["event"] == "table truncated by the size caps"]
+    assert len(warnings) == 1
+    assert warnings[0]["log_level"] == "warning"
+    assert (warnings[0]["rows_in_source"], warnings[0]["rows_kept"]) == (150, 1 + len(table.rows))
+    assert warnings[0]["max_cells"] == MAX_TABLE_CELLS
+    assert "secret-looking text" not in str(logs)
+
+
+def test_table_within_the_caps_logs_nothing() -> None:
+    with structlog.testing.capture_logs() as logs:
+        table_from_html("<table><tr><td>a</td></tr><tr><td>b</td></tr></table>")
+    assert logs == []

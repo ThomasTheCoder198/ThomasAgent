@@ -9,13 +9,14 @@ from docx import Document
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.trace import StatusCode
 from pptx import Presentation
 
 from tests.unit.parsing.fixtures import datalab_tree
 from tests.unit.parsing.test_pdf_local import _pdf
 from thomas_ragx.parsing.datalab import ConvertOutcome
-from thomas_ragx.parsing.model import LocatorKind, ParseProvider
-from thomas_ragx.parsing.registry import local_registry
+from thomas_ragx.parsing.model import LocatorKind, ParsedDocument, ParseProvider
+from thomas_ragx.parsing.registry import ParserRegistry, local_registry
 from thomas_ragx.parsing.service import SPAN_DATALAB, SPAN_LOCAL, ParseService
 from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
@@ -385,3 +386,44 @@ async def test_datalab_error_logs_the_status_code_never_the_message(pdf: Path) -
     failed = [entry for entry in logs if entry["event"] == "datalab failed, parsing locally"]
     assert failed[0]["status_code"] == 503 and failed[0]["error_type"] == "FakeApiError"
     assert "secret-looking text" not in str(logs)
+
+
+async def test_a_failed_datalab_span_carries_the_error_type_never_the_message(pdf: Path) -> None:
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    await _service(FakeConverter(error=FakeApiError(503)), provider=provider).parse(
+        pdf, ".pdf", external_parsing=True
+    )
+    span = _spans(exporter)[SPAN_DATALAB]
+    assert span.status.status_code is StatusCode.ERROR
+    assert span.status.description == "FakeApiError"
+    assert "secret-looking text" not in str(span.events) + str(span.status.description)
+
+
+class _LeakyParser:
+    def parse(self, path: Path) -> ParsedDocument:
+        raise ValueError("secret-looking text")
+
+
+async def test_a_failed_local_span_carries_the_error_type_only(tmp_path: Path) -> None:
+    path = tmp_path / "a.txt"
+    path.write_text("x", encoding="utf-8")
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    service = ParseService(
+        ParserRegistry({".txt": _LeakyParser()}),
+        None,
+        mode="balanced",
+        retry_mode="accurate",
+        min_quality=3.0,
+        local_first_extensions=LOCAL_FIRST,
+        tracer=provider.get_tracer(__name__),
+    )
+    with pytest.raises(AppError):
+        await service.parse(path, ".txt", external_parsing=False)
+    span = _spans(exporter)[SPAN_LOCAL]
+    assert span.status.status_code is StatusCode.ERROR
+    assert span.status.description == "ValueError"  # the parser's own type, never its message
+    assert "secret-looking text" not in str(span.events) + str(span.attributes)

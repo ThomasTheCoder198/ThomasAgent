@@ -25,6 +25,7 @@ from thomas_ragx.platform.errors import AppError
 from thomas_ragx.platform.litellm_policy import apply_litellm_policy
 from thomas_ragx.platform.logging import configure_logging
 from thomas_ragx.platform.request_id import new_job_id
+from thomas_ragx.platform.timing import elapsed_ms
 from thomas_ragx.platform.tracing import (
     apply_trace_content_policy,
     configure_tracing,
@@ -40,7 +41,6 @@ from thomas_ragx.worker.metrics import configure_worker_metrics
 from thomas_ragx.worker.run import run_worker
 
 DEV_ENVIRONMENT: Final = "dev"
-MILLISECONDS_PER_SECOND: Final = 1000
 log = structlog.get_logger(__name__)
 
 app = typer.Typer(no_args_is_help=True)
@@ -209,7 +209,11 @@ def eval_run(
             report = asyncio.run(_eval(config, golden, org, UUID(kb)))
         except AppError as exc:
             # log.exception would attach the traceback; the code alone is the boundary record (rule 4).
-            log.error("eval failed", error_code=exc.code.value, duration_ms=_elapsed_ms(started))  # noqa: TRY400
+            log.error("eval failed", error_code=exc.code.value, duration_ms=elapsed_ms(started))  # noqa: TRY400
+            raise typer.Exit(code=1) from None
+        except Exception as exc:
+            # A malformed --kb or a down dependency: the type is the record, never the text.
+            log.error("eval failed", error_type=type(exc).__name__, duration_ms=elapsed_ms(started))  # noqa: TRY400
             raise typer.Exit(code=1) from None
         if out is not None:
             out.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -218,9 +222,5 @@ def eval_run(
             scored=report["scored"],
             recall_at_5=report["recall"]["5"],
             mrr=report["mrr"],
-            duration_ms=_elapsed_ms(started),
+            duration_ms=elapsed_ms(started),
         )
-
-
-def _elapsed_ms(started: float) -> int:
-    return round((perf_counter() - started) * MILLISECONDS_PER_SECOND)

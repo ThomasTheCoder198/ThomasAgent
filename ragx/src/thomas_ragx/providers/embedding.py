@@ -8,10 +8,10 @@ from tenacity import AsyncRetrying
 
 from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
+from thomas_ragx.platform.timing import MILLISECONDS_PER_SECOND
 from thomas_ragx.providers.litellm_errors import to_app_error
 from thomas_ragx.registry.model import ModelHandle
 
-DURATION_MILLISECONDS: Final = 1000
 OUTCOME_SUCCESS: Final = "success"
 OUTCOME_ERROR: Final = "error"
 RESPONSE_INDEX: Final = "index"
@@ -61,7 +61,7 @@ class LiteLLMEmbedder:
             duration = perf_counter() - started
             attributes = {"kind": model.access.kind.value, "outcome": outcome}
             self._metrics.observe_embedding_call(model.access.kind.value, outcome, duration)
-            log.info("embedding call completed", **attributes, duration_ms=duration * DURATION_MILLISECONDS)
+            log.info("embedding call completed", **attributes, duration_ms=duration * MILLISECONDS_PER_SECOND)
 
     async def embed(self, model: ModelHandle, texts: Sequence[str]) -> list[list[float]]:
         async for attempt in self._retrying():

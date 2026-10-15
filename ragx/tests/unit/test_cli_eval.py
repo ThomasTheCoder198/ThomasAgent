@@ -64,7 +64,10 @@ class _Wiring:
         monkeypatch.setattr(cli.kbs, "get_kb", get_kb)
 
 
-def _invoke(tmp_path: Path, *extra: str) -> Any:
+KB_ID = "7a9d6c36-0000-4000-8000-000000000001"
+
+
+def _invoke(tmp_path: Path, *extra: str, kb: str = KB_ID) -> Any:
     golden = tmp_path / "set.jsonl"
     golden.write_text(json.dumps(GOLDEN_LINE), encoding="utf-8")
     try:
@@ -78,7 +81,7 @@ def _invoke(tmp_path: Path, *extra: str) -> Any:
                 "--org",
                 "org-1",
                 "--kb",
-                "7a9d6c36-0000-4000-8000-000000000001",
+                kb,
                 *extra,
             ],
         )
@@ -131,3 +134,33 @@ def test_eval_run_logs_completion_with_request_id_and_duration(
     finished = next(line for line in _log_lines(result.output) if line.get("msg") == "eval finished")
     assert finished["request_id"].startswith("job_") and finished["duration_ms"] >= 0
     assert json.loads(out.read_text(encoding="utf-8"))["scored"] == 1
+
+
+def _failure_lines(output: str) -> list[dict[str, Any]]:
+    return [line for line in _log_lines(output) if line.get("msg") == "eval failed"]
+
+
+def test_eval_run_logs_a_malformed_kb_once_and_exits_non_zero(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _Wiring(monkeypatch, _Resources(), kb=object())
+    result = _invoke(tmp_path, kb="not-a-uuid")
+    assert result.exit_code == 1
+    assert "Traceback" not in result.output and "not-a-uuid" not in result.output
+    (failure,) = _failure_lines(result.output)
+    assert failure["error_type"] == "ValueError"
+    assert failure["request_id"].startswith("job_") and failure["duration_ms"] >= 0
+
+
+def test_eval_run_logs_an_unexpected_failure_by_type_only(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    resources = _Resources(open_error=RuntimeError("secret-looking text"))
+    wiring = _Wiring(monkeypatch, resources, kb=object())
+    result = _invoke(tmp_path)
+    assert result.exit_code == 1
+    assert "Traceback" not in result.output and "secret-looking text" not in result.output
+    (failure,) = _failure_lines(result.output)
+    assert failure["error_type"] == "RuntimeError"
+    assert failure["request_id"].startswith("job_") and failure["duration_ms"] >= 0
+    assert wiring.tracing.shut_down and wiring.metrics.shut_down

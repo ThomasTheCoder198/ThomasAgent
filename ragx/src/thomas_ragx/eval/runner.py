@@ -15,6 +15,7 @@ from thomas_ragx.eval.report import (
     percentile,
 )
 from thomas_ragx.kb.model import KnowledgeBase
+from thomas_ragx.platform.timing import MILLISECONDS_PER_SECOND
 from thomas_ragx.retrieval.search_service import (
     SEARCHABLE_STATUSES,
     SearchAnswer,
@@ -23,7 +24,6 @@ from thomas_ragx.retrieval.search_service import (
 )
 
 NO_EVIDENCE_CATEGORIES: Final = frozenset({"A1", "A4", "A5"})
-MILLISECONDS_PER_SECOND: Final = 1000.0
 DEFAULT_KS: Final = (5, 8)
 
 

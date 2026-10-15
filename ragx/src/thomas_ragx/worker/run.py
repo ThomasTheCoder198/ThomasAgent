@@ -17,6 +17,7 @@ from thomas_ragx.parsing.registry import local_registry
 from thomas_ragx.parsing.service import ParseService
 from thomas_ragx.platform.config import Config
 from thomas_ragx.platform.retry import backoff_seconds
+from thomas_ragx.platform.timing import MILLISECONDS_PER_SECOND
 from thomas_ragx.platform.tracing import ATTR_ORG_ID, ATTR_REQUEST_ID
 from thomas_ragx.registry.factory import create_registry_service
 from thomas_ragx.resources import Resources
@@ -28,7 +29,6 @@ from thomas_ragx.worker.relay import OutboxRelay
 from thomas_ragx.worker.sweeper import Sweeper
 
 SPAN_NAMES = {STREAM_INGEST_REQUESTED: "rag.ingest.run", STREAM_KB_PURGE_REQUESTED: "rag.kb.purge"}
-MILLISECONDS_PER_SECOND = 1000
 log = structlog.get_logger(__name__)
 
 

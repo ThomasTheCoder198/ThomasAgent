@@ -2,6 +2,7 @@ import re
 from collections.abc import Iterator, Mapping
 from typing import Any, Final
 
+import structlog
 from bs4 import BeautifulSoup, Tag
 
 from thomas_ragx.parsing.locators import DATALAB_LOCATOR_KINDS
@@ -90,6 +91,9 @@ LATEX_SYMBOLS: Final[Mapping[str, str]] = {
 }
 
 
+log = structlog.get_logger(__name__)
+
+
 def _latex_symbol(match: re.Match[str]) -> str:
     return LATEX_SYMBOLS.get(match.group(), match.group())
 
@@ -130,12 +134,14 @@ def table_from_html(html: str) -> TableData | None:
         return None
     grid: dict[tuple[int, int], str] = {}
     width = 0
+    cut_cells = False
     for row_index, row in enumerate(rows):
         column = 0
         for cell in row.find_all(CELL_TAGS, recursive=False):
             while (row_index, column) in grid:
                 column += 1
             if column >= MAX_TABLE_COLUMNS or len(grid) >= MAX_TABLE_CELLS:
+                cut_cells = True
                 break
             text = _soup_text(cell)
             rowspan = _span(cell, ROWSPAN_ATTR, len(rows) - row_index)
@@ -147,6 +153,16 @@ def table_from_html(html: str) -> TableData | None:
             column += colspan
             width = max(width, column)
     height = max(1, min(len(rows), MAX_TABLE_CELLS // max(width, 1)))
+    if cut_cells or height < len(rows):
+        # Counts only: a table is document content and must not reach the logs.
+        log.warning(
+            "table truncated by the size caps",
+            rows_in_source=len(rows),
+            rows_kept=height,
+            columns=width,
+            max_cells=MAX_TABLE_CELLS,
+            max_columns=MAX_TABLE_COLUMNS,
+        )
     cells = [tuple(grid.get((r, c), "") for c in range(width)) for r in range(height)]
     return TableData(header=cells[0], rows=tuple(cells[1:]))
 

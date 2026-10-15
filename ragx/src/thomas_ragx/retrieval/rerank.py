@@ -11,10 +11,10 @@ from tenacity import AsyncRetrying
 
 from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
+from thomas_ragx.platform.timing import MILLISECONDS_PER_SECOND
 from thomas_ragx.providers.litellm_errors import to_app_error
 from thomas_ragx.registry.model import ModelHandle
 
-DURATION_MILLISECONDS: Final = 1000
 OUTCOME_SUCCESS: Final = "success"
 OUTCOME_ERROR: Final = "error"
 RESULT_INDEX: Final = "index"
@@ -107,7 +107,7 @@ class LiteLLMReranker:
                 kind=model.access.kind.value,
                 outcome=outcome,
                 request_id=get_contextvars().get("request_id", ""),
-                duration_ms=duration * DURATION_MILLISECONDS,
+                duration_ms=duration * MILLISECONDS_PER_SECOND,
             )
 
     async def rerank(

@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 import pytest
 
@@ -16,6 +17,15 @@ from thomas_ragx.worker.metrics import (
     SWEEP_KIND_SLOT,
     configure_worker_metrics,
 )
+
+
+def _metrics_export(line: str) -> dict[str, Any] | None:
+    """Stdout also carries structlog JSON lines and may carry stray text: keep only metric exports."""
+    try:
+        parsed = json.loads(line)
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) and "resource_metrics" in parsed else None
 
 
 def test_worker_metrics_export_to_stdout_with_bounded_labels(capfd: pytest.CaptureFixture[str]) -> None:
@@ -47,10 +57,11 @@ def test_http_latency_histogram_uses_second_scale_buckets(capfd: pytest.CaptureF
     output = capfd.readouterr().out
     provider.shutdown()
 
+    exports = [export for line in output.splitlines() if (export := _metrics_export(line)) is not None]
     bounds = [
         point["explicit_bounds"]
-        for line in output.splitlines()
-        for scope in json.loads(line)["resource_metrics"][0]["scope_metrics"]
+        for export in exports
+        for scope in export["resource_metrics"][0]["scope_metrics"]
         for metric in scope["metrics"]
         if metric["name"] == HTTP_DURATION_NAME
         for point in metric["data"]["data_points"]

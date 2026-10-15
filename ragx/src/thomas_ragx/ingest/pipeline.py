@@ -26,6 +26,7 @@ from thomas_ragx.kb.model import FileStatus
 from thomas_ragx.kb.storage import PREVIEW_BUCKET, ObjectStorage, preview_key
 from thomas_ragx.parsing.model import ParsedDocument
 from thomas_ragx.parsing.service import ParseService
+from thomas_ragx.platform.timing import MILLISECONDS_PER_SECOND
 from thomas_ragx.platform.tracing import ATTR_SPAN_KIND, SPAN_KIND_CHAIN
 from thomas_ragx.retrieval.qdrant_store import PointOwner, build_point
 
@@ -40,7 +41,6 @@ STEP_INDEX: Final = "index"
 STEP_PREVIEW: Final = "preview"
 PREVIEW_CONTENT_TYPE: Final = "application/json"
 OUTCOME_FAILED: Final = "failed"
-MILLISECONDS_PER_SECOND: Final = 1000
 log = structlog.get_logger(__name__)
 
 

@@ -31,6 +31,12 @@ RELAY_ROWS_NAME: Final = "ragx_worker_relay_rows_total"
 SWEEP_COUNT_NAME: Final = "ragx_worker_sweep_total"
 HTTP_REQUESTS_NAME: Final = "ragx_http_requests_total"
 HTTP_DURATION_NAME: Final = "ragx_http_request_duration_seconds"
+# Metric attribute keys: bounded labels only, never request or tenant ids.
+ATTR_KIND: Final = "kind"
+ATTR_OUTCOME: Final = "outcome"
+ATTR_RESULT: Final = "result"
+ATTR_STEP: Final = "step"
+ATTR_STREAM: Final = "stream"
 SWEEP_KIND_SLOT: Final = "slot"
 SWEEP_KIND_OBJECT: Final = "object"
 OUTCOME_SUCCESS: Final = "success"
@@ -66,37 +72,37 @@ class WorkerMetrics:
         self._sweeps = meter.create_counter(SWEEP_COUNT_NAME, description="Items the sweeper deleted")
 
     def observe_rerank_call(self, kind: str, outcome: str, duration_seconds: float) -> None:
-        attributes = {"kind": kind, "outcome": outcome}
+        attributes = {ATTR_KIND: kind, ATTR_OUTCOME: outcome}
         self._rerank_calls.add(1, attributes)
         self._rerank_duration.record(duration_seconds, attributes)
 
     def observe_chat_call(self, kind: str, outcome: str, duration_seconds: float) -> None:
-        attributes = {"kind": kind, "outcome": outcome}
+        attributes = {ATTR_KIND: kind, ATTR_OUTCOME: outcome}
         self._chat_calls.add(1, attributes)
         self._chat_duration.record(duration_seconds, attributes)
 
     def observe_embedding_call(self, kind: str, outcome: str, duration_seconds: float) -> None:
-        attributes = {"kind": kind, "outcome": outcome}
+        attributes = {ATTR_KIND: kind, ATTR_OUTCOME: outcome}
         self._embedding_calls.add(1, attributes)
         self._embedding_duration.record(duration_seconds, attributes)
 
     def observe_embedding_cache(self, result: str, count: int) -> None:
         if count > 0:
-            self._embedding_cache.add(count, {"result": result})
+            self._embedding_cache.add(count, {ATTR_RESULT: result})
 
     def observe_ingest_step(self, step: str, duration_seconds: float) -> None:
-        self._ingest_steps.record(duration_seconds, {"step": step})
+        self._ingest_steps.record(duration_seconds, {ATTR_STEP: step})
 
     def observe_ingest_file(self, outcome: str) -> None:
-        self._ingest_files.add(1, {"outcome": outcome})
+        self._ingest_files.add(1, {ATTR_OUTCOME: outcome})
 
     def observe_job(self, stream: str, outcome: str, duration_seconds: float) -> None:
-        attributes = {"stream": stream, "outcome": outcome}
+        attributes = {ATTR_STREAM: stream, ATTR_OUTCOME: outcome}
         self._jobs.add(1, attributes)
         self._duration.record(duration_seconds, attributes)
 
     def observe_relay(self, outcome: str, duration_seconds: float, rows: int) -> None:
-        attributes = {"outcome": outcome}
+        attributes = {ATTR_OUTCOME: outcome}
         self._relay_batches.add(1, attributes)
         self._relay_duration.record(duration_seconds, attributes)
         if rows:
@@ -104,7 +110,7 @@ class WorkerMetrics:
 
     def observe_sweep(self, kind: str, count: int) -> None:
         if count > 0:
-            self._sweeps.add(count, {"kind": kind})
+            self._sweeps.add(count, {ATTR_KIND: kind})
 
 
 def _one_line(data: MetricsData) -> str:

@@ -13,11 +13,12 @@ from pydantic_settings import (
     YamlConfigSettingsSource,
 )
 
+from thomas_ragx.platform.timing import MILLISECONDS_PER_SECOND
+
 DEFAULT_CONFIG_FILE = Path(__file__).with_name("config.yaml")
 PUBLIC_ENDPOINT_SCHEMES: Final = frozenset({"http", "https"})
 PRESIGN_MIN_TTL: Final = timedelta(seconds=1)
 PRESIGN_MAX_TTL: Final = timedelta(days=7)
-MILLISECONDS_PER_SECOND: Final = 1000
 MIN_EXTENSION_LENGTH: Final = 2  # a dot and at least one character
 CONVERTS_PER_FILE: Final = 2  # balanced, then accurate when quality is low (ruling A7)
 

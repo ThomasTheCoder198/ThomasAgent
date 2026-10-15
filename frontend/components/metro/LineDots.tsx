@@ -1,6 +1,6 @@
 import { cn } from "@/lib/cn";
 
-import { lineBg, type Line } from "./lines";
+import { lineBg, type Line } from "@/components/lines";
 
 /** The coloured dots that tell which lines a conversation or nav item touches. */
 export function LineDots({ lines, size = "sm" }: { lines: readonly Line[]; size?: "sm" | "md" }) {

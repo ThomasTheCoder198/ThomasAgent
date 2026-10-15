@@ -5,9 +5,9 @@ import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/Button";
 import { InlineAlert } from "@/components/ui/InlineAlert";
-import { useToast } from "@/components/ui/Toast";
 import { EmptyState } from "@/features/shell/EmptyState";
 import { describeApiError } from "@/lib/api/client";
+import { useNotify } from "@/lib/useNotify";
 import type { KbFile } from "@/lib/ragx/types";
 
 import { StorageUploadError } from "../upload";
@@ -25,7 +25,7 @@ export function FileList({ orgId, kbId, initialFiles, initialCursor }: Props) {
   const t = useTranslations("kb");
   const tErr = useTranslations("errors");
   const router = useRouter();
-  const toast = useToast();
+  const notify = useNotify();
   const storageText = useStorageFailureText();
   const list = useFiles(orgId, kbId, initialFiles, initialCursor);
   const queue = useUploadQueue(
@@ -38,8 +38,7 @@ export function FileList({ orgId, kbId, initialFiles, initialCursor }: Props) {
     },
     (file, error) => {
       // The storage leg has no core response to show, so its failure is announced here (P-F17).
-      if (error instanceof StorageUploadError)
-        toast.show({ tone: "error", title: file.name, detail: storageText(error) });
+      if (error instanceof StorageUploadError) notify.problem(file.name, storageText(error));
     },
   );
   const requestId = (id: string) => tErr("requestId", { id });

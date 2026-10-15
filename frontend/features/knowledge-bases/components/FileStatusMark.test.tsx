@@ -35,7 +35,7 @@ describe("FileStatusMark", () => {
   it.each(inProgress)("draws %s as a hollow ring with its step label", (status) => {
     renderMark(status);
     const mark = screen.getByRole("img", { name: messages.kb.status[status] });
-    expect(mark.className).toMatch(/border-todo/);
+    expect(mark.className).toMatch(/border-border/);
     expect(screen.getByText(messages.kb.status[status])).toBeInTheDocument();
   });
 

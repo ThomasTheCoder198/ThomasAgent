@@ -2,8 +2,8 @@
 
 ## Purpose
 
-The ThomasAgent web app (Next.js 16 App Router, React 19, Tailwind v4) in the Metro Wayfinding world: owner
-login, the signage sidebar shell, and the chat surface with its run line, citations and evidence panel. It owns
+The ThomasAgent web app (Next.js 16 App Router, React 19, Tailwind v4) in the Editorial Trust system (`DESIGN.md`): owner
+login, the sidebar shell, and the chat surface with its run line, citations and evidence panel. It owns
 no business data; everything comes from Go core through the same-origin `/api/v1/*` rewrite.
 
 ## Entry points
@@ -16,7 +16,7 @@ no business data; everything comes from Go core through the same-origin `/api/v1
 - `app/(workspace)/{tools,usage}` — designed empty states until their milestones.
 - `app/(workspace)/template.tsx` — route-change fade; the sidebar rail state comes from the `thomas_sidebar` cookie.
 - `proxy.ts` — redirects to `/login` without a `thomas_session` cookie; forwards the path as `x-pathname`.
-- `app/globals.css` — Metro tokens for light (station white) and dark (platform night).
+- `app/globals.css` — Editorial Trust tokens (shadcn names) for light (warm paper) and dark, mapped into Tailwind with `@theme inline`; root font 16px so the 4pt grid is Tailwind step x 4px. Fonts (Inter, Newsreader, IBM Plex Mono, each with the `vietnamese` subset) load in `app/layout.tsx`, which also mounts the Sonner `Toaster` and `TooltipProvider`.
 
 ## Dependencies
 
@@ -47,8 +47,10 @@ Bun is only the script runner; install with npm and keep `package-lock.json` as 
 ## Conventions
 
 - Data never flows through a mock inside app code: the UI always speaks HTTP to core. `mock-core/` is a separate fake core; switching to the real one is only `WEB_CORE_URL`.
-- Layers: `components/` presentational primitives (`ui/`, `metro/`), `features/*` feature modules, `lib/` cross-cutting helpers. Feature components take view props; protocol knowledge lives in one mapper (`features/chat/run-view.ts`).
-- Every string comes from `messages/{vi,en}.json` (parity test). Line colours come from `components/metro/lines.ts`; never hand-write a line colour.
+- Layers: `components/` presentational primitives (`ui/` is shadcn/ui on Radix; `metro/` the tool-line components), `features/*` feature modules, `lib/` cross-cutting helpers, `hooks/` shared React hooks. Feature components take view props; protocol knowledge lives in one mapper (`features/chat/run-view.ts`).
+- Every string comes from `messages/{vi,en}.json` (parity test). Line colours come from `components/lines.ts`; never hand-write a line colour.
+- Outcomes surface as toasts through `lib/useNotify.ts` (`success`, `info`, `error`, `problem`): `error(err)` shows the localized catalog message for an `ApiError` code (a network message for anything else) and the request id in mono for 5xx; errors stay until dismissed, confirmations leave after 4s. Field-level validation stays in place (`components/ui/Field.tsx`).
+- Standard controls come from shadcn/ui (`components.json`, `components/ui/*`); do not hand-roll them. The CLI writes kebab-case file names, so add components in a scratch directory and copy them in as PascalCase.
 - Chat endpoints are PROVISIONAL until M2 specifies them in OpenAPI (`features/chat/contract.ts`).
 - S8 (SSE through the rewrite): with the plain `rewrites()`, Next gzips proxied responses for browsers and buffers the whole stream. Core's SSE response must send `Cache-Control: no-cache, no-transform` (the fake core does), or set `compress: false` here. Decide in S8.
 

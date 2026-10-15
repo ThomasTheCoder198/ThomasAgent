@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
-import { tabPanelId, Tabs, type TabItem } from "@/components/ui/Tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import type { Model, RoleAssignment } from "@/features/registry/types";
 import { loadedOr, type Loaded } from "@/lib/api/loaded";
 
@@ -11,14 +11,13 @@ import type { AgentDetail, KnowledgeBaseSummary } from "./contract";
 import { AgentSign } from "./components/AgentSign";
 import { ModelsTab } from "./components/ModelsTab";
 import { SaveBar } from "./components/SaveBar";
-import { agentTabs, TAB_QUERY_KEY, type AgentTab } from "./tab-ids";
+import { agentTabs, isAgentTab, TAB_QUERY_KEY, type AgentTab } from "./tab-ids";
 import { KnowledgeTab } from "./components/KnowledgeTab";
 import { InstructionsTab, OverviewTab, type TabProps } from "./components/tabs";
 import type { AgentDraft } from "./draft";
 import { ToolsTab } from "./components/ToolsTab";
 import { useAgentEditor } from "./useAgentEditor";
 
-const TABS_ID = "agent";
 const tabKey = {
   overview: "tabOverview",
   instructions: "tabInstructions",
@@ -73,35 +72,30 @@ export function AgentSettings({ agent: initial, knowledgeBases, models, roles, i
   const editor = useAgentEditor(initial);
   const { agent, draft, update } = editor;
   const [tab, setTab] = useState<AgentTab>(initialTab);
-  const items: Array<TabItem<AgentTab>> = agentTabs.map((id) => ({ id, label: t(tabKey[id]) }));
 
-  function selectTab(next: AgentTab) {
+  function selectTab(next: string) {
+    if (!isAgentTab(next)) return;
     setTab(next);
     // Keep the tab in the URL so a reload or a shared link lands on the same section.
     window.history.replaceState(null, "", `?${new URLSearchParams({ [TAB_QUERY_KEY]: next })}`);
   }
 
   return (
-    <div className="flex min-h-full flex-col">
+    <Tabs value={tab} onValueChange={selectTab} className="min-h-full gap-0">
       <AgentSign {...signFacts({ agent, draft, knowledgeBases, models, roles })} />
-      <div className="border-rule bg-ground sticky top-0 z-10 border-b">
-        <Tabs
-          items={items}
-          value={tab}
-          onChange={selectTab}
-          idPrefix={TABS_ID}
-          label={t("tabsLabel")}
-          size="md"
-          className="mx-auto w-full max-w-272 px-2 md:px-6"
-        />
+      <div className="border-border bg-background sticky top-0 z-10 border-b">
+        <TabsList aria-label={t("tabsLabel")} className="mx-auto max-w-272 border-b-0 px-2 md:px-6">
+          {agentTabs.map((id) => (
+            <TabsTrigger key={id} value={id}>
+              {t(tabKey[id])}
+            </TabsTrigger>
+          ))}
+        </TabsList>
       </div>
-      <div
+      <TabsContent
         key={tab}
-        role="tabpanel"
-        id={tabPanelId(TABS_ID, tab)}
-        aria-labelledby={`${TABS_ID}-tab-${tab}`}
-        tabIndex={0}
-        className="animate-rise mx-auto w-full max-w-272 flex-1 px-4 pt-6 pb-28 outline-none focus-visible:outline-2 md:px-8"
+        value={tab}
+        className="animate-rise mx-auto w-full max-w-272 flex-1 px-4 pt-6 pb-28 outline-none md:px-8"
       >
         {/* Disabling the whole fieldset while saving keeps the draft identical to what was sent. */}
         <fieldset disabled={editor.saving} className="contents">
@@ -116,7 +110,7 @@ export function AgentSettings({ agent: initial, knowledgeBases, models, roles, i
             roles={roles}
           />
         </fieldset>
-      </div>
+      </TabsContent>
       <SaveBar
         dirty={editor.dirty}
         canSave={editor.canSave}
@@ -125,6 +119,6 @@ export function AgentSettings({ agent: initial, knowledgeBases, models, roles, i
         onSave={() => void editor.persist()}
         onDiscard={editor.discard}
       />
-    </div>
+    </Tabs>
   );
 }

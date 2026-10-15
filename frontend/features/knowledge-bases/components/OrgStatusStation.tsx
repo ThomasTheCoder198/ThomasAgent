@@ -71,7 +71,7 @@ function Ring({ failed, live }: { failed: boolean; live: boolean }) {
   }
   return (
     <span
-      className={cn("bg-paper size-5.5 rounded-full border-[5px]", failed ? "border-app" : "border-todo")}
+      className={cn("bg-card size-5.5 rounded-full border-[5px]", failed ? "border-app" : "border-border")}
     />
   );
 }
@@ -102,17 +102,17 @@ export function OrgStatusStation({ org }: { org: Organization }) {
           <h1 className="text-[22px] font-bold tracking-[-0.015em]">
             {failed ? t("orgFailed") : t("orgPending")}
           </h1>
-          <p className="text-ink-2 mt-2 font-medium">{org.name}</p>
+          <p className="text-muted-foreground mt-2 font-medium">{org.name}</p>
           {failed && org.ragxErrorCode && (
-            <p className="tabular text-app mt-1 text-xs">{org.ragxErrorCode}</p>
+            <p className="tabular text-destructive mt-1 text-xs">{org.ragxErrorCode}</p>
           )}
-          {stalled && <p className="text-ink-2 mt-2 leading-relaxed">{t("orgPendingStalled")}</p>}
+          {stalled && <p className="text-muted-foreground mt-2 leading-relaxed">{t("orgPendingStalled")}</p>}
           {failure && (
             <div className="mt-4">
               <InlineAlert title={failure} />
             </div>
           )}
-          <Button onClick={() => void retry()} pending={pending} disabled={pending} className="mt-6">
+          <Button onClick={() => void retry()} pending={pending} className="mt-6">
             {t("retryOrg")}
           </Button>
         </div>

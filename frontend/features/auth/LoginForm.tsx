@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { TextField } from "@/components/ui/TextField";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
 import type { Locale } from "@/i18n/config";
 import { apiFetch, describeApiError } from "@/lib/api/client";
 
@@ -39,20 +40,20 @@ export function LoginForm({ next }: { next: string }) {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
-      <TextField label={t("email")} name="email" type="email" autoComplete="username" required />
-      <TextField
-        label={t("password")}
-        name="password"
-        type="password"
-        autoComplete="current-password"
-        required
-      />
+      <Field label={t("email")}>
+        {(control) => <Input {...control} name="email" type="email" autoComplete="username" required />}
+      </Field>
+      <Field label={t("password")}>
+        {(control) => (
+          <Input {...control} name="password" type="password" autoComplete="current-password" required />
+        )}
+      </Field>
       {error && (
-        <p role="alert" className="text-app animate-rise text-sm font-medium">
+        <p role="alert" className="text-destructive animate-rise text-sm font-medium">
           {error}
         </p>
       )}
-      <Button type="submit" disabled={pending} pending={pending} className="mt-2 py-2.5 text-[15px]">
+      <Button type="submit" pending={pending} size="lg" className="mt-2">
         {pending ? t("submitting") : t("submit")}
       </Button>
     </form>

@@ -3,7 +3,7 @@
  * contracts/openapi/core.v1.yaml. An Agent has exactly one Knowledge Base (decision 2026-10-04); tool
  * policies follow spec §8 (auto / ask / off, risky tools default to ask).
  */
-import type { ToolLine } from "@/components/metro/lines";
+import type { ToolLine } from "@/components/lines";
 import type { Role } from "@/features/registry/types";
 
 export const AGENT_PATHS = {

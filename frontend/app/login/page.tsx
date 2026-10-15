@@ -19,7 +19,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const { next } = await searchParams;
   return (
     <main className="grid min-h-dvh grid-rows-[auto_1fr] md:grid-cols-[minmax(340px,2fr)_3fr] md:grid-rows-1">
-      <section className="bg-sign text-sign-ink flex flex-col gap-8 px-6 py-7 md:justify-between md:gap-10 md:px-10 md:py-10">
+      <section className="bg-sidebar text-sidebar-foreground flex flex-col gap-8 px-6 py-7 md:justify-between md:gap-10 md:px-10 md:py-10">
         <BrandMark label="ThomasAgent" className="animate-fade" />
         <p className="animate-rise max-w-[18ch] text-[clamp(1.35rem,2.6vw,2.5rem)] leading-[1.15] font-semibold tracking-[-0.02em]">
           {t("signLine")}
@@ -34,7 +34,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <div className="relative w-full max-w-sm pl-9">
           <span
             aria-hidden
-            className="border-model bg-ground animate-pop absolute top-2 left-0 size-5 rounded-full border-[5px] [animation-delay:0.5s]"
+            className="border-model bg-background animate-pop absolute top-2 left-0 size-5 rounded-full border-[5px] [animation-delay:0.5s]"
           />
           <span
             aria-hidden
@@ -42,7 +42,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           />
           <div className="animate-rise">
             <h1 className="text-[28px] font-bold tracking-[-0.02em]">{t("title")}</h1>
-            <p className="text-ink-2 mt-1 mb-9">{t("subtitle")}</p>
+            <p className="text-muted-foreground mt-1 mb-9">{t("subtitle")}</p>
             <LoginForm next={safeNext(next)} />
           </div>
         </div>

@@ -17,9 +17,6 @@ import { deleteKnowledgeBase } from "../api";
 import { ConfirmDelete } from "./ConfirmDelete";
 import { RenameKnowledgeBaseDialog } from "./KnowledgeBaseDialogs";
 
-const SIGN_BUTTON =
-  "border-sign-rule text-sign-ink hover:bg-sign-hover min-h-touch bg-transparent md:min-h-0";
-
 /** The KB's platform sign (the Agent sign's band): name at display size, its plate, count and model in mono. */
 export function KnowledgeBaseSign({ orgId, knowledgeBase }: { orgId: string; knowledgeBase: KnowledgeBase }) {
   const t = useTranslations("kb");
@@ -28,13 +25,13 @@ export function KnowledgeBaseSign({ orgId, knowledgeBase }: { orgId: string; kno
   const [dialog, setDialog] = useState<"rename" | "delete" | null>(null);
   const close = (open: boolean) => !open && setDialog(null);
   return (
-    <header className="bg-sign-band text-sign-ink border-sign-rule dark:border-b">
+    <header className="bg-sidebar text-sidebar-foreground border-sidebar-border dark:border-b">
       <div className="mx-auto w-full max-w-272 px-4 pt-4 pb-6 md:px-8 md:pt-6 md:pb-7">
         <div className="flex items-center gap-2">
-          <MenuButton tone="sign" />
+          <MenuButton />
           <Link
             href={orgHome(orgId)}
-            className="text-sign-ink-2 hover:text-sign-ink min-h-touch inline-flex items-center gap-1.5 text-xs font-medium transition-colors md:min-h-0"
+            className="text-muted-foreground hover:text-sidebar-foreground inline-flex min-h-11 items-center gap-1.5 text-xs font-medium transition-colors md:min-h-0"
           >
             <ArrowLeft aria-hidden className="size-3.5" />
             {t("back")}
@@ -47,19 +44,19 @@ export function KnowledgeBaseSign({ orgId, knowledgeBase }: { orgId: string; kno
           <LineBadge line="kb" icon={LibraryBig}>
             {t("plate")}
           </LineBadge>
-          <span className="tabular text-sign-ink-2 text-xs">
+          <span className="tabular text-muted-foreground text-xs">
             {t("files", { count: knowledgeBase.fileCount })}
           </span>
-          <span className="tabular text-sign-ink-2 text-xs">
+          <span className="tabular text-muted-foreground text-xs">
             {knowledgeBase.embeddingModel} · {knowledgeBase.embeddingDims}
           </span>
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
-          <Button variant="outline" className={SIGN_BUTTON} onClick={() => setDialog("rename")}>
+          <Button variant="outline" onClick={() => setDialog("rename")}>
             {t("rename")}
           </Button>
           {!knowledgeBase.isDefault && (
-            <Button variant="outline" className={SIGN_BUTTON} onClick={() => setDialog("delete")}>
+            <Button variant="outline" onClick={() => setDialog("delete")}>
               {t("delete")}
             </Button>
           )}

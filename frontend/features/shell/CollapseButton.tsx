@@ -3,7 +3,7 @@
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useSyncExternalStore } from "react";
 
-import { IconButton } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 
 import { useShellMenu } from "./shell-menu";
 import { shortcutHint } from "./sidebar-state";
@@ -26,19 +26,17 @@ export function CollapseButton() {
   if (!menu) return null;
   const label = menu.collapsed ? menu.expandLabel : menu.collapseLabel;
   return (
-    <IconButton
-      tone="sign"
-      label={`${label} (${hint})`}
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label={`${label} (${hint})`}
+      title={`${label} (${hint})`}
       aria-expanded={!menu.collapsed}
       aria-controls="workspace-sidebar"
       onClick={menu.toggleCollapsed}
-      className="hidden size-8 md:grid"
+      className="hidden md:inline-flex"
     >
-      {menu.collapsed ? (
-        <PanelLeftOpen aria-hidden className="size-4" />
-      ) : (
-        <PanelLeftClose aria-hidden className="size-4" />
-      )}
-    </IconButton>
+      {menu.collapsed ? <PanelLeftOpen aria-hidden /> : <PanelLeftClose aria-hidden />}
+    </Button>
   );
 }

@@ -24,18 +24,18 @@ function KbOption({ id, selected, onSelect, tone = "kb", children }: OptionProps
   return (
     <label
       className={cn(
-        "has-focus-visible:outline-focus flex cursor-pointer items-center gap-3 rounded-lg border px-3.5 py-3 transition-[background-color,border-color] duration-200 has-focus-visible:outline-2",
+        "has-focus-visible:outline-ring flex cursor-pointer items-center gap-3 rounded-lg border px-3.5 py-3 transition-[background-color,border-color] duration-200 has-focus-visible:outline-2",
         selected && !warn && "border-kb bg-kb-tint",
         selected && warn && "border-app bg-app-tint",
-        !selected && "border-rule hover:border-rule-strong",
+        !selected && "border-border hover:border-input",
       )}
     >
       <input type="radio" name="kb" value={id} checked={selected} onChange={onSelect} className="sr-only" />
       <span
         aria-hidden
         className={cn(
-          "bg-paper size-4.5 shrink-0 rounded-full transition-[border-width,border-color] duration-200",
-          selected ? "border-[5px]" : "border-rule-strong border-2",
+          "bg-card size-4.5 shrink-0 rounded-full transition-[border-width,border-color] duration-200",
+          selected ? "border-[5px]" : "border-input border-2",
           selected && (warn ? "border-app" : "border-kb"),
         )}
       />
@@ -75,7 +75,9 @@ export function KnowledgeTab({ agent, draft, update, knowledgeBases }: Props) {
             >
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium">{t("kbUnknown")}</span>
-                <span className="text-ink-2 block text-xs">{t("kbUnknownHint", { id: agent.kbId })}</span>
+                <span className="text-muted-foreground block text-xs">
+                  {t("kbUnknownHint", { id: agent.kbId })}
+                </span>
               </span>
             </KbOption>
           )}
@@ -87,7 +89,9 @@ export function KnowledgeTab({ agent, draft, update, knowledgeBases }: Props) {
               onSelect={() => update({ kbId: kb.id })}
             >
               <span className="min-w-0 flex-1 truncate text-sm font-medium">{kb.name}</span>
-              <span className="tabular text-ink-3 text-xs">{t("documents", { count: kb.documents })}</span>
+              <span className="tabular text-muted-foreground text-xs">
+                {t("documents", { count: kb.documents })}
+              </span>
             </KbOption>
           ))}
         </div>

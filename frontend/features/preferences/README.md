@@ -6,7 +6,7 @@ Theme (`light | dark | system`, via next-themes on `data-theme`) and language (`
 
 ## Entry points
 
-- `ThemeSwitcher.tsx`, `LocaleSwitcher.tsx` — both drawn with `components/ui/Segmented`.
+- `ThemeSwitcher.tsx`, `LocaleSwitcher.tsx` — both drawn with `components/ui/SegmentedChoice`.
 - `actions.ts` — `setLocale` server action.
 
 ## Dependencies

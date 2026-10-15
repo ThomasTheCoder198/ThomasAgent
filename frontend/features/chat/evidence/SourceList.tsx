@@ -28,19 +28,19 @@ export function SourceList({ citations, selected, onSelect, compact }: Props) {
             type="button"
             onClick={() => onSelect(c.n)}
             aria-current={c.n === selected ? "true" : undefined}
-            className="hover:bg-ground aria-[current=true]:bg-kb-tint grid w-full grid-cols-[auto_1fr_auto] items-center gap-2.5 rounded-md px-1.5 py-1.5 text-left text-[13px]"
+            className="hover:bg-background aria-[current=true]:bg-kb-tint grid w-full grid-cols-[auto_1fr_auto] items-center gap-2.5 rounded-md px-1.5 py-1.5 text-left text-[13px]"
           >
             <CitationRoundel n={c.n} label={tChat("citation", { n: c.n })} />
             <span className="min-w-0 truncate">
               {c.fileName}
               {c.locator && (
-                <small className="text-ink-3 ml-1.5 text-xs">
+                <small className="text-muted-foreground ml-1.5 text-xs">
                   {t("pageShort", { page: c.locator.page })} {c.title}
                 </small>
               )}
             </span>
             {c.locator && (
-              <span className="tabular text-ink-3 text-[11px]" title={t("score")}>
+              <span className="tabular text-muted-foreground text-[11px]" title={t("score")}>
                 {c.locator.score.toFixed(SCORE_DIGITS)}
               </span>
             )}

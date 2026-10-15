@@ -29,13 +29,13 @@ export function AgentSign({ name, description, kbName, sources, toolCount, model
     ...sources.map((s) => ({ line: s.line, label: s.name })),
   ];
   return (
-    <header className="bg-sign-band text-sign-ink border-sign-rule dark:border-b">
+    <header className="bg-sidebar text-sidebar-foreground border-sidebar-border dark:border-b">
       <div className="mx-auto w-full max-w-272 px-4 pt-4 pb-6 md:px-8 md:pt-6 md:pb-7">
         <div className="flex items-center gap-2">
-          <MenuButton tone="sign" />
+          <MenuButton />
           <Link
             href="/agents"
-            className="text-sign-ink-2 hover:text-sign-ink inline-flex items-center gap-1.5 text-xs font-medium transition-colors"
+            className="text-muted-foreground hover:text-sidebar-foreground inline-flex items-center gap-1.5 text-xs font-medium transition-colors"
           >
             <ArrowLeft aria-hidden className="size-3.5" />
             {t("back")}
@@ -44,16 +44,16 @@ export function AgentSign({ name, description, kbName, sources, toolCount, model
         <h1 className="animate-rise mt-4 truncate text-[clamp(1.75rem,3vw,2.6rem)] leading-tight font-bold tracking-[-0.025em]">
           {name}
         </h1>
-        {description && <p className="text-sign-ink-2 mt-1.5 max-w-[70ch] truncate">{description}</p>}
+        {description && <p className="text-muted-foreground mt-1.5 max-w-[70ch] truncate">{description}</p>}
         <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
           <LineBadge line="kb" icon={LibraryBig}>
             {kbName}
           </LineBadge>
-          <span className="text-sign-ink-2 inline-flex items-center gap-2">
+          <span className="text-muted-foreground inline-flex items-center gap-2">
             <LineDots lines={sources.map((s) => s.line)} size="md" />
             {t("toolCount", { count: toolCount })}
           </span>
-          {model && <span className="tabular text-sign-ink-2 text-xs">{model}</span>}
+          {model && <span className="tabular text-muted-foreground text-xs">{model}</span>}
         </div>
         <div className="animate-draw-x mt-6 max-w-xl">
           <RouteStrip stops={stops} />

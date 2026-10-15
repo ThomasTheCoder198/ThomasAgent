@@ -27,7 +27,7 @@ test.beforeEach(async ({ request }, testInfo) => {
 test("edits a tool policy, saves it, and the change survives a reload", async ({ page }, testInfo) => {
   await openAgent(page, agentFor(testInfo), "tools");
   const policy = page.getByRole("group", { name: /Gửi email/ });
-  await policy.getByRole("radio", { name: "Tự động" }).check({ force: true });
+  await policy.getByRole("radio", { name: "Tự động" }).click();
   await saveButton(page).click();
   await expect(page.getByText("Đã lưu")).toBeVisible();
   await page.reload();

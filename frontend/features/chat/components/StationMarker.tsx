@@ -2,7 +2,7 @@
 
 import { ThinkingOrb } from "thinking-orbs";
 
-import { lineBorder, lineTint, type Line } from "@/components/metro/lines";
+import { lineBorder, lineTint, type Line } from "@/components/lines";
 import { cn } from "@/lib/cn";
 
 export type OrbState = "solving" | "searching" | "connecting" | "composing";
@@ -43,9 +43,9 @@ export function StationMarker({ line, live = false, orb, tone = "default" }: Pro
     <span
       className={cn(
         // "Awaiting" is a thin hollow ring everywhere (here and in the mini line): the train has not reached it.
-        "bg-paper block size-4.5 rounded-full",
+        "bg-card block size-4.5 rounded-full",
         tone === "awaiting" ? "border-2" : "border-4",
-        tone === "error" ? "border-app" : tone === "muted" ? "border-todo" : lineBorder[line],
+        tone === "error" ? "border-app" : tone === "muted" ? "border-border" : lineBorder[line],
       )}
     />
   );

@@ -11,7 +11,7 @@ export function PageHeader({ title, body, actions }: { title: string; body?: str
         <h1 className="text-[clamp(1.6rem,2.4vw,2.1rem)] leading-tight font-bold tracking-[-0.02em]">
           {title}
         </h1>
-        {body && <p className="text-ink-2 mt-1.5 max-w-[60ch]">{body}</p>}
+        {body && <p className="text-muted-foreground mt-1.5 max-w-[60ch]">{body}</p>}
       </div>
       {actions}
     </header>

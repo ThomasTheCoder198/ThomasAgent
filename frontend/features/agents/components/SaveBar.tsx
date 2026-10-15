@@ -28,9 +28,10 @@ function StatusText({ save, errors }: Pick<Props, "save" | "errors">) {
       </span>
     );
   }
-  if (save.status === "error") return <span className="text-app text-sm font-medium">{save.message}</span>;
-  if (errors.name) return <span className="text-app text-sm font-medium">{t("nameRequired")}</span>;
-  return <span className="text-sign-ink-2 text-sm">{t("unsaved")}</span>;
+  if (save.status === "error")
+    return <span className="text-destructive text-sm font-medium">{save.message}</span>;
+  if (errors.name) return <span className="text-destructive text-sm font-medium">{t("nameRequired")}</span>;
+  return <span className="text-muted-foreground text-sm">{t("unsaved")}</span>;
 }
 
 /**
@@ -49,7 +50,7 @@ export function SaveBar({ dirty, canSave, errors, save, onSave, onDiscard }: Pro
         visible ? "translate-y-0 opacity-100" : "translate-y-full opacity-0",
       )}
     >
-      <div className="bg-sign text-sign-ink shadow-lift pointer-events-auto mx-auto flex max-w-272 flex-wrap items-center gap-3 rounded-xl px-4 py-3">
+      <div className="bg-sidebar text-sidebar-foreground shadow-lift pointer-events-auto mx-auto flex max-w-272 flex-wrap items-center gap-3 rounded-xl px-4 py-3">
         <div aria-live="polite" className="min-w-0">
           {visible && <StatusText save={save} errors={errors} />}
         </div>
@@ -59,7 +60,7 @@ export function SaveBar({ dirty, canSave, errors, save, onSave, onDiscard }: Pro
               variant="ghost"
               onClick={onDiscard}
               disabled={save.status === "saving"}
-              className="text-sign-ink-2 hover:bg-sign-active hover:text-sign-ink"
+              className="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
             >
               {t("discard")}
             </Button>
@@ -67,7 +68,7 @@ export function SaveBar({ dirty, canSave, errors, save, onSave, onDiscard }: Pro
               onClick={onSave}
               disabled={!canSave || save.status === "saving"}
               pending={save.status === "saving"}
-              className="bg-sign-ink text-sign hover:bg-sign-ink/90"
+              className="bg-sidebar-foreground text-sidebar hover:bg-sidebar-foreground/90"
             >
               {save.status === "saving" ? t("saving") : t("save")}
             </Button>

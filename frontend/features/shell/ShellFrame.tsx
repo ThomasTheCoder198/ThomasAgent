@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { BrandMark } from "@/components/metro/BrandMark";
-import { IconButton } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 
 import { MenuButton } from "./MenuButton";
@@ -40,14 +40,16 @@ export function ShellFrame({ sidebar, initialCollapsed, labels, children }: Prop
         >
           {sidebar}
           {open && (
-            <IconButton
-              tone="sign"
-              label={labels.closeMenu}
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={labels.closeMenu}
+              title={labels.closeMenu}
               onClick={close}
               className="absolute top-4 right-3 md:hidden"
             >
-              <X aria-hidden className="size-4" />
-            </IconButton>
+              <X aria-hidden />
+            </Button>
           )}
         </div>
         {open && (
@@ -55,8 +57,8 @@ export function ShellFrame({ sidebar, initialCollapsed, labels, children }: Prop
         )}
         <div className="flex min-w-0 flex-1 flex-col">
           {!ownsHeader && (
-            <div className="bg-sign text-sign-ink flex h-12 shrink-0 items-center gap-2 px-2 md:hidden">
-              <MenuButton tone="sign" />
+            <div className="bg-sidebar text-sidebar-foreground flex h-12 shrink-0 items-center gap-2 px-2 md:hidden">
+              <MenuButton />
               <BrandMark label="ThomasAgent" className="scale-90" />
             </div>
           )}

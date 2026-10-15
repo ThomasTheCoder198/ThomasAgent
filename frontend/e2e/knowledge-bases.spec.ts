@@ -150,12 +150,12 @@ test("a file storage refuses shows a toast with the mapped message, the S3 code 
   await page
     .locator('input[type="file"]')
     .setInputFiles({ name, mimeType: "text/markdown", buffer: Buffer.from("more than one byte") });
-  const toast = page.getByRole("alert").filter({ hasText: "EntityTooLarge" });
+  const toast = page.locator("[data-sonner-toast]").filter({ hasText: "EntityTooLarge" });
   await expect(toast).toContainText(name);
   await expect(toast).toContainText("Tệp đã thay đổi sau khi được chọn. Hãy chọn lại (EntityTooLarge)");
   await expect(toast).not.toContainText("Mã yêu cầu");
   await toast.getByRole("button", { name: "Đóng thông báo" }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "EntityTooLarge" })).toHaveCount(0);
+  await expect(page.locator("[data-sonner-toast]").filter({ hasText: "EntityTooLarge" })).toHaveCount(0);
   await page.screenshot({ path: "../docs/superpowers/reports/m1-2-ui-kb-storage-refused-vi.png" });
 });
 

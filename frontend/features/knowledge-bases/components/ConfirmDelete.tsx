@@ -3,8 +3,16 @@
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/AlertDialog";
 import { Button } from "@/components/ui/Button";
-import { Dialog, DialogClose, DialogContent } from "@/components/ui/Dialog";
 import { InlineAlert } from "@/components/ui/InlineAlert";
 import { describeApiError } from "@/lib/api/client";
 
@@ -37,20 +45,21 @@ export function ConfirmDelete({ onOpenChange, title, body, onConfirm }: Props) {
   }
 
   return (
-    <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent title={title} description={body}>
-        <div className="flex flex-col gap-4">
-          {failure && <InlineAlert title={failure} />}
-          <div className="flex flex-wrap justify-end gap-2">
-            <DialogClose asChild>
-              <Button variant="ghost">{t("cancel")}</Button>
-            </DialogClose>
-            <Button onClick={() => void confirm()} pending={pending} disabled={pending}>
-              {t("delete")}
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <AlertDialog open onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{body}</AlertDialogDescription>
+        </AlertDialogHeader>
+        {failure && <InlineAlert title={failure} />}
+        <AlertDialogFooter>
+          <AlertDialogCancel variant="ghost">{t("cancel")}</AlertDialogCancel>
+          {/* A plain Button, not AlertDialogAction: the dialog must stay open while the request runs or fails. */}
+          <Button variant="destructive" onClick={() => void confirm()} pending={pending}>
+            {t("delete")}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

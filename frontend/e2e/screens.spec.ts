@@ -94,7 +94,7 @@ test("@screens capture", async ({ page }) => {
   await page
     .getByRole("group", { name: "Chính sách cho Huỷ hoá đơn" })
     .getByRole("radio", { name: "Hỏi trước" })
-    .check({ force: true });
+    .click();
   await shot(page, "agent-unsaved-desktop-light");
   await page.getByRole("button", { name: "Hoàn tác" }).click();
   await theme(page, "dark");

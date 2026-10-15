@@ -8,7 +8,7 @@
  */
 import type { UIMessage } from "ai";
 
-import type { Line, ToolLine } from "@/components/metro/lines";
+import type { Line, ToolLine } from "@/components/lines";
 
 export const CHAT_PATHS = {
   chat: "/api/v1/chat",

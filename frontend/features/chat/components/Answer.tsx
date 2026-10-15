@@ -52,17 +52,17 @@ const components = {
     </a>
   ),
   table: ({ children }) => (
-    <div className="border-rule bg-paper animate-fade my-2 mb-3.5 overflow-x-auto rounded-[10px] border">
+    <div className="border-border bg-card animate-fade my-2 mb-3.5 overflow-x-auto rounded-[10px] border">
       <table className="w-full border-collapse text-sm">{children}</table>
     </div>
   ),
   th: ({ children }) => (
-    <th className="border-rule bg-paper-2 text-ink-2 border-b px-3.5 py-2.25 text-left text-[12.5px] font-semibold">
+    <th className="border-border bg-secondary text-muted-foreground border-b px-3.5 py-2.25 text-left text-[12.5px] font-semibold">
       {children}
     </th>
   ),
   td: ({ children }) => (
-    <td className="border-rule-2 border-b px-3.5 py-2.5 align-top first:w-[30%] first:font-semibold [tr:last-child_&]:border-b-0">
+    <td className="border-border border-b px-3.5 py-2.5 align-top first:w-[30%] first:font-semibold [tr:last-child_&]:border-b-0">
       {children}
     </td>
   ),

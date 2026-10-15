@@ -2,7 +2,7 @@
  * The only place that knows the AI SDK message protocol. It turns a streamed `ChatMessage` into the
  * Metro view model the presentational components draw: stations on a line, answer text, citations, usage.
  */
-import { isToolLine, type ToolLine } from "@/components/metro/lines";
+import { isToolLine, type ToolLine } from "@/components/lines";
 
 import {
   METADATA_NS,

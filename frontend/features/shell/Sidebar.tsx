@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 import { BrandMark } from "@/components/metro/BrandMark";
 import { LineDots } from "@/components/metro/LineDots";
-import type { Line, ToolLine } from "@/components/metro/lines";
+import type { Line, ToolLine } from "@/components/lines";
 import type { SessionUser } from "@/features/auth/types";
 import { cn } from "@/lib/cn";
 
@@ -46,15 +46,15 @@ type Props = {
 
 const NEW_CHAT_HREF = "/chat";
 const rowLink =
-  "hover:bg-sign-hover aria-[current=page]:bg-sign-active aria-[current=page]:text-sign-ink flex items-center rounded-md transition-colors";
+  "hover:bg-sidebar-accent aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-sidebar-foreground flex items-center rounded-md transition-colors";
 
 function Recents({ recents, labels, activeHref }: Pick<Props, "recents" | "labels" | "activeHref">) {
   return (
     <>
-      <h2 className="text-sign-ink-2 mx-2.5 mt-5.5 mb-2 text-xs font-semibold">{labels.recents}</h2>
+      <h2 className="text-muted-foreground mx-2.5 mt-5.5 mb-2 text-xs font-semibold">{labels.recents}</h2>
       <ul className="-mx-1 flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-1">
         {recents.length === 0 && (
-          <li className="text-sign-ink-2 px-2.5 text-xs leading-relaxed">{labels.recentsEmpty}</li>
+          <li className="text-muted-foreground px-2.5 text-xs leading-relaxed">{labels.recentsEmpty}</li>
         )}
         {recents.map((r) => {
           const href = `/chat/${r.id}`;
@@ -66,7 +66,7 @@ function Recents({ recents, labels, activeHref }: Pick<Props, "recents" | "label
                 serverPath={activeHref}
                 className={cn(
                   rowLink,
-                  "text-sign-ink/85 max-md:min-h-touch grid grid-cols-[1fr_auto] items-center gap-2 px-2.5 py-1.5 text-[13.5px]",
+                  "text-sidebar-foreground/85 grid grid-cols-[1fr_auto] items-center gap-2 px-2.5 py-1.5 text-[13.5px] max-md:min-h-11",
                 )}
               >
                 <span className="truncate" title={r.title}>
@@ -95,7 +95,7 @@ function PrimaryActions({ labels }: Pick<Props, "labels">) {
         href={NEW_CHAT_HREF}
         title={labels.newChat}
         className={cn(
-          "bg-sign-ink text-sign max-md:min-h-touch flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-semibold transition-[opacity,transform] hover:opacity-90 active:scale-[0.97]",
+          "bg-sidebar-foreground text-sidebar flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-semibold transition-[opacity,transform] hover:opacity-90 active:scale-[0.97] max-md:min-h-11",
           RAIL_CENTER,
         )}
       >
@@ -107,7 +107,7 @@ function PrimaryActions({ labels }: Pick<Props, "labels">) {
         disabled
         title={labels.searchSoon}
         className={cn(
-          "border-sign-rule text-sign-ink-2 max-md:min-h-touch mt-2 flex cursor-not-allowed items-center gap-2.5 rounded-lg border px-3 py-2 text-sm",
+          "border-sidebar-border text-muted-foreground mt-2 flex cursor-not-allowed items-center gap-2.5 rounded-lg border px-3 py-2 text-sm max-md:min-h-11",
           RAIL_CENTER,
         )}
       >
@@ -124,20 +124,20 @@ function OwnerPlate({ user, labels, footer }: Pick<Props, "user" | "labels" | "f
   return (
     <div
       className={cn(
-        "border-sign-rule mt-auto flex items-center gap-2.5 border-t px-2 pt-2.5",
+        "border-sidebar-border mt-auto flex items-center gap-2.5 border-t px-2 pt-2.5",
         "md:group-data-[collapsed=true]/shell:flex-col md:group-data-[collapsed=true]/shell:px-0",
       )}
     >
       <span
         title={name}
-        className="bg-sign-active grid size-7.5 shrink-0 place-items-center rounded-full text-[13px] font-bold"
+        className="bg-sidebar-accent grid size-7.5 shrink-0 place-items-center rounded-full text-[13px] font-bold"
         aria-hidden
       >
         {name.slice(0, 1).toUpperCase()}
       </span>
       <span className={cn("min-w-0 text-sm leading-tight", RAIL_TEXT)}>
         <span className="block truncate">{name}</span>
-        <small className="text-sign-ink-2 block truncate text-xs">{labels.tenant}</small>
+        <small className="text-muted-foreground block truncate text-xs">{labels.tenant}</small>
       </span>
       {footer}
     </div>
@@ -149,7 +149,7 @@ export function Sidebar({ items, recents, user, labels, activeHref, footer, org,
   return (
     <aside
       className={cn(
-        "bg-sign text-sign-ink ease-out-expo flex h-dvh w-62 shrink-0 flex-col px-3.5 pt-4.5 pb-3.5 transition-[width,padding] duration-300",
+        "bg-sidebar text-sidebar-foreground ease-out-expo flex h-dvh w-62 shrink-0 flex-col px-3.5 pt-4.5 pb-3.5 transition-[width,padding] duration-300",
         "md:group-data-[collapsed=true]/shell:w-16 md:group-data-[collapsed=true]/shell:px-2.5",
         className,
       )}
@@ -174,7 +174,7 @@ export function Sidebar({ items, recents, user, labels, activeHref, footer, org,
             match="section"
             serverPath={activeHref}
             title={label}
-            className={cn(rowLink, "max-md:min-h-touch gap-2.5 px-2.5 py-2 text-sm", RAIL_CENTER)}
+            className={cn(rowLink, "gap-2.5 px-2.5 py-2 text-sm max-md:min-h-11", RAIL_CENTER)}
           >
             <Icon aria-hidden className="size-4 shrink-0" />
             <span className={RAIL_TEXT}>{label}</span>

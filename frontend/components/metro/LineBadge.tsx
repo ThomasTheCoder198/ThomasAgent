@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { lineBg, onLine, type Line } from "@/components/metro/lines";
+import { lineBg, onLine, type Line } from "@/components/lines";
 import { cn } from "@/lib/cn";
 
 /** A line's name plate: the solid colour block every tool source wears (sidebar, approvals, evidence sign). */

@@ -10,8 +10,8 @@ export function OrgStatusDot({ status, label }: { status: RagxStatus; label: str
       aria-label={label}
       className={cn(
         "inline-block size-2.5 shrink-0 rounded-full",
-        status === "ready" && "bg-sign-ink",
-        status === "pending" && "border-sign-ink-2 border-2",
+        status === "ready" && "bg-sidebar-foreground",
+        status === "pending" && "border-muted-foreground border-2",
         status === "failed" && "bg-app",
       )}
     />

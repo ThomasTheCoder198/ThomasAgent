@@ -66,7 +66,7 @@ export function UploadDropZone({ onFiles }: { onFiles: (files: File[]) => void }
   }
 
   return (
-    <div className="border-rule flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-3 py-4">
+    <div className="border-border flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-3 py-4">
       <input
         ref={input}
         type="file"
@@ -77,17 +77,17 @@ export function UploadDropZone({ onFiles }: { onFiles: (files: File[]) => void }
         tabIndex={-1}
         aria-hidden
       />
-      <Button onClick={() => input.current?.click()} className="min-h-touch md:min-h-0">
+      <Button onClick={() => input.current?.click()}>
         <Upload aria-hidden className="size-4" />
         {t("upload")}
       </Button>
-      <span className="text-ink-3 text-[13px]">{t("dropHint")}</span>
+      <span className="text-muted-foreground text-[13px]">{t("dropHint")}</span>
       {dragging && (
         <div
           aria-hidden
-          className="bg-paper/85 pointer-events-none fixed inset-0 z-30 grid place-items-center p-4"
+          className="bg-card/85 pointer-events-none fixed inset-0 z-30 grid place-items-center p-4"
         >
-          <div className="border-rule-strong text-ink grid size-full place-items-center rounded-xl border-2 border-dashed text-lg font-semibold">
+          <div className="border-input text-foreground grid size-full place-items-center rounded-xl border-2 border-dashed text-lg font-semibold">
             {t("dropHere")}
           </div>
         </div>

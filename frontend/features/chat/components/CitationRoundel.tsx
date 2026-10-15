@@ -1,4 +1,4 @@
-import { lineBg, onLine, type Line } from "@/components/metro/lines";
+import { lineBg, onLine, type Line } from "@/components/lines";
 import { cn } from "@/lib/cn";
 
 type Props = {

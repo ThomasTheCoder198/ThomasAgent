@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 
-import { lineBg, lineBorder, type Line } from "@/components/metro/lines";
+import { lineBg, lineBorder, type Line } from "@/components/lines";
 import { cn } from "@/lib/cn";
 
 /**
@@ -20,7 +20,7 @@ export function MiniLine({ lines, pending }: { lines: readonly Line[]; pending?:
       {pending && (
         <>
           <span className={cn("h-[3px] w-3.5 opacity-50", lineBg[pending])} />
-          <span className={cn("bg-paper size-[11px] rounded-full border-2", lineBorder[pending])} />
+          <span className={cn("bg-card size-[11px] rounded-full border-2", lineBorder[pending])} />
         </>
       )}
     </span>

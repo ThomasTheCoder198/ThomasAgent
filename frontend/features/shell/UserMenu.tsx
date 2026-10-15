@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 
-import { IconButton } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { useDismiss } from "@/components/ui/useDismiss";
 import { AUTH_PATHS, LOGIN_ROUTE } from "@/features/auth/paths";
 import { LocaleSwitcher } from "@/features/preferences/LocaleSwitcher";
@@ -27,17 +27,19 @@ export function UserMenu() {
 
   return (
     <div ref={ref} className="relative ml-auto">
-      <IconButton
-        tone="sign"
-        label={t("shell.settings")}
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={t("shell.settings")}
+        title={t("shell.settings")}
         aria-expanded={open}
         aria-haspopup="true"
         onClick={() => setOpen((v) => !v)}
       >
-        <Settings aria-hidden className="size-4" />
-      </IconButton>
+        <Settings aria-hidden />
+      </Button>
       {open && (
-        <div className="bg-sign border-sign-rule shadow-lift absolute bottom-11 left-0 z-20 flex w-60 flex-col gap-3.5 rounded-xl border p-3.5">
+        <div className="bg-sidebar border-sidebar-border shadow-lift absolute bottom-11 left-0 z-20 flex w-60 flex-col gap-3.5 rounded-xl border p-3.5">
           <ThemeSwitcher
             labels={{
               light: t("preferences.light"),
@@ -50,7 +52,7 @@ export function UserMenu() {
           <button
             type="button"
             onClick={logout}
-            className="text-sign-ink hover:bg-sign-active -mx-1 flex items-center gap-2 rounded-md px-1 py-1.5 text-sm"
+            className="text-sidebar-foreground hover:bg-sidebar-accent -mx-1 flex items-center gap-2 rounded-md px-1 py-1.5 text-sm"
           >
             <LogOut aria-hidden className="size-4" />
             {t("auth.logout")}

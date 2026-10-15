@@ -1,82 +1,128 @@
 "use client";
 
+import { XIcon } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import { useRef, type ReactNode, type RefObject } from "react";
+import type { ComponentProps, RefObject } from "react";
 
 import { cn } from "@/lib/cn";
 
-import { isInToastRegion } from "./Toast";
+import { useModalLayer } from "./useModalLayer";
 
-export const Dialog = DialogPrimitive.Root;
-export const DialogTrigger = DialogPrimitive.Trigger;
-export const DialogClose = DialogPrimitive.Close;
-
-const FALLBACK_FOCUS_SELECTOR = "main";
-
-/**
- * Dialogs mount already open, without a Radix Trigger, so Radix has no trigger to return focus to and
- * focus would drop to <body>. The opener is remembered when the dialog takes focus; if the opener is gone
- * (a deleted row, a closed menu) focus goes to the page's main landmark instead of being lost.
- */
-function restoreFocus(opener: HTMLElement | null) {
-  if (opener?.isConnected) {
-    opener.focus();
-    return;
-  }
-  const fallback = document.querySelector<HTMLElement>(FALLBACK_FOCUS_SELECTOR);
-  fallback?.setAttribute("tabindex", "-1");
-  fallback?.focus({ preventScroll: true });
+export function Dialog(props: ComponentProps<typeof DialogPrimitive.Root>) {
+  return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
 
-/** A lifted notice: paper on a scrim, title first, focus trapped and returned by Radix. */
-export function DialogContent({
-  title,
-  description,
-  children,
-  className,
-  returnFocusRef,
-}: {
-  title: string;
-  description?: string;
-  children: ReactNode;
-  className?: string;
+export function DialogTrigger(props: ComponentProps<typeof DialogPrimitive.Trigger>) {
+  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
+}
+
+export function DialogClose(props: ComponentProps<typeof DialogPrimitive.Close>) {
+  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
+}
+
+export function DialogOverlay({ className, ...props }: ComponentProps<typeof DialogPrimitive.Overlay>) {
+  return (
+    <DialogPrimitive.Overlay
+      data-slot="dialog-overlay"
+      className={cn(
+        "bg-scrim data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 fixed inset-0 z-40 duration-200",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+type ContentProps = ComponentProps<typeof DialogPrimitive.Content> & {
+  showCloseButton?: boolean;
   /** Where focus goes on close when the opener unmounts before the dialog does (a menu item, for one). */
   returnFocusRef?: RefObject<HTMLElement | null>;
-}) {
-  const opener = useRef<HTMLElement | null>(null);
+};
+
+/** A lifted notice on a scrim: card fill, lift shadow, 14px radius; focus is trapped and returned. */
+export function DialogContent({
+  className,
+  children,
+  showCloseButton = true,
+  returnFocusRef,
+  ...props
+}: ContentProps) {
+  const t = useTranslations("common");
+  const layer = useModalLayer(returnFocusRef);
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="bg-scrim animate-fade fixed inset-0 z-40" />
+      <DialogOverlay />
       <DialogPrimitive.Content
-        onOpenAutoFocus={() => {
-          const active = document.activeElement;
-          opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
-        }}
-        // A toast floats above the scrim; dismissing it is not a click outside the dialog.
-        onInteractOutside={(event) => {
-          if (isInToastRegion(event.target)) event.preventDefault();
-        }}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          restoreFocus(returnFocusRef?.current ?? opener.current);
-        }}
+        data-slot="dialog-content"
+        {...props}
+        {...layer}
         className={cn(
-          "bg-paper border-rule shadow-lift animate-rise fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border p-5 sm:p-6",
+          "bg-card text-card-foreground border-border shadow-lift data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg border p-5 duration-200 sm:p-6",
           className,
         )}
       >
-        <DialogPrimitive.Title className="text-[17px] leading-snug font-bold tracking-[-0.01em]">
-          {title}
-        </DialogPrimitive.Title>
-        {description ? (
-          <DialogPrimitive.Description className="text-ink-2 mt-1.5 text-[13.5px] leading-relaxed">
-            {description}
-          </DialogPrimitive.Description>
-        ) : (
-          <DialogPrimitive.Description className="sr-only">{title}</DialogPrimitive.Description>
+        {children}
+        {showCloseButton && (
+          <DialogPrimitive.Close
+            data-slot="dialog-close"
+            className="text-muted-foreground hover:bg-accent hover:text-foreground absolute top-3 right-3 grid size-8 place-items-center rounded-md transition-colors max-md:size-11 [&_svg]:size-4"
+          >
+            <XIcon aria-hidden />
+            <span className="sr-only">{t("close")}</span>
+          </DialogPrimitive.Close>
         )}
-        <div className="mt-5">{children}</div>
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
+  );
+}
+
+export function DialogHeader({ className, ...props }: ComponentProps<"div">) {
+  return <div data-slot="dialog-header" className={cn("flex flex-col gap-1.5 pr-8", className)} {...props} />;
+}
+
+/**
+ * Title and optional description. Radix expects a description for the dialog's accessible description; without
+ * one, the title doubles as a screen-reader-only description so the dialog still announces its purpose.
+ */
+export function DialogHeading({ title, description }: { title: string; description?: string }) {
+  return (
+    <DialogHeader>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogDescription className={cn(!description && "sr-only")}>{description ?? title}</DialogDescription>
+    </DialogHeader>
+  );
+}
+
+export function DialogFooter({ className, ...props }: ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="dialog-footer"
+      className={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
+      {...props}
+    />
+  );
+}
+
+export function DialogTitle({ className, ...props }: ComponentProps<typeof DialogPrimitive.Title>) {
+  return (
+    <DialogPrimitive.Title
+      data-slot="dialog-title"
+      className={cn("text-lg leading-snug font-semibold tracking-tight", className)}
+      {...props}
+    />
+  );
+}
+
+export function DialogDescription({
+  className,
+  ...props
+}: ComponentProps<typeof DialogPrimitive.Description>) {
+  return (
+    <DialogPrimitive.Description
+      data-slot="dialog-description"
+      className={cn("text-muted-foreground text-sm", className)}
+      {...props}
+    />
   );
 }

@@ -27,8 +27,8 @@ function StatusAction({ kind, requestId, retry }: Pick<Props, "kind" | "requestI
 
   if (kind === "loading") {
     return (
-      <div className="bg-rule-strong relative mt-6 h-0.5 w-28 overflow-hidden rounded-full" aria-hidden>
-        <span className="animate-depart bg-ink absolute inset-y-0 left-0 w-2/5 rounded-full" />
+      <div className="bg-input relative mt-6 h-0.5 w-28 overflow-hidden rounded-full" aria-hidden>
+        <span className="animate-depart bg-foreground absolute inset-y-0 left-0 w-2/5 rounded-full" />
       </div>
     );
   }
@@ -36,7 +36,7 @@ function StatusAction({ kind, requestId, retry }: Pick<Props, "kind" | "requestI
     return (
       <Link
         href="/chat"
-        className="text-mcp-ink focus-visible:outline-focus mt-6 inline-flex min-h-10 items-center rounded-lg font-semibold underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="text-foreground focus-visible:outline-ring mt-6 inline-flex min-h-10 items-center rounded-lg font-semibold underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         {t("backToWorkspace")}
       </Link>
@@ -45,10 +45,12 @@ function StatusAction({ kind, requestId, retry }: Pick<Props, "kind" | "requestI
   return (
     <>
       {requestId && (
-        <p className="text-ink-3 tabular mt-3 text-xs break-all">{errors("requestId", { id: requestId })}</p>
+        <p className="text-muted-foreground tabular mt-3 text-xs break-all">
+          {errors("requestId", { id: requestId })}
+        </p>
       )}
       {retry && (
-        <Button disabled={pending} pending={pending} onClick={() => startTransition(retry)} className="mt-6">
+        <Button pending={pending} onClick={() => startTransition(retry)} className="mt-6">
           {common("retry")}
         </Button>
       )}
@@ -62,9 +64,19 @@ export function RouteStatus({ kind, workspace = false, requestId, retry }: Props
   const pathname = usePathname();
   const showMenu = workspace && pageOwnsHeader(pathname);
   const status = {
-    loading: { title: t("loadingTitle"), body: t("loadingBody"), ring: "border-ink", stem: "bg-ink" },
+    loading: {
+      title: t("loadingTitle"),
+      body: t("loadingBody"),
+      ring: "border-foreground",
+      stem: "bg-foreground",
+    },
     error: { title: t("errorTitle"), body: t("errorBody"), ring: "border-app", stem: "bg-app" },
-    notFound: { title: t("notFoundTitle"), body: t("notFoundBody"), ring: "border-ink", stem: "bg-ink" },
+    notFound: {
+      title: t("notFoundTitle"),
+      body: t("notFoundBody"),
+      ring: "border-foreground",
+      stem: "bg-foreground",
+    },
   }[kind];
   const accessibility = {
     loading: { role: "status", live: "polite" as const, busy: true },
@@ -86,12 +98,12 @@ export function RouteStatus({ kind, workspace = false, requestId, retry }: Props
         className="mx-auto flex w-full max-w-[68ch] items-start gap-5 px-4 py-14 md:px-8 md:py-20"
       >
         <span className="flex shrink-0 flex-col items-center pt-1" aria-hidden>
-          <span className={`bg-paper size-5.5 rounded-full border-[5px] ${status.ring}`} />
+          <span className={`bg-card size-5.5 rounded-full border-[5px] ${status.ring}`} />
           <span className={`mt-0.5 h-16 w-[3px] rounded-b-sm ${status.stem}`} />
         </span>
         <div className="min-w-0 flex-1">
           <h1 className="text-[22px] font-bold tracking-[-0.015em]">{status.title}</h1>
-          <p className="text-ink-2 mt-2 leading-relaxed">{status.body}</p>
+          <p className="text-muted-foreground mt-2 leading-relaxed">{status.body}</p>
           <StatusAction kind={kind} requestId={requestId} retry={retry} />
         </div>
       </section>

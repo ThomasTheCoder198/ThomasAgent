@@ -45,7 +45,7 @@ export function ModelsTab({ draft, update, models: loadedModels, roles: loadedRo
   }
   return (
     <>
-      <p className="text-ink-2 max-w-[70ch] pt-2 pb-2 text-[13.5px]">{t("modelsHint")}</p>
+      <p className="text-muted-foreground max-w-[70ch] pt-2 pb-2 text-[13.5px]">{t("modelsHint")}</p>
       {agentRoles.map((role) => {
         const keys = roleKeys[role];
         const platformModel = models.find((m) => m.id === roles.find((r) => r.role === role)?.modelId);
@@ -61,7 +61,7 @@ export function ModelsTab({ draft, update, models: loadedModels, roles: loadedRo
                 id={selectId}
                 value={draft.overrides[role] ?? INHERIT}
                 onChange={(e) => setOverride(role, e.target.value)}
-                className="border-rule-strong bg-paper text-ink focus-visible:border-ink w-full cursor-pointer appearance-none rounded-lg border py-2.5 pr-9 pl-3 text-[15px] outline-none"
+                className="border-input bg-card text-foreground focus-visible:border-foreground w-full cursor-pointer appearance-none rounded-lg border py-2.5 pr-9 pl-3 text-[15px] outline-none"
               >
                 <option value={INHERIT}>
                   {platformModel ? t("inherit", { model: platformModel.displayName }) : t("inheritNone")}
@@ -74,7 +74,7 @@ export function ModelsTab({ draft, update, models: loadedModels, roles: loadedRo
               </select>
               <ChevronDown
                 aria-hidden
-                className="text-ink-3 pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2"
+                className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2"
               />
             </div>
           </SettingsSection>

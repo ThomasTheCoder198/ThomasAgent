@@ -4,8 +4,8 @@ import { ShieldAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { LineBadge } from "@/components/metro/LineBadge";
-import { lineIcons } from "@/components/metro/lineIcons";
-import { Segmented } from "@/components/ui/Segmented";
+import { lineIcons } from "@/components/lineIcons";
+import { SegmentedChoice } from "@/components/ui/SegmentedChoice";
 
 import { toolPolicies, type AgentTool, type AgentToolSource, type ToolPolicy } from "../contract";
 import type { TabProps } from "./tabs";
@@ -24,26 +24,24 @@ function ToolRow({
 }) {
   const t = useTranslations("agents");
   return (
-    <li className="border-rule-2 flex flex-col gap-3 border-b py-3.5 last:border-b-0 sm:flex-row sm:items-center">
+    <li className="border-border flex flex-col gap-3 border-b py-3.5 last:border-b-0 sm:flex-row sm:items-center">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
           <span className="text-sm font-semibold">{tool.title}</span>
-          <code className="tabular text-ink-3 text-xs">{tool.name}</code>
+          <code className="tabular text-muted-foreground text-xs">{tool.name}</code>
           {tool.risky && (
-            <span className="text-app inline-flex items-center gap-1 text-xs font-medium">
+            <span className="text-destructive inline-flex items-center gap-1 text-xs font-medium">
               <ShieldAlert aria-hidden className="size-3.5" />
               {t("risky")}
             </span>
           )}
         </div>
-        <p className="text-ink-2 mt-0.5 text-[13.5px]">{tool.description}</p>
+        <p className="text-muted-foreground mt-0.5 text-[13.5px]">{tool.description}</p>
       </div>
       <div className="w-full sm:w-72">
-        <Segmented<ToolPolicy>
-          name={`policy-${tool.id}`}
+        <SegmentedChoice<ToolPolicy>
           legend={t("policyLegend", { tool: tool.title })}
           hideLegend
-          tone="ground"
           value={policy}
           onChange={onChange}
           options={toolPolicies.map((value) => ({ value, label: t(policyKey[value]) }))}
@@ -65,7 +63,7 @@ function SourceGroup({
         <LineBadge line={source.line} icon={lineIcons[source.line]}>
           {source.name}
         </LineBadge>
-        <span className="text-ink-3 text-xs">{t(kindKey[source.kind])}</span>
+        <span className="text-muted-foreground text-xs">{t(kindKey[source.kind])}</span>
       </header>
       <ul className="mt-1">
         {source.tools.map((tool) => (
@@ -85,7 +83,7 @@ export function ToolsTab({ agent, draft, update }: TabProps) {
   const t = useTranslations("agents");
   return (
     <div className="flex flex-col gap-8 pt-2">
-      <p className="text-ink-2 max-w-[70ch] text-[13.5px]">{t("toolsHint")}</p>
+      <p className="text-muted-foreground max-w-[70ch] text-[13.5px]">{t("toolsHint")}</p>
       {agent.toolSources.map((source) => (
         <SourceGroup key={source.id} source={source} draft={draft} update={update} />
       ))}

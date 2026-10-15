@@ -3,24 +3,29 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
 
-import { Tabs } from "./Tabs";
-
-const items = [
-  { id: "a", label: "Một" },
-  { id: "b", label: "Hai" },
-  { id: "c", label: "Ba" },
-] as const;
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./Tabs";
 
 function Harness() {
-  const [value, setValue] = useState<"a" | "b" | "c">("a");
-  return <Tabs items={items} value={value} onChange={setValue} idPrefix="t" label="Thử" />;
+  const [value, setValue] = useState("a");
+  return (
+    <Tabs value={value} onValueChange={setValue}>
+      <TabsList aria-label="Thử">
+        <TabsTrigger value="a">Một</TabsTrigger>
+        <TabsTrigger value="b">Hai</TabsTrigger>
+        <TabsTrigger value="c">Ba</TabsTrigger>
+      </TabsList>
+      <TabsContent value="a">Nội dung một</TabsContent>
+      <TabsContent value="b">Nội dung hai</TabsContent>
+      <TabsContent value="c">Nội dung ba</TabsContent>
+    </Tabs>
+  );
 }
 
 describe("Tabs keyboard", () => {
-  it("keeps a roving tabindex: only the selected tab is in the tab order", () => {
+  it("marks the selected tab", () => {
     render(<Harness />);
-    expect(screen.getByRole("tab", { name: "Một" })).toHaveAttribute("tabindex", "0");
-    expect(screen.getByRole("tab", { name: "Hai" })).toHaveAttribute("tabindex", "-1");
+    expect(screen.getByRole("tab", { name: "Một" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Hai" })).toHaveAttribute("aria-selected", "false");
   });
 
   it("moves selection and focus with arrows, wrapping at both ends", async () => {
@@ -41,5 +46,13 @@ describe("Tabs keyboard", () => {
     expect(screen.getByRole("tab", { name: "Ba" })).toHaveAttribute("aria-selected", "true");
     await userEvent.keyboard("{Home}");
     expect(screen.getByRole("tab", { name: "Một" })).toHaveFocus();
+  });
+
+  it("shows only the selected panel and names it by its tab", async () => {
+    render(<Harness />);
+    expect(screen.getByRole("tabpanel", { name: "Một" })).toHaveTextContent("Nội dung một");
+    await userEvent.click(screen.getByRole("tab", { name: "Hai" }));
+    expect(screen.getByRole("tabpanel", { name: "Hai" })).toHaveTextContent("Nội dung hai");
+    expect(screen.queryByText("Nội dung một")).toBeNull();
   });
 });

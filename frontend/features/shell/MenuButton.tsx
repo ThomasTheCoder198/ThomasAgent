@@ -2,24 +2,26 @@
 
 import { Menu } from "lucide-react";
 
-import { IconButton } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 
 import { useShellMenu } from "./shell-menu";
 
 /** Opens the mobile sidebar drawer; renders nothing on desktop or outside the workspace shell. */
-export function MenuButton({ tone = "ground" }: { tone?: "ground" | "sign" }) {
+export function MenuButton() {
   const menu = useShellMenu();
   if (!menu) return null;
   return (
-    <IconButton
-      tone={tone}
-      label={menu.label}
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={menu.label}
+      title={menu.label}
       aria-expanded={menu.expanded}
       aria-controls="workspace-sidebar"
       onClick={menu.open}
       className="-ml-1.5 md:hidden"
     >
-      <Menu aria-hidden className="size-4.5" />
-    </IconButton>
+      <Menu aria-hidden className="size-5" />
+    </Button>
   );
 }

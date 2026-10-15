@@ -23,6 +23,11 @@ if (typeof window !== "undefined") {
     }),
   });
 
+  // jsdom has no pointer capture; Sonner captures the pointer when a toast is pressed.
+  Element.prototype.setPointerCapture ??= () => undefined;
+  Element.prototype.releasePointerCapture ??= () => undefined;
+  Element.prototype.hasPointerCapture ??= () => false;
+
   // jsdom has no ResizeObserver; Radix's Switch measures its control with one.
   globalThis.ResizeObserver ??= class {
     observe() {}

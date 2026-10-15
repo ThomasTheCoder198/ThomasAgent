@@ -15,12 +15,12 @@ Server-rendered model-config UI at `/ui`: Login, Providers, Models, Roles. Templ
 ## Run & test
 ```bash
 cd ragx
-uv run pytest -q tests/unit/test_ui_tokens.py tests/unit/test_ui_messages.py tests/integration/test_admin_ui.py
+uv run pytest -q tests/unit/test_ui_messages.py tests/integration/test_admin_ui.py
 ```
 Then rebuild with `task up:ragx` and check `/ui` in a browser at 390 px and 1280 px, light and dark, VI and EN.
 
 ## Conventions
-- Tokens are copied verbatim from `frontend/app/globals.css` and checked by `test_ui_tokens.py`; edit them in the frontend first. UI-only values live outside `:root` (for example `--target-size: 44px` on `html`, because the 15px root makes `2.75rem` only 41px).
+- Ragx owns its Metro Wayfinding tokens in `static/ragx.css` since 2026-10-15 (owner decision): the frontend moved to the Editorial Trust system (`DESIGN.md`) and ragx no longer mirrors it, so there is no cross-check test; edit `ragx.css` here. UI-only values live outside `:root` (for example `--target-size: 44px` on `html`, because the 15px root makes `2.75rem` only 41px).
 - CSP allows only `'self'`: no inline script or style; `<meta name="htmx-config">` turns off htmx's injected indicator style.
 - Every unsafe request carries the CSRF token (hidden field, or `X-CSRF-Token` from `hx-headers`).
 - Post/redirect/get with `?notice=` or `?error=<catalog code>&rid=<failing request id>`, so the page shows the id that is in the logs. 5xx codes are logged once and shown as `INTERNAL_ERROR`.

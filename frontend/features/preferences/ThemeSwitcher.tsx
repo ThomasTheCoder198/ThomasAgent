@@ -3,7 +3,7 @@
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
-import { Segmented } from "@/components/ui/Segmented";
+import { SegmentedChoice } from "@/components/ui/SegmentedChoice";
 
 export type ThemeLabels = { light: string; dark: string; system: string; legend: string };
 
@@ -14,8 +14,7 @@ const icons = { light: Sun, dark: Moon, system: Monitor } as const;
 export function ThemeSwitcher({ labels }: { labels: ThemeLabels }) {
   const { theme, setTheme } = useTheme();
   return (
-    <Segmented<Theme>
-      name="theme"
+    <SegmentedChoice<Theme>
       legend={labels.legend}
       value={theme as Theme | undefined}
       onChange={setTheme}

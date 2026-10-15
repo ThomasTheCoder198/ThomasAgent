@@ -35,7 +35,7 @@ state; the dialog shows it at once and calls `router.refresh()`. The UI never ke
 
 ## Dependencies
 
-- Uses: `components/ui` (Dialog, DropdownMenu, Switch, Button, TextField, InlineAlert), `lib/api`.
+- Uses: `components/ui` (Dialog, DropdownMenu, Field / SwitchField, Input, Button, InlineAlert), `lib/api`.
 - Used by: `app/(workspace)/layout.tsx`, `proxy.ts`, the Knowledge Base surface (Task 7).
 
 ## Run & test

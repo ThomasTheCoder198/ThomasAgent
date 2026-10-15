@@ -15,7 +15,7 @@ export async function KnowledgeBaseList({ orgId, items }: { orgId: string; items
           <Link
             href={kbPage(orgId, kb.id)}
             style={{ animationDelay: `calc(${index} * var(--stagger))` }}
-            className="animate-rise border-rule-2 hover:bg-paper grid min-h-14 items-center gap-x-5 gap-y-1 border-b px-3 py-3.5 transition-colors sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,14rem)]"
+            className="animate-rise border-border hover:bg-card grid min-h-14 items-center gap-x-5 gap-y-1 border-b px-3 py-3.5 transition-colors sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,14rem)]"
           >
             <span className="flex min-w-0 items-center gap-2.5">
               <span aria-hidden className="bg-kb size-2.5 shrink-0 rounded-full" />
@@ -28,10 +28,10 @@ export async function KnowledgeBaseList({ orgId, items }: { orgId: string; items
                 </span>
               )}
             </span>
-            <span className="tabular text-ink-2 pl-5 text-xs sm:pl-0">
+            <span className="tabular text-muted-foreground pl-5 text-xs sm:pl-0">
               {t("files", { count: kb.fileCount })}
             </span>
-            <span className="tabular text-ink-3 truncate pl-5 text-xs sm:pl-0">
+            <span className="tabular text-muted-foreground truncate pl-5 text-xs sm:pl-0">
               {kb.embeddingModel} · {kb.embeddingDims}
             </span>
           </Link>

@@ -67,7 +67,7 @@ function Thread({ session, evidence }: { session: Session; evidence: Evidence })
         <AssistantMessage message={PENDING_REPLY} streaming onCite={noop} onDecide={noop} onInspect={noop} />
       )}
       {status === "error" && (
-        <div role="alert" className="text-app mb-6 flex items-center gap-3 text-sm">
+        <div role="alert" className="text-destructive mb-6 flex items-center gap-3 text-sm">
           {t("streamFailed")}
           <Button variant="outline" onClick={session.retry}>
             <RotateCcw aria-hidden className="size-3.5" />
@@ -111,7 +111,7 @@ export function ChatSurface({
         >
           <Thread session={session} evidence={evidence} />
         </div>
-        <div className="from-ground/0 to-ground bg-gradient-to-b from-0% to-30% pt-3.5 pb-4.5">
+        <div className="from-background/0 to-background bg-gradient-to-b from-0% to-30% pt-3.5 pb-4.5">
           {/* Same column and same inner padding as the thread, so composer and messages share both edges. */}
           <div className={cn(CHAT_COLUMN, "px-4 md:px-8")}>
             <Composer

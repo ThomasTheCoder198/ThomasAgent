@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { Dialog, DialogClose, DialogContent } from "@/components/ui/Dialog";
+import { Dialog, DialogClose, DialogContent, DialogHeading } from "@/components/ui/Dialog";
+import { Field, SwitchField } from "@/components/ui/Field";
 import { InlineAlert } from "@/components/ui/InlineAlert";
-import { Switch } from "@/components/ui/Switch";
-import { TextField } from "@/components/ui/TextField";
+import { Input } from "@/components/ui/Input";
 import type { Locale } from "@/i18n/config";
 import { ApiError, describeApiError } from "@/lib/api/client";
 import { ErrorCode } from "@/lib/errors/codes.gen";
@@ -137,17 +137,21 @@ export function OrgDialog(props: Props) {
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent title={copy.title} description={copy.description} returnFocusRef={props.returnFocusRef}>
+      <DialogContent returnFocusRef={props.returnFocusRef}>
+        <DialogHeading title={copy.title} description={copy.description} />
         <form onSubmit={submit} noValidate className="flex flex-col gap-5">
-          <TextField
-            label={t("name")}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            error={saving.nameError}
-            autoComplete="off"
-            required
-          />
-          <Switch
+          <Field label={t("name")} error={saving.nameError}>
+            {(control) => (
+              <Input
+                {...control}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoComplete="off"
+                required
+              />
+            )}
+          </Field>
+          <SwitchField
             label={t("externalParsing")}
             hint={t("externalParsingHint")}
             checked={externalParsing}
@@ -179,7 +183,7 @@ function FormActions({
       <DialogClose asChild>
         <Button variant="ghost">{common("cancel")}</Button>
       </DialogClose>
-      <Button type="submit" pending={pending} disabled={pending || !dirty}>
+      <Button type="submit" pending={pending} disabled={!dirty}>
         {submitLabel}
       </Button>
     </div>
@@ -209,14 +213,14 @@ function ProvisioningState({
     }
   }, [org, pending]);
   return (
-    <div className="border-rule-2 flex flex-wrap items-center justify-between gap-3 border-t pt-4 text-sm">
+    <div className="border-border flex flex-wrap items-center justify-between gap-3 border-t pt-4 text-sm">
       <p ref={statusRef} role="status" tabIndex={-1} className="outline-none">
         <span className="font-medium">{t(`status.${org.ragxStatus}`)}</span>
         {!org.settingsSynced && org.ragxStatus === "ready" && (
-          <span className="text-ink-2"> · {t("settingsSyncing")}</span>
+          <span className="text-muted-foreground"> · {t("settingsSyncing")}</span>
         )}
         {org.ragxErrorCode && (
-          <span className="tabular text-app mt-0.5 block text-xs">{org.ragxErrorCode}</span>
+          <span className="tabular text-destructive mt-0.5 block text-xs">{org.ragxErrorCode}</span>
         )}
       </p>
       {needsRetry && (
@@ -227,7 +231,6 @@ function ProvisioningState({
             onRetry();
           }}
           pending={pending}
-          disabled={pending}
         >
           {t("retry")}
         </Button>

@@ -5,7 +5,10 @@
     "retry": "Retry",
     "cancel": "Cancel",
     "save": "Save",
-    "dismissNotification": "Dismiss notification: {title}"
+    "close": "Close",
+    "notifications": "Notifications",
+    "closeNotification": "Close notification",
+    "requestIdLabel": "Request ID"
   },
   "routeStatus": {
     "loadingTitle": "Opening page",

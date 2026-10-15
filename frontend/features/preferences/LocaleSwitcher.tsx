@@ -3,7 +3,7 @@
 import { useLocale, useTranslations } from "next-intl";
 import { useTransition } from "react";
 
-import { Segmented } from "@/components/ui/Segmented";
+import { SegmentedChoice } from "@/components/ui/SegmentedChoice";
 import { locales, type Locale } from "@/i18n/config";
 
 import { setLocale } from "./actions";
@@ -13,8 +13,7 @@ export function LocaleSwitcher() {
   const current = useLocale() as Locale;
   const [pending, startTransition] = useTransition();
   return (
-    <Segmented<Locale>
-      name="locale"
+    <SegmentedChoice<Locale>
       legend={t("language")}
       value={current}
       disabled={pending}

@@ -36,7 +36,7 @@ export const lineText: Record<Line, string> = {
   mcp: "text-mcp",
   cmp: "text-cmp",
   app: "text-app",
-  model: "text-ink",
+  model: "text-foreground",
 };
 
 /** Text that sits on a solid line fill (roundels, line badges). */
@@ -53,5 +53,5 @@ export const lineTint: Record<Line, string> = {
   mcp: "bg-mcp-tint",
   cmp: "bg-cmp-tint",
   app: "bg-app-tint",
-  model: "bg-paper-2",
+  model: "bg-secondary",
 };

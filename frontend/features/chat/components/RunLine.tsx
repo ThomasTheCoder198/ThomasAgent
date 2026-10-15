@@ -3,8 +3,8 @@
 import { BookOpen, Brain } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 
-import { lineIcons } from "@/components/metro/lineIcons";
-import { lineBg, type Line } from "@/components/metro/lines";
+import { lineIcons } from "@/components/lineIcons";
+import { lineBg, type Line } from "@/components/lines";
 import { cn } from "@/lib/cn";
 import { formatSeconds } from "@/lib/format";
 
@@ -18,7 +18,7 @@ function stationLine(station: Station): Line {
   return station.kind === "tool" ? station.line : "model";
 }
 
-const iconClass = "text-ink-2 size-4 shrink-0";
+const iconClass = "text-muted-foreground size-4 shrink-0";
 
 function StationIcon({ station }: { station: Station }) {
   if (station.kind !== "tool") return <Brain aria-hidden className={iconClass} />;
@@ -48,7 +48,7 @@ function StationHeading({ station, live }: { station: Station; live: boolean }) 
       <StationIcon station={station} />
       <span className="min-w-0">{label}</span>
       {duration !== undefined && !live && (
-        <span className="tabular text-ink-3 ml-auto shrink-0 pl-2 text-xs">
+        <span className="tabular text-muted-foreground ml-auto shrink-0 pl-2 text-xs">
           {t("seconds", { seconds: formatSeconds(duration, locale) })}
         </span>
       )}

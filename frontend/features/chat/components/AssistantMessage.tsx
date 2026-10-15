@@ -119,7 +119,7 @@ export function UserMessage({ message }: { message: ChatMessage }) {
   const text = message.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n");
   return (
     <div className="animate-rise mb-5.5 flex justify-end">
-      <p className="border-rule bg-paper max-w-[78%] rounded-[14px_14px_4px_14px] border px-3.75 py-2.75 whitespace-pre-wrap">
+      <p className="border-border bg-card max-w-[78%] rounded-[14px_14px_4px_14px] border px-3.75 py-2.75 whitespace-pre-wrap">
         {text}
       </p>
     </div>

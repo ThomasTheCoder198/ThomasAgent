@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
 
 import type { ToolStation } from "../run-view";
 import { LineBadge } from "@/components/metro/LineBadge";
-import { lineIcons } from "@/components/metro/lineIcons";
+import { lineIcons } from "@/components/lineIcons";
 
 export type ApprovalDecision = { approvalId: string; approved: boolean; always?: boolean };
 
@@ -30,27 +30,25 @@ export function ApprovalSign({ station, onDecide, disabled }: Props) {
   return (
     <section
       aria-label={t("approvalTitle")}
-      className={cn(
-        "border-mcp-rule bg-mcp-tint animate-rise mt-2 max-w-[62ch] rounded-xl border px-4 py-3.5",
-      )}
+      className={cn("border-border bg-mcp-tint animate-rise mt-2 max-w-[62ch] rounded-xl border px-4 py-3.5")}
     >
       <header className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-sm">
         <LineBadge line={station.line} icon={lineIcons[station.line]}>
           {station.source}
         </LineBadge>
         <b className="font-semibold">{station.title}</b>
-        <span className="text-mcp-ink-2 ml-auto text-xs font-medium">{t("approvalTitle")}</span>
+        <span className="text-muted-foreground ml-auto text-xs font-medium">{t("approvalTitle")}</span>
       </header>
-      <dl className="tabular text-mcp-ink my-3 grid grid-cols-[auto_1fr] gap-x-3 text-[12.5px] leading-[1.7]">
+      <dl className="tabular text-foreground my-3 grid grid-cols-[auto_1fr] gap-x-3 text-[12.5px] leading-[1.7]">
         {Object.entries(station.input).map(([key, value]) => (
           <div key={key} className="contents">
-            <dt className="text-mcp-ink-2">{key}</dt>
+            <dt className="text-muted-foreground">{key}</dt>
             <dd className="min-w-0 break-words">{formatArg(value)}</dd>
           </div>
         ))}
       </dl>
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="line" disabled={disabled} onClick={() => decide(true)}>
+        <Button disabled={disabled} onClick={() => decide(true)}>
           {t("approve")}
         </Button>
         <Button variant="outline" disabled={disabled} onClick={() => decide(false)}>

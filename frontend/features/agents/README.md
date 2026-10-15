@@ -21,7 +21,7 @@ Save errors include the request ID when core supplies one, using the current lan
 
 ## Dependencies
 
-- Uses: `components/ui` (Tabs, Segmented, SettingsSection, TextArea, TextField, InlineAlert, Button), `components/metro` (LineBadge, lineIcons), `features/registry/types`, `lib/api` (`serverFetchResult`, `Loaded`), `lib/format` (`formatBytes`).
+- Uses: `components/ui` (Tabs, SegmentedChoice, SettingsSection, Field, Input, Textarea, InlineAlert, Button), `components/metro` (LineBadge), `components/lineIcons`, `features/registry/types`, `lib/api` (`serverFetchResult`, `Loaded`), `lib/format` (`formatBytes`).
 - Used by: `app/(workspace)/agents/*`.
 
 ## Run & test

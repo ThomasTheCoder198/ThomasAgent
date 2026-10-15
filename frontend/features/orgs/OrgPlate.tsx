@@ -53,27 +53,27 @@ export function OrgPlate({ orgs, current: serverCurrent, failed }: Props) {
         <DropdownMenuTrigger
           ref={triggerRef}
           className={cn(
-            "border-sign-rule hover:bg-sign-hover data-[state=open]:bg-sign-active min-h-touch mb-3 flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors",
+            "border-sidebar-border hover:bg-sidebar-accent data-[state=open]:bg-sidebar-accent mb-3 flex min-h-11 w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors",
             "md:group-data-[collapsed=true]/shell:justify-center md:group-data-[collapsed=true]/shell:border-transparent md:group-data-[collapsed=true]/shell:px-0",
           )}
           aria-label={t("switchLabel", { name })}
         >
           <span
             aria-hidden
-            className="bg-sign-active grid size-7 shrink-0 place-items-center rounded-full text-[13px] font-bold"
+            className="bg-sidebar-accent grid size-7 shrink-0 place-items-center rounded-full text-[13px] font-bold"
           >
             {initialOf(name)}
           </span>
           <span className={cn("min-w-0 flex-1", RAIL_TEXT)}>
             <span className="block truncate text-sm font-semibold">{name}</span>
             {current && (
-              <span className="text-sign-ink-2 flex items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
                 <OrgStatusDot status={current.ragxStatus} label={t(`status.${current.ragxStatus}`)} />
                 {t(`status.${current.ragxStatus}`)}
               </span>
             )}
           </span>
-          <ChevronsUpDown aria-hidden className={cn("text-sign-ink-2 size-4 shrink-0", RAIL_TEXT)} />
+          <ChevronsUpDown aria-hidden className={cn("text-muted-foreground size-4 shrink-0", RAIL_TEXT)} />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
           <DropdownMenuLabel>{t("menuLabel")}</DropdownMenuLabel>

@@ -13,9 +13,9 @@ export function NewChatIntro() {
         <h2 className="text-[clamp(1.6rem,2.4vw,2.1rem)] leading-tight font-bold tracking-[-0.02em]">
           {t("newTitle")}
         </h2>
-        <p className="text-ink-2 mt-2 max-w-[56ch] leading-relaxed">{t("newBody")}</p>
+        <p className="text-muted-foreground mt-2 max-w-[56ch] leading-relaxed">{t("newBody")}</p>
       </div>
-      <div className="bg-sign max-w-md rounded-xl px-5 py-4">
+      <div className="bg-sidebar max-w-md rounded-xl px-5 py-4">
         <RouteStrip
           stops={[
             { line: "model", label: "Model" },

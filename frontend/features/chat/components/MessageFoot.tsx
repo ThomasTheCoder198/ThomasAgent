@@ -4,7 +4,7 @@ import { Check, Copy, ScanSearch } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 
-import { IconButton } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { formatCost, formatSeconds, formatTokens } from "@/lib/format";
 
 import type { RunUsage } from "../contract";
@@ -24,13 +24,19 @@ export function MessageFoot({ text, usage, onInspect }: Props) {
     setTimeout(() => setCopied(false), COPIED_RESET_MS);
   }
   return (
-    <div className="text-ink-3 animate-fade mt-1.5 flex flex-wrap items-center gap-0.5">
-      <IconButton label={copied ? t("copied") : t("copy")} onClick={copy}>
+    <div className="text-muted-foreground animate-fade mt-1.5 flex flex-wrap items-center gap-0.5">
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={copied ? t("copied") : t("copy")}
+        title={copied ? t("copied") : t("copy")}
+        onClick={copy}
+      >
         {copied ? <Check aria-hidden className="size-4" /> : <Copy aria-hidden className="size-4" />}
-      </IconButton>
-      <IconButton label={t("inspect")} onClick={onInspect}>
+      </Button>
+      <Button variant="ghost" size="icon" aria-label={t("inspect")} title={t("inspect")} onClick={onInspect}>
         <ScanSearch aria-hidden className="size-4" />
-      </IconButton>
+      </Button>
       {usage && (
         <p className="tabular ml-2.5 flex flex-wrap gap-x-3.5 text-xs">
           <span>{usage.runId}</span>

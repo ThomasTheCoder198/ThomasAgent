@@ -6,9 +6,10 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { Dialog, DialogClose, DialogContent } from "@/components/ui/Dialog";
+import { Dialog, DialogClose, DialogContent, DialogHeading } from "@/components/ui/Dialog";
+import { Field } from "@/components/ui/Field";
 import { InlineAlert } from "@/components/ui/InlineAlert";
-import { TextField } from "@/components/ui/TextField";
+import { Input } from "@/components/ui/Input";
 import type { Locale } from "@/i18n/config";
 import { ApiError, describeApiError } from "@/lib/api/client";
 import { ErrorCode } from "@/lib/errors/codes.gen";
@@ -74,22 +75,26 @@ function NameDialog({
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent title={title} description={description}>
+      <DialogContent>
+        <DialogHeading title={title} description={description} />
         <form onSubmit={(e) => void submit(e)} noValidate className="flex flex-col gap-5">
-          <TextField
-            label={t("name")}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            error={nameError}
-            autoComplete="off"
-            required
-          />
+          <Field label={t("name")} error={nameError}>
+            {(control) => (
+              <Input
+                {...control}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoComplete="off"
+                required
+              />
+            )}
+          </Field>
           {failure && <InlineAlert title={failure} />}
           <div className="flex flex-wrap justify-end gap-2">
             <DialogClose asChild>
               <Button variant="ghost">{t("cancel")}</Button>
             </DialogClose>
-            <Button type="submit" pending={saving} disabled={saving}>
+            <Button type="submit" pending={saving}>
               {submitLabel}
             </Button>
           </div>
@@ -158,11 +163,8 @@ export function NewKnowledgeBaseButton({ orgId }: { orgId: string }) {
   return (
     <>
       {/* Icon-only on phones so the title keeps its width; the label stays for assistive tech. */}
-      <Button
-        onClick={() => setOpen(true)}
-        className="min-h-touch max-sm:min-w-touch shrink-0 max-sm:px-0 md:min-h-0"
-      >
-        <Plus aria-hidden className="size-4" />
+      <Button onClick={() => setOpen(true)} className="shrink-0 max-sm:min-w-11 max-sm:px-0">
+        <Plus aria-hidden />
         <span className="max-sm:sr-only">{t("new")}</span>
       </Button>
       {open && <NewKnowledgeBaseDialog orgId={orgId} onOpenChange={setOpen} />}

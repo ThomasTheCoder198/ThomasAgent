@@ -18,7 +18,10 @@ function tail(fileName: string) {
 
 export function Caret() {
   return (
-    <span aria-hidden className="bg-ink animate-caret ml-0.5 inline-block h-[1.05em] w-0.5 align-[-3px]" />
+    <span
+      aria-hidden
+      className="bg-foreground animate-caret ml-0.5 inline-block h-[1.05em] w-0.5 align-[-3px]"
+    />
   );
 }
 
@@ -27,7 +30,7 @@ export function ReasoningBody({ station }: { station: ReasoningStation }) {
     <p
       className={cn(
         "mt-1.5 max-w-[62ch] text-[13.5px] leading-relaxed",
-        station.live ? "text-ink" : "text-ink-2",
+        station.live ? "text-foreground" : "text-muted-foreground",
       )}
     >
       {station.text}
@@ -43,18 +46,18 @@ function KbSearchBody({ station }: { station: ToolStation }) {
   return (
     <div className="mt-1.5 text-[13.5px]">
       {input.query && (
-        <span className="bg-kb-tint text-ink inline-block rounded-md px-2.5 py-0.5 text-[13px]">
+        <span className="bg-kb-tint text-foreground inline-block rounded-md px-2.5 py-0.5 text-[13px]">
           “{input.query}”
         </span>
       )}
       {output && (
-        <div className="text-ink-2 mt-2 flex flex-wrap items-center gap-1.5 text-[13px]">
+        <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-1.5 text-[13px]">
           {t("chunks", { chunks: output.chunks, docs: output.documents.length })}
           {output.documents.map((doc) => (
             <span
               key={doc}
               title={doc}
-              className="border-rule bg-paper inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[12.5px]"
+              className="border-border bg-card inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[12.5px]"
             >
               <FileText aria-hidden className="size-3.25" />
               {tail(doc)}
@@ -80,9 +83,9 @@ function ToolOutcome({ station }: { station: ToolStation }) {
   const link = typeof output[LINK_FIELD] === "string" ? output[LINK_FIELD] : undefined;
   if (ids.length === 0 && !link && !station.ownerApproved) return null;
   return (
-    <p className="text-ink-2 mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13.5px]">
+    <p className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13.5px]">
       {ids.map((id) => (
-        <span key={id} className="tabular text-ink text-[12.5px] font-medium">
+        <span key={id} className="tabular text-foreground text-[12.5px] font-medium">
           {id}
         </span>
       ))}
@@ -109,8 +112,10 @@ function ToolOutcome({ station }: { station: ToolStation }) {
 
 export function ToolBody({ station }: { station: ToolStation }) {
   const t = useTranslations("chat");
-  if (station.state === "error") return <p className="text-app mt-1.5 text-[13.5px]">{station.errorText}</p>;
-  if (station.state === "denied") return <p className="text-ink-3 mt-1.5 text-[13.5px]">{t("toolDenied")}</p>;
+  if (station.state === "error")
+    return <p className="text-destructive mt-1.5 text-[13.5px]">{station.errorText}</p>;
+  if (station.state === "denied")
+    return <p className="text-muted-foreground mt-1.5 text-[13.5px]">{t("toolDenied")}</p>;
   if (station.name === KB_TOOLS.search) return <KbSearchBody station={station} />;
   if (station.name === KB_TOOLS.readSection) return null;
   return <ToolOutcome station={station} />;

@@ -5,7 +5,10 @@
     "retry": "Thử lại",
     "cancel": "Huỷ",
     "save": "Lưu",
-    "dismissNotification": "Đóng thông báo: {title}"
+    "close": "Đóng",
+    "notifications": "Thông báo",
+    "closeNotification": "Đóng thông báo",
+    "requestIdLabel": "Mã yêu cầu"
   },
   "routeStatus": {
     "loadingTitle": "Đang mở trang",

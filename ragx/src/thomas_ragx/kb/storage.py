@@ -111,7 +111,19 @@ class ObjectStorage:
 
     async def download_to(self, bucket: str, key: str, path: Path) -> str | None:
         """One pass: the copy that gets parsed is exactly the bytes that were hashed (ruling A15)."""
-        return await asyncio.to_thread(self._download_to, bucket, key, path)
+        download = asyncio.create_task(asyncio.to_thread(self._download_to, bucket, key, path))
+        try:
+            return await asyncio.shield(download)
+        except asyncio.CancelledError:
+            # Cancelling the await cannot stop the SDK thread; unlink only after its writer closes.
+            def cleanup(done: asyncio.Task[str | None]) -> None:
+                if not done.cancelled():
+                    done.exception()
+                with suppress(OSError):
+                    path.unlink(missing_ok=True)
+
+            download.add_done_callback(cleanup)
+            raise
 
     async def exists(self, bucket: str, key: str) -> bool:
         try:

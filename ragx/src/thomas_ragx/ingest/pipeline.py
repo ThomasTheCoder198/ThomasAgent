@@ -1,6 +1,7 @@
 import asyncio
 import json
 from collections.abc import Awaitable
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
@@ -19,7 +20,7 @@ from thomas_ragx.ingest.indexing import Indexing
 from thomas_ragx.ingest.job import IngestJob
 from thomas_ragx.ingest.outline import Outline, build_outline
 from thomas_ragx.ingest.repository import ClaimState, IngestTarget
-from thomas_ragx.ingest.source import extension_of, fetch_verified
+from thomas_ragx.ingest.source import attempt_path, extension_of, fetch_verified
 from thomas_ragx.ingest.summaries import SectionText
 from thomas_ragx.kb import repository as kbs
 from thomas_ragx.kb.model import FileStatus
@@ -151,8 +152,9 @@ class IngestPipeline:
                 raise  # the consumer retries or dead-letters; the hook marks the file failed
 
     async def _run(self, target: IngestTarget, request_id: str) -> None:
-        path = await self._step(STEP_FETCH, fetch_verified(self._storage, target, self._work_dir), target)
+        path = attempt_path(target, self._work_dir)
         try:
+            await self._step(STEP_FETCH, fetch_verified(self._storage, target, path), target)
             parsed = await self._step(
                 STEP_PARSE,
                 self._parser.parse(
@@ -164,7 +166,9 @@ class IngestPipeline:
                 target,
             )
         finally:
-            path.unlink(missing_ok=True)
+            # A cancelled fetch may still have a writer thread; storage removes that copy when it closes.
+            with suppress(OSError):
+                path.unlink(missing_ok=True)
         outline = build_outline(target.file_id, target.version, target.name, parsed.blocks)
         state = await self._step(STEP_PERSIST, self._persist(target, outline, parsed), target)
         if state is not ClaimState.OWNED:

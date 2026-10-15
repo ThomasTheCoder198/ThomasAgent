@@ -13,8 +13,9 @@ def extension_of(target: IngestTarget) -> str:
 async def fetch_verified(storage: ObjectStorage, target: IngestTarget, work_dir: Path) -> Path:
     """Verify stored bytes because the presigned ticket remains usable after confirm."""
     work_dir.mkdir(parents=True, exist_ok=True)
-    # The extension stays: Datalab's SDK picks the MIME type from the file name.
-    path = work_dir / f"{target.file_id}-{target.version}{extension_of(target)}"
+    # The extension stays: Datalab's SDK picks the MIME type from the file name. The attempt id keeps two
+    # attempts of one file in one process from sharing (and unlinking) one copy.
+    path = work_dir / f"{target.file_id}-{target.version}-{target.attempt_id}{extension_of(target)}"
     digest = await storage.download_to(RAW_BUCKET, raw_key(target.org_id, target.kb_id, target.file_id), path)
     if digest is None:
         path.unlink(missing_ok=True)

@@ -121,11 +121,16 @@ async def existing_file_ids(conn: Connection, ids: list[UUID]) -> set[UUID]:
 
 
 async def mark_ingest_failed(conn: Connection, org_id: str, file_id: UUID, error_code: str) -> bool:
-    """False when the file already finished (or is gone) and the row was left alone."""
+    """False when the file already finished, is gone, or a live attempt still holds its lease (Codex I1).
+
+    A failing attempt releases its own lease before it raises, so only a stale attempt's dead letter meets a
+    live lease, and that lease belongs to the attempt that took the file over.
+    """
     cursor = await conn.execute(
         b"UPDATE kb_files SET status = 'failed', error_code = %s, ingest_lease_until = NULL, "
         b"updated_at = now() WHERE id = %s AND org_id = %s AND deleted_at IS NULL "
-        b"AND status NOT IN ('uploading', 'ready', 'degraded')",
+        b"AND status NOT IN ('uploading', 'ready', 'degraded') "
+        b"AND (ingest_lease_until IS NULL OR ingest_lease_until < now())",
         (error_code, file_id, org_id),
     )
     return cursor.rowcount > 0
@@ -169,7 +174,9 @@ async def mark_file_deleted(conn: Connection, org_id: str, kb_id: UUID, file_id:
 async def requeue_failed(conn: Connection, org_id: str, kb_id: UUID, file_id: UUID) -> KbFile | None:
     row = await (
         await conn.execute(
-            b"UPDATE kb_files SET status = 'pending', error_code = '', updated_at = now() "
+            # An explicit retry also restarts the stalled-ingest recovery budget (worker.recovery).
+            b"UPDATE kb_files SET status = 'pending', error_code = '', ingest_recoveries = 0, "
+            b"updated_at = now() "
             b"WHERE id = %s AND org_id = %s AND kb_id = %s AND deleted_at IS NULL "
             b"AND status = 'failed' RETURNING *",
             (file_id, org_id, kb_id),

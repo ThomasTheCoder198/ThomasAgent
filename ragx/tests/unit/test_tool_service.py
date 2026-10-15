@@ -34,6 +34,7 @@ def _service(timeout: float = 1):  # type: ignore[no-untyped-def]
         provider.get_tracer(__name__),
         timeout_seconds=timeout,
         section_max_chars=4,
+        section_page_rows=64,
         outline_max_nodes=3,
         page_default_limit=20,
         page_max_limit=100,
@@ -148,3 +149,35 @@ async def test_unexpected_errors_mark_the_tool_span_as_failed_without_their_mess
     span = exporter.get_finished_spans()[0]
     assert span.status.status_code is StatusCode.ERROR and span.status.description is None
     assert not span.events and "secret detail" not in str(span.attributes)
+
+
+async def test_section_read_stops_fetching_once_the_character_cap_is_reached(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _ = _service()
+    service._section_max_chars = 250
+    node_id, file_id = uuid4(), uuid4()
+    rows = [
+        {"block_id": f"b{i}", "position": i, "text": "x" * 100, "locator": {"kind": "text_lines"}}
+        for i in range(1000)
+    ]
+    served: list[int] = []
+
+    async def section_blocks(*_: object, after_position: int | None = None, limit: int | None = None) -> list:
+        start = 0 if after_position is None else after_position + 1
+        page = rows[start:] if limit is None else rows[start : start + limit]
+        served.append(len(page))
+        return page
+
+    monkeypatch.setattr(
+        tool_repository, "node_in_kb", AsyncMock(return_value={"id": node_id, "file_id": file_id})
+    )
+    monkeypatch.setattr(tool_repository, "node_path", AsyncMock(return_value=[]))
+    monkeypatch.setattr(tool_repository, "section_blocks", section_blocks)
+    section = await service.read_section(
+        Caller("org", "tool:kb_read_section", str(uuid4()), "req_test", "jti"), "kb_read_section", node_id
+    )
+    assert [block["block_id"] for block in section["blocks"]] == ["b0", "b1"]
+    assert section["truncated"] is True
+    assert sum(served) < len(rows)  # the rest of the section is never read
+    assert sum(served) <= len(section["blocks"]) + service._section_page_rows

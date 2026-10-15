@@ -81,16 +81,16 @@ def test_presigned_uploads_down_removes_uploading_rows(postgres_url: str) -> Non
                 b"VALUES (gen_random_uuid(), 'o', %s, 'b.txt', 'text/plain', 1, 'pending')",
                 (kb_id,),
             )
-    assert migrate_down(url, steps=3) == [5, 4, 3]
+    assert migrate_down(url, steps=4) == [6, 5, 4, 3]
     with psycopg.connect(url) as conn:
         assert conn.execute(b"SELECT count(*) FROM kb_files").fetchone() == (0,)
-    assert migrate_up(url) == [3, 4, 5]
+    assert migrate_up(url) == [3, 4, 5, 6]
 
 
 def test_rag_pipeline_up_backfills_collection_names_and_down_drops_the_tables(postgres_url: str) -> None:
     url = _fresh_database(postgres_url, "migrate_pipeline")
     migrate_up(url)
-    assert migrate_down(url, steps=2) == [5, 4]
+    assert migrate_down(url, steps=3) == [6, 5, 4]
     provider_id, model_id, kb_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     with psycopg.connect(url, autocommit=True) as conn:
         conn.execute(b"INSERT INTO orgs (id, name, external_parsing) VALUES ('o', 'O', true)")
@@ -105,13 +105,13 @@ def test_rag_pipeline_up_backfills_collection_names_and_down_drops_the_tables(po
             b"VALUES (%s, 'o', 'kb', true, %s, 8)",
             (kb_id, model_id),
         )
-    assert migrate_up(url) == [4, 5]
+    assert migrate_up(url) == [4, 5, 6]
     with psycopg.connect(url) as conn:
         row = conn.execute(b"SELECT collection_name FROM knowledge_bases WHERE id = %s", (kb_id,)).fetchone()
     assert row == (f"kb_{model_id.hex}_8",)
     pipeline_tables = {"doc_nodes", "doc_blocks", "kb_tables", "embedding_cache"}
     assert pipeline_tables <= _tables(url)
-    migrate_down(url, steps=2)
+    migrate_down(url, steps=3)
     assert not pipeline_tables & _tables(url)
 
 
@@ -130,7 +130,29 @@ def test_purge_cascade_indexes_migrate_up_and_down(postgres_url: str) -> None:
             }
 
     assert expected <= indexes()
-    assert migrate_down(url, steps=1) == [5]
+    assert migrate_down(url, steps=2) == [6, 5]
     assert not expected & indexes()
-    assert migrate_up(url) == [5]
+    assert migrate_up(url) == [5, 6]
     assert expected <= indexes()
+
+
+def test_ingest_attempts_migrate_up_and_down(postgres_url: str) -> None:
+    url = _fresh_database(postgres_url, "migrate_ingest_attempts")
+    migrate_up(url)
+
+    def schema() -> tuple[bool, bool]:
+        with psycopg.connect(url) as conn:
+            column = conn.execute(
+                b"SELECT 1 FROM information_schema.columns "
+                b"WHERE table_name = 'kb_files' AND column_name = 'ingest_attempt_id'"
+            ).fetchone()
+            index = conn.execute(
+                b"SELECT 1 FROM pg_indexes WHERE indexname = 'idx_doc_blocks_file_id_position'"
+            ).fetchone()
+        return column is not None, index is not None
+
+    assert schema() == (True, True)
+    assert migrate_down(url, steps=1) == [6]
+    assert schema() == (False, False)
+    assert migrate_up(url) == [6]
+    assert schema() == (True, True)

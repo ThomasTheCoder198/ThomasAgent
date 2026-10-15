@@ -58,4 +58,4 @@ export query/document/credential content through those fields.
 
 The four KB tools use closed camelCase DTOs and `KbToolService`; the repository scopes every lookup and recursive step by org and KB. Outline and section reads require live ready/degraded files. Lists include confirmed statuses and use the shared file cursor encoding. Tool spans have bounded deadlines and suppress exception details.
 
-Section output preserves whole blocks where possible. An oversized first block is clipped to `section_max_chars` and marked `truncated`, so the configured character bound holds even for a single large block.
+`read_section` fetches the section in pages of `section_page_rows` blocks (keyset on `position`, `tool_repository.section_blocks`) and stops as soon as the character cap is reached, so it reads at most one page past the cap however long the section is (Codex I2). Section output preserves whole blocks where possible. An oversized first block is clipped to `section_max_chars` and marked `truncated`, so the configured character bound holds even for a single large block.

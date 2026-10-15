@@ -14,7 +14,13 @@ from thomas_ragx.kb import file_repository as files
 from thomas_ragx.kb.storage import PREVIEW_BUCKET, PREVIEW_SUFFIX, RAW_BUCKET, ObjectStorage, raw_key
 from thomas_ragx.platform.request_id import new_job_id
 from thomas_ragx.platform.timing import elapsed_ms
-from thomas_ragx.worker.metrics import SWEEP_KIND_OBJECT, SWEEP_KIND_SLOT
+from thomas_ragx.worker.metrics import (
+    SWEEP_KIND_INGEST_FAILED,
+    SWEEP_KIND_INGEST_REQUEUED,
+    SWEEP_KIND_OBJECT,
+    SWEEP_KIND_SLOT,
+)
+from thomas_ragx.worker.recovery import IngestRecovery, RecoveryResult
 
 SWEPT_BUCKETS: Final = (RAW_BUCKET, PREVIEW_BUCKET)
 KEY_SEPARATOR: Final = "/"
@@ -29,6 +35,8 @@ class SweepRecorder(Protocol):
 class SweepResult:
     slots: int
     objects: int
+    requeued: int = 0
+    failed: int = 0
 
 
 def _utc_now() -> datetime:
@@ -44,7 +52,9 @@ def file_id_of(key: str) -> UUID | None:
 
 
 class Sweeper:
-    """Removes expired upload slots and objects no row owns (spec §14.3 step 5, ruling A16)."""
+    """Removes expired upload slots and objects no row owns (spec §14.3 step 5, ruling A16) and, with an
+    `IngestRecovery`, re-drives or fails stalled ingests (m1/m3).
+    """
 
     def __init__(
         self,
@@ -55,7 +65,9 @@ class Sweeper:
         interval_seconds: float,
         metrics: SweepRecorder | None = None,
         now: Callable[[], datetime] = _utc_now,
+        recovery: IngestRecovery | None = None,
     ) -> None:
+        self._recovery = recovery  # stalled ingest recovery (m1/m3); None in slot/object-only tests
         self._pool = pool
         self._storage = storage
         self._cutoff_age = cutoff_age
@@ -97,11 +109,27 @@ class Sweeper:
                     removed += 1
         return removed
 
+    async def _recover(self) -> RecoveryResult:
+        if self._recovery is None:
+            return RecoveryResult(0, 0)
+        try:
+            return await self._recovery.recover()
+        except Exception as exc:  # isolated: a recovery outage must not cost the slot and object sweeps
+            log.error("ingest recovery failed", error_type=type(exc).__name__)  # noqa: TRY400
+            return RecoveryResult(0, 0)
+
     async def sweep_once(self) -> SweepResult:
-        result = SweepResult(slots=await self._sweep_slots(), objects=await self._sweep_objects())
+        slots = await self._sweep_slots()
+        objects = await self._sweep_objects()
+        recovered = await self._recover()
+        result = SweepResult(
+            slots=slots, objects=objects, requeued=recovered.requeued, failed=recovered.failed
+        )
         if self._metrics is not None:
             self._metrics.observe_sweep(SWEEP_KIND_SLOT, result.slots)
             self._metrics.observe_sweep(SWEEP_KIND_OBJECT, result.objects)
+            self._metrics.observe_sweep(SWEEP_KIND_INGEST_REQUEUED, result.requeued)
+            self._metrics.observe_sweep(SWEEP_KIND_INGEST_FAILED, result.failed)
         return result
 
     async def run(self, stop: asyncio.Event) -> None:
@@ -114,6 +142,8 @@ class Sweeper:
                         "sweep finished",
                         slots=result.slots,
                         objects=result.objects,
+                        requeued=result.requeued,
+                        failed=result.failed,
                         duration_ms=elapsed_ms(started),
                     )
                 except Exception as exc:  # storage or database outage: try again next period

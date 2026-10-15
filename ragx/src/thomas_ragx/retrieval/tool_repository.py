@@ -7,6 +7,7 @@ from psycopg.rows import DictRow
 from thomas_ragx.kb.repository import Connection
 
 SEARCHABLE: Final = ["ready", "degraded"]
+BEFORE_FIRST_POSITION: Final = -1  # block positions start at 0
 
 
 async def searchable_file(conn: Connection, org_id: str, kb_id: UUID, file_id: UUID) -> DictRow | None:
@@ -59,17 +60,25 @@ async def node_path(conn: Connection, org_id: str, kb_id: UUID, node_id: UUID) -
 
 
 async def section_blocks(
-    conn: Connection, org_id: str, kb_id: UUID, file_id: UUID, node_id: UUID
+    conn: Connection,
+    org_id: str,
+    kb_id: UUID,
+    file_id: UUID,
+    node_id: UUID,
+    *,
+    after_position: int = BEFORE_FIRST_POSITION,
+    limit: int,
 ) -> list[DictRow]:
+    """One page of a section's blocks in document order; the caller pages on `position` (Codex I2)."""
     return await (
         await conn.execute(
             b"WITH RECURSIVE tree AS (SELECT id FROM doc_nodes WHERE org_id = %s AND kb_id = %s AND id = %s "
             b"UNION ALL SELECT n.id FROM doc_nodes n JOIN tree t ON n.parent_id = t.id WHERE "
             b"n.org_id = %s AND n.kb_id = %s) "
-            b"SELECT block_id, block_type, text, locator FROM doc_blocks "
+            b"SELECT block_id, block_type, text, locator, position FROM doc_blocks "
             b"WHERE org_id = %s AND kb_id = %s AND file_id = %s AND node_id IN (SELECT id FROM "
-            b"tree) ORDER BY position",
-            (org_id, kb_id, node_id, org_id, kb_id, org_id, kb_id, file_id),
+            b"tree) AND position > %s ORDER BY position LIMIT %s",
+            (org_id, kb_id, node_id, org_id, kb_id, org_id, kb_id, file_id, after_position, limit),
         )
     ).fetchall()
 

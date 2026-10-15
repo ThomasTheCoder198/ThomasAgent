@@ -85,4 +85,5 @@ search_min_rerank_score: 0.1
 
 tool_timeout_ms: 20000
 section_max_chars: 8000
+section_page_rows: 64
 outline_max_nodes: 500

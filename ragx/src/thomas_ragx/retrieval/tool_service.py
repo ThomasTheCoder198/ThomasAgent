@@ -12,6 +12,7 @@ from thomas_ragx.db.pool import Pool
 from thomas_ragx.kb import repository as kbs
 from thomas_ragx.kb.file_service import CODE_INVALID, CODE_OUT_OF_RANGE, decode_cursor, encode_cursor_values
 from thomas_ragx.kb.model import KnowledgeBase
+from thomas_ragx.kb.repository import Connection
 from thomas_ragx.kb.service import require_org
 from thomas_ragx.kb.upload import field_error
 from thomas_ragx.platform.constants import HTTP_STATUS_SERVER_ERROR
@@ -36,6 +37,7 @@ class KbToolService:
         *,
         timeout_seconds: float,
         section_max_chars: int,
+        section_page_rows: int,
         outline_max_nodes: int,
         page_default_limit: int,
         page_max_limit: int,
@@ -45,6 +47,7 @@ class KbToolService:
         self._tracer = tracer
         self._timeout = timeout_seconds
         self._section_max_chars = section_max_chars
+        self._section_page_rows = section_page_rows
         self._outline_max_nodes = outline_max_nodes
         self._page_default = page_default_limit
         self._page_max = page_max_limit
@@ -113,23 +116,36 @@ class KbToolService:
                 if node is None:
                     raise AppError(ErrorCode.KB_NODE_NOT_FOUND)
                 path = await tools.node_path(conn, caller.org_id, kb.id, node_id)
-                rows = await tools.section_blocks(conn, caller.org_id, kb.id, node["file_id"], node_id)
-            kept: list[DictRow] = []
-            used = 0
-            truncated = False
-            for row in rows:
+                kept, truncated = await self._capped_section(
+                    conn, caller.org_id, kb.id, node["file_id"], node_id
+                )
+            return {"node": node, "path": path, "blocks": kept, "truncated": truncated}
+
+        return await self._bounded(tool, run())
+
+    async def _capped_section(
+        self, conn: Connection, org_id: str, kb_id: UUID, file_id: UUID, node_id: UUID
+    ) -> tuple[list[DictRow], bool]:
+        # Paged so a huge section is never read whole: at most one page past the cap is fetched (Codex I2).
+        kept: list[DictRow] = []
+        used = 0
+        after = tools.BEFORE_FIRST_POSITION
+        while True:
+            page = await tools.section_blocks(
+                conn, org_id, kb_id, file_id, node_id, after_position=after, limit=self._section_page_rows
+            )
+            for row in page:
                 remaining = self._section_max_chars - used
                 if len(row["text"]) > remaining:
                     # Preserve whole blocks when possible, while bounding an oversized first block.
                     if not kept:
                         kept.append({**row, "text": row["text"][:remaining]})
-                    truncated = True
-                    break
+                    return kept, True
                 kept.append(row)
                 used += len(row["text"])
-            return {"node": node, "path": path, "blocks": kept, "truncated": truncated}
-
-        return await self._bounded(tool, run())
+            if len(page) < self._section_page_rows:
+                return kept, False
+            after = page[-1]["position"]
 
     async def list_documents(
         self,

@@ -1,8 +1,10 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Final
 from uuid import UUID
 
+from psycopg.rows import DictRow
 from psycopg.types.json import Jsonb
 
 from thomas_ragx.db.outbox import PURGE_KIND_FILE, STREAM_KB_PURGE_REQUESTED, enqueue_outbox
@@ -22,14 +24,26 @@ IN_PROGRESS: Final = (
 CLAIMABLE: Final = (FileStatus.PENDING, FileStatus.FAILED)
 CLAIM: Final = (
     b"UPDATE kb_files f SET status = 'parsing', error_code = '', updated_at = now(), "
-    b"ingest_lease_until = now() + make_interval(secs => %s) "
+    b"ingest_lease_until = now() + make_interval(secs => %s), ingest_attempt_id = gen_random_uuid(), "
+    # A claim from failed (UI retry, DLQ replay) starts a fresh recovery budget (worker.recovery).
+    b"ingest_recoveries = CASE WHEN f.status = 'failed' THEN 0 ELSE f.ingest_recoveries END "
     b"FROM knowledge_bases kb, orgs o "
     b"WHERE f.id = %s AND f.org_id = %s AND f.kb_id = %s AND f.version = %s AND f.deleted_at IS NULL "
     b"AND kb.id = f.kb_id AND kb.deleted_at IS NULL AND o.id = f.org_id "
     b"AND (f.status = ANY(%s) OR (f.status = ANY(%s) AND f.ingest_lease_until < now())) "
     b"RETURNING f.id, f.org_id, f.kb_id, f.version, f.name, f.sha256, o.external_parsing, "
-    b"kb.collection_name, kb.embedding_model_id, kb.embedding_dims"
+    b"kb.collection_name, kb.embedding_model_id, kb.embedding_dims, f.ingest_attempt_id"
 )
+# Matches only the attempt that still holds the claim (Codex I1); a stale attempt's write matches no row.
+OWNED_BY_ATTEMPT: Final = (
+    b"id = %s AND version = %s AND ingest_attempt_id = %s AND deleted_at IS NULL AND status = ANY(%s)"
+)
+
+
+class ClaimState(StrEnum):
+    OWNED = "owned"  # this attempt still holds the live file
+    LOST = "lost"  # the file is live, but another attempt took it over or finished it
+    GONE = "gone"  # the file or its KB was deleted
 
 
 @dataclass(frozen=True)
@@ -44,6 +58,7 @@ class IngestTarget:
     collection_name: str
     embedding_model_id: UUID
     embedding_dims: int
+    attempt_id: UUID
 
 
 async def claim_file(conn: Connection, job: IngestJob, lease_seconds: float) -> IngestTarget | None:
@@ -75,35 +90,109 @@ async def claim_file(conn: Connection, job: IngestJob, lease_seconds: float) -> 
         collection_name=row["collection_name"],
         embedding_model_id=row["embedding_model_id"],
         embedding_dims=row["embedding_dims"],
+        attempt_id=row["ingest_attempt_id"],
     )
 
 
-async def set_step(conn: Connection, file_id: UUID, status: FileStatus) -> None:
+def _owned(target: IngestTarget) -> tuple[UUID, int, UUID, list[str]]:
+    return (target.file_id, target.version, target.attempt_id, [s.value for s in IN_PROGRESS])
+
+
+async def set_step(conn: Connection, target: IngestTarget, status: FileStatus) -> None:
     await conn.execute(
-        b"UPDATE kb_files SET status = %s, updated_at = now() "
-        b"WHERE id = %s AND deleted_at IS NULL AND status = ANY(%s)",
-        (status.value, file_id, [s.value for s in IN_PROGRESS]),
+        b"UPDATE kb_files SET status = %s, updated_at = now() WHERE " + OWNED_BY_ATTEMPT,
+        (status.value, *_owned(target)),
     )
 
 
-async def is_live(conn: Connection, file_id: UUID, version: int) -> bool:
+async def claim_state(conn: Connection, target: IngestTarget) -> ClaimState:
+    """Called under the KB lock, so no other attempt or purge can write this file's data until commit."""
     row = await (
         await conn.execute(
-            b"SELECT 1 FROM kb_files f JOIN knowledge_bases kb ON kb.id = f.kb_id "
+            b"SELECT f.ingest_attempt_id = %s AND f.status = ANY(%s) AS owned "
+            b"FROM kb_files f JOIN knowledge_bases kb ON kb.id = f.kb_id "
             b"WHERE f.id = %s AND f.version = %s AND f.deleted_at IS NULL AND kb.deleted_at IS NULL",
-            (file_id, version),
+            (target.attempt_id, [s.value for s in IN_PROGRESS], target.file_id, target.version),
         )
     ).fetchone()
-    return row is not None
+    if row is None:
+        return ClaimState.GONE
+    return ClaimState.OWNED if row["owned"] else ClaimState.LOST
 
 
-async def release_claim(conn: Connection, file_id: UUID, version: int) -> None:
+async def release_claim(conn: Connection, target: IngestTarget) -> None:
     """A failed attempt gives the file back so the stream's retry can claim it (ruling A24)."""
     await conn.execute(
-        b"UPDATE kb_files SET status = 'pending', ingest_lease_until = NULL, updated_at = now() "
-        b"WHERE id = %s AND version = %s AND deleted_at IS NULL AND status = ANY(%s)",
-        (file_id, version, [s.value for s in IN_PROGRESS]),
+        b"UPDATE kb_files SET status = 'pending', ingest_lease_until = NULL, updated_at = now() WHERE "
+        + OWNED_BY_ATTEMPT,
+        _owned(target),
     )
+
+
+@dataclass(frozen=True)
+class StalledFile:
+    file_id: UUID
+    org_id: str
+    kb_id: UUID
+    version: int
+    recoveries: int
+
+
+# In progress, but the lease ended more than the grace ago: the attempt is gone (crash, or its release failed)
+# and the stream's own reclaim had its chance. A live attempt always ends before its lease (job deadline).
+STALLED: Final = (
+    b"WHERE deleted_at IS NULL AND status = ANY(%s) "
+    b"AND ingest_lease_until < now() - make_interval(secs => %s) "
+    # A tombstoned KB's files wait for its purge; re-driving them would only skip or dead-letter noise.
+    b"AND NOT EXISTS (SELECT 1 FROM knowledge_bases kb "
+    b"WHERE kb.id = kb_files.kb_id AND kb.deleted_at IS NOT NULL) "
+)
+STALLED_RETURNING: Final = b" RETURNING id, org_id, kb_id, version, ingest_recoveries"
+
+
+def _stalled(rows: Sequence[DictRow]) -> list[StalledFile]:
+    return [
+        StalledFile(
+            file_id=row["id"],
+            org_id=row["org_id"],
+            kb_id=row["kb_id"],
+            version=row["version"],
+            recoveries=row["ingest_recoveries"],
+        )
+        for row in rows
+    ]
+
+
+async def requeue_stalled(conn: Connection, grace_seconds: float, max_recoveries: int) -> list[StalledFile]:
+    """Give stalled files back as pending; clearing the attempt id fences out any attempt still alive."""
+    rows = await (
+        await conn.execute(
+            b"UPDATE kb_files SET status = 'pending', ingest_lease_until = NULL, ingest_attempt_id = NULL, "
+            b"ingest_recoveries = ingest_recoveries + 1, updated_at = now() "
+            + STALLED
+            + b"AND ingest_recoveries < %s"
+            + STALLED_RETURNING,
+            ([s.value for s in IN_PROGRESS], grace_seconds, max_recoveries),
+        )
+    ).fetchall()
+    return _stalled(rows)
+
+
+async def fail_stalled(
+    conn: Connection, grace_seconds: float, max_recoveries: int, error_code: str
+) -> list[StalledFile]:
+    """A file that vanished on every recovery is failed instead of re-driven forever (a poison file)."""
+    rows = await (
+        await conn.execute(
+            b"UPDATE kb_files SET status = 'failed', error_code = %s, ingest_lease_until = NULL, "
+            b"ingest_attempt_id = NULL, updated_at = now() "
+            + STALLED
+            + b"AND ingest_recoveries >= %s"
+            + STALLED_RETURNING,
+            (error_code, [s.value for s in IN_PROGRESS], grace_seconds, max_recoveries),
+        )
+    ).fetchall()
+    return _stalled(rows)
 
 
 async def replace_outline(
@@ -177,9 +266,9 @@ async def finish(conn: Connection, target: IngestTarget, parsed: ParsedDocument,
         await conn.execute(
             b"UPDATE kb_files SET status = %s, degraded = %s, parse_provider = %s, parse_quality = %s, "
             b"page_count = %s, chunk_count = %s, error_code = '', ingested_at = now(), "
-            b"ingest_lease_until = NULL, "
+            b"ingest_lease_until = NULL, ingest_recoveries = 0, "
             b"updated_at = now() "
-            b"WHERE id = %s AND version = %s AND deleted_at IS NULL AND status = ANY(%s) RETURNING id",
+            b"WHERE " + OWNED_BY_ATTEMPT + b" RETURNING id",
             (
                 status.value,
                 parsed.degraded,
@@ -187,22 +276,21 @@ async def finish(conn: Connection, target: IngestTarget, parsed: ParsedDocument,
                 parsed.quality,
                 parsed.page_count,
                 chunk_count,
-                target.file_id,
-                target.version,
-                [s.value for s in IN_PROGRESS],
+                *_owned(target),
             ),
         )
     ).fetchone()
     return row is not None
 
 
-async def set_summaries(conn: Connection, summaries: Mapping[UUID, str]) -> None:
+async def set_summaries(conn: Connection, target: IngestTarget, summaries: Mapping[UUID, str]) -> None:
     if not summaries:
         return
     async with conn.cursor() as cursor:
         await cursor.executemany(
-            b"UPDATE doc_nodes SET summary = %s WHERE id = %s",
-            [(text, node) for node, text in summaries.items()],
+            b"UPDATE doc_nodes SET summary = %s WHERE id = %s AND file_id = %s "
+            b"AND EXISTS (SELECT 1 FROM kb_files WHERE " + OWNED_BY_ATTEMPT + b")",
+            [(text, node, target.file_id, *_owned(target)) for node, text in summaries.items()],
         )
 
 

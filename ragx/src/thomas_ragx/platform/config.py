@@ -21,6 +21,8 @@ PRESIGN_MIN_TTL: Final = timedelta(seconds=1)
 PRESIGN_MAX_TTL: Final = timedelta(days=7)
 MIN_EXTENSION_LENGTH: Final = 2  # a dot and at least one character
 CONVERTS_PER_FILE: Final = 2  # balanced, then accurate when quality is low (ruling A7)
+# The ingest lease ends this share of the stream visibility margin before Redis may reclaim the entry (m3).
+LEASE_MARGIN_DIVISOR: Final = 2
 
 
 class Config(BaseSettings):
@@ -58,6 +60,7 @@ class Config(BaseSettings):
     qdrant_timeout_seconds: int = Field(gt=0)
     tool_timeout_ms: int = Field(gt=0)
     section_max_chars: int = Field(gt=0)
+    section_page_rows: int = Field(gt=0)
     outline_max_nodes: int = Field(gt=0)
     search_dense_limit: int = Field(gt=0)
     search_sparse_limit: int = Field(gt=0)
@@ -199,6 +202,32 @@ class Config(BaseSettings):
                 "RAG_STREAM_VISIBILITY_TIMEOUT_MILLISECONDS"
             )
         return self
+
+    @property
+    def ingest_job_deadline_seconds(self) -> float:
+        """An ingest attempt ends before its lease can expire; the stream visibility timeout is the margin.
+
+        `_ingest_lease_outlives_a_job` keeps this above two Datalab timeouts (Codex I1, ruling A11).
+        """
+        deadline_ms = (
+            self.ingest_visibility_timeout_milliseconds - self.stream_visibility_timeout_milliseconds
+        )
+        return deadline_ms / MILLISECONDS_PER_SECOND
+
+    @property
+    def ingest_lease_seconds(self) -> float:
+        """The DB lease ends half a margin after the deadline and half a margin before Redis may reclaim (m3).
+
+        A crash-reclaimed entry then always finds an expired lease instead of skipping and being acked, and an
+        attempt still has half a margin after its deadline for cleanup.
+        """
+        margin_ms = self.stream_visibility_timeout_milliseconds / LEASE_MARGIN_DIVISOR
+        return (self.ingest_visibility_timeout_milliseconds - margin_ms) / MILLISECONDS_PER_SECOND
+
+    @property
+    def ingest_recovery_grace_seconds(self) -> float:
+        """How long past its lease an in-progress file waits before the sweep re-drives it (m1)."""
+        return self.stream_visibility_timeout_milliseconds / MILLISECONDS_PER_SECOND
 
     @model_validator(mode="after")
     def _chunk_word_limits_are_ordered(self) -> "Config":

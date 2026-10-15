@@ -18,7 +18,7 @@ from thomas_ragx.ingest.chunker import Chunk
 from thomas_ragx.ingest.indexing import Indexing
 from thomas_ragx.ingest.job import IngestJob
 from thomas_ragx.ingest.outline import Outline, build_outline
-from thomas_ragx.ingest.repository import IngestTarget
+from thomas_ragx.ingest.repository import ClaimState, IngestTarget
 from thomas_ragx.ingest.source import extension_of, fetch_verified
 from thomas_ragx.ingest.summaries import SectionText
 from thomas_ragx.kb import repository as kbs
@@ -26,7 +26,9 @@ from thomas_ragx.kb.model import FileStatus
 from thomas_ragx.kb.storage import PREVIEW_BUCKET, ObjectStorage, preview_key
 from thomas_ragx.parsing.model import ParsedDocument
 from thomas_ragx.parsing.service import ParseService
-from thomas_ragx.platform.timing import MILLISECONDS_PER_SECOND
+from thomas_ragx.platform.error_codes_gen import ErrorCode
+from thomas_ragx.platform.errors import AppError
+from thomas_ragx.platform.timing import MILLISECONDS_PER_SECOND, elapsed_ms
 from thomas_ragx.platform.tracing import ATTR_SPAN_KIND, SPAN_KIND_CHAIN
 from thomas_ragx.retrieval.qdrant_store import PointOwner, build_point
 
@@ -62,6 +64,7 @@ class IngestPipeline:
         indexing: Indexing,
         work_dir: Path,
         lease_seconds: float,
+        job_timeout_seconds: float,
         metrics: IngestRecorder | None = None,
     ) -> None:
         self._indexing = indexing
@@ -71,6 +74,7 @@ class IngestPipeline:
         self._tracer = tracer
         self._work_dir = work_dir
         self._lease_seconds = lease_seconds
+        self._job_timeout = job_timeout_seconds
         self._metrics = metrics
 
     @staticmethod
@@ -121,11 +125,27 @@ class IngestPipeline:
             log.info("ingest skipped", file_id=str(job.file_id), version=job.version)
             return
         with structlog.contextvars.bound_contextvars(kb_id=str(target.kb_id), file_id=str(target.file_id)):
+            started = perf_counter()
+            # End the attempt before its lease can expire, so no second attempt runs beside it (I1).
+            deadline = asyncio.timeout(self._job_timeout)
             try:
-                await self._run(target, job.request_id)
+                try:
+                    async with deadline:
+                        await self._run(target, job.request_id)
+                except TimeoutError:
+                    if deadline.expired():
+                        # Tells "this file is too slow" apart from a provider timeout with the same code (m2).
+                        log.warning(
+                            "ingest deadline exceeded",
+                            request_id=job.request_id,
+                            file_id=str(target.file_id),
+                            deadline_seconds=self._job_timeout,
+                            duration_ms=elapsed_ms(started),
+                        )
+                    raise AppError(ErrorCode.DEPENDENCY_TIMEOUT) from None
             except Exception:
                 async with self._pool.connection() as conn:
-                    await ingest.release_claim(conn, target.file_id, target.version)  # ruling A24
+                    await ingest.release_claim(conn, target)  # ruling A24; a stale attempt releases nothing
                 if self._metrics is not None:
                     self._metrics.observe_ingest_file(OUTCOME_FAILED)
                 raise  # the consumer retries or dead-letters; the hook marks the file failed
@@ -146,12 +166,12 @@ class IngestPipeline:
         finally:
             path.unlink(missing_ok=True)
         outline = build_outline(target.file_id, target.version, target.name, parsed.blocks)
-        persisted = await self._step(STEP_PERSIST, self._persist(target, outline, parsed), target)
-        if not persisted:
-            log.info("ingest abandoned, target deleted", version=target.version)
+        state = await self._step(STEP_PERSIST, self._persist(target, outline, parsed), target)
+        if state is not ClaimState.OWNED:
+            self._abandoned(target, state)
             return
         await self._advance(target, FileStatus.ENRICHING)
-        await self._step(STEP_ENRICH, self._enrich(outline, parsed), target)
+        await self._step(STEP_ENRICH, self._enrich(target, outline, parsed), target)
         await self._advance(target, FileStatus.CHUNKING)
         chunks = await self._step(
             STEP_CHUNK,
@@ -183,9 +203,12 @@ class IngestPipeline:
         # KB before file rows, matching purge/confirm: no writer can outlive a completed purge.
         async with self._pool.connection() as conn, conn.transaction():
             await kbs.lock_collection(conn, target.org_id, target.kb_id)
-            if not await ingest.is_live(conn, target.file_id, target.version):
+            state = await ingest.claim_state(conn, target)
+            if state is ClaimState.GONE:
                 await self._discard(target)
-                log.info("ingest abandoned, target deleted", version=target.version)
+            if state is not ClaimState.OWNED:
+                # LOST: another attempt holds or finished the file; its points and preview are not ours.
+                self._abandoned(target, state)
                 return
             try:
                 await self._step(STEP_INDEX, self._index(target, chunks, dense, sparse), target)
@@ -193,9 +216,11 @@ class IngestPipeline:
                 finished = await ingest.finish(conn, target, parsed, chunk_count=len(chunks))
                 retired = await ingest.supersede_older_versions(conn, target, request_id) if finished else []
                 if not finished:
+                    # Ownership held under the KB lock, so every point and preview of this file is ours: the
+                    # finish lost only to a delete or a takeover that has not published yet.
                     await self._discard(target)
-            except Exception:
-                # A failed later batch or preview must not strand earlier external writes.
+            except BaseException:
+                # A failed later batch, preview or the job deadline must not strand earlier external writes.
                 await self._discard(target)
                 raise
         self._finished(parsed, finished, len(parsed.blocks), len(chunks), len(retired))
@@ -206,19 +231,24 @@ class IngestPipeline:
         )
         await self._storage.remove(PREVIEW_BUCKET, preview_key(target.org_id, target.kb_id, target.file_id))
 
+    @staticmethod
+    def _abandoned(target: IngestTarget, state: ClaimState) -> None:
+        # claim=gone: the file or KB was deleted; claim=lost: another attempt took the file over.
+        log.info("ingest abandoned", version=target.version, claim=state.value)
+
     async def _advance(self, target: IngestTarget, status: FileStatus) -> None:
         async with self._pool.connection() as conn:
-            await ingest.set_step(conn, target.file_id, status)
+            await ingest.set_step(conn, target, status)
 
-    async def _persist(self, target: IngestTarget, outline: Outline, parsed: ParsedDocument) -> bool:
+    async def _persist(self, target: IngestTarget, outline: Outline, parsed: ParsedDocument) -> ClaimState:
         async with self._pool.connection() as conn, conn.transaction():
             await kbs.lock_collection(conn, target.org_id, target.kb_id)
-            if not await ingest.is_live(conn, target.file_id, target.version):
-                return False
-            await ingest.replace_outline(conn, target, outline, parsed.blocks)
-            return True
+            state = await ingest.claim_state(conn, target)
+            if state is ClaimState.OWNED:
+                await ingest.replace_outline(conn, target, outline, parsed.blocks)
+            return state
 
-    async def _enrich(self, outline: Outline, parsed: ParsedDocument) -> None:
+    async def _enrich(self, target: IngestTarget, outline: Outline, parsed: ParsedDocument) -> None:
         texts: dict[UUID, list[str]] = {}
         for block in parsed.blocks:
             texts.setdefault(outline.block_nodes[block.block_id], []).append(block.text)
@@ -229,7 +259,7 @@ class IngestPipeline:
         ]
         summaries = await self._indexing.summarizer.summarize(sections)
         async with self._pool.connection() as conn:
-            await ingest.set_summaries(conn, summaries)
+            await ingest.set_summaries(conn, target, summaries)
 
     async def _embed(
         self, target: IngestTarget, chunks: list[Chunk]

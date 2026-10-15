@@ -34,6 +34,7 @@ async def test_failed_ingest_step_observes_duration(tmp_path: Path) -> None:
         indexing=Mock(),
         work_dir=tmp_path,
         lease_seconds=60,
+        job_timeout_seconds=50,
         metrics=metrics,
     )
     target = Mock(kb_id=uuid4(), file_id=uuid4(), version=1)

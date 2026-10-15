@@ -114,6 +114,7 @@ async def test_tool_deadline_is_http_504_with_a_masked_body(  # type: ignore[no-
         TracerProvider().get_tracer(__name__),
         timeout_seconds=0.000001,
         section_max_chars=8000,
+        section_page_rows=64,
         outline_max_nodes=500,
         page_default_limit=20,
         page_max_limit=100,

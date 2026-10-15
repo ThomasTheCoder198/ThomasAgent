@@ -12,7 +12,7 @@ Uses Postgres, object storage, parsing and injected tracing/metrics. Used by the
 
 ## Run & test
 ```bash
-uv run pytest -q tests/unit/test_outline.py tests/integration/test_ingest.py
+uv run pytest -q tests/unit/test_outline.py tests/integration/test_ingest.py tests/integration/test_ingest_fencing.py
 ```
 
 ## Conventions
@@ -45,5 +45,12 @@ Warm embedding cache reads validate both persisted dimension metadata and decode
 The pipeline claims and fetches the verified source, parses, persists the outline, enriches section summaries, chunks, embeds, indexes dense and BM25 points, writes preview JSON, then finishes. Temporary raw copies are removed after parsing. Each step has a CHAIN span and duration metric; embedding/cache/index spans contain counts only.
 
 The embedding model and dimensions come from the KB snapshot, never the current embedding role (B5). Optional chat.fast summaries cannot fail ingest (B14). Finishing retires older versions of the same name and enqueues their purge in the same transaction (B15). Publication validates KB/file liveness under the KB lock; finalization removes points and preview when file deletion wins (B16). Preview JSON contains fileId, version, provider, pageCount and blocks with blockId, nodeId, type, text and locator (B17).
+
+## Attempts, fencing and the job deadline (Codex I1)
+Each claim writes a new `kb_files.ingest_attempt_id` and returns it on `IngestTarget.attempt_id`. Every write of an attempt matches that id: `set_step`, `release_claim`, `finish`, `set_summaries` and the outline write. A stale attempt (its lease expired and another attempt claimed the file) therefore changes nothing in Postgres.
+
+`_persist` and `_publish` call `claim_state` under the KB lock before any outline, Qdrant or preview write: `owned` proceeds; `gone` (file or KB deleted) keeps the B16 cleanup; `lost` (live, but another attempt holds or finished it) stops with no writes and no cleanup, and is logged as `ingest abandoned` with `claim=lost`. Cleanup after a lost finish or a failed index/preview stays safe because ownership was confirmed under the KB lock that every other persist, publish and purge also takes: no one else can have published this file's points (whose ids are deterministic per file, version and chunk) or preview meanwhile.
+
+An attempt runs under `asyncio.timeout(Config.ingest_job_deadline_seconds)` = ingest visibility timeout − stream visibility timeout (1740 s by default), so it ends before its lease can expire. When the deadline fires the pipeline logs one warning `ingest deadline exceeded` (`request_id`, `file_id`, `deadline_seconds`, `duration_ms`; no content), so "this file is too slow" can be told apart from a provider timeout, then raises retryable `DEPENDENCY_TIMEOUT`, releases the claim and follows the normal retry/DLQ path; publication cleanup also runs on cancellation, so a partial index is removed. A file that needs longer than the deadline fails; raise `RAG_INGEST_VISIBILITY_TIMEOUT_MILLISECONDS` to give it more (lease and deadline move together). The raw temp copy's name includes the attempt id. The DB lease is `Config.ingest_lease_seconds` = visibility − half the stream visibility margin (1770 s): it ends after the deadline (cleanup window) and before Redis may reclaim the entry, so a crash-reclaimed entry finds an expired lease instead of skipping and being acknowledged (m3). An in-progress file whose attempt vanished anyway is re-driven by the worker sweep (`worker.recovery.IngestRecovery`).
 
 Publication holds the KB row lock across indexing, preview and finish, using the same KB-before-file lock order as purge. Outline replacement also locks the KB first so FK insertion cannot invert this order. Liveness includes the KB tombstone. An indexing/preview failure or lost finalization removes points and preview while the lock is held. Provider calls and chunking remain outside this transaction. Holding a DB connection/KB lock across external storage calls serializes publication per KB and can delay KB deletion.

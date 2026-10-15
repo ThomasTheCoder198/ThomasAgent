@@ -17,7 +17,6 @@ from thomas_ragx.parsing.registry import local_registry
 from thomas_ragx.parsing.service import ParseService
 from thomas_ragx.platform.config import Config
 from thomas_ragx.platform.retry import backoff_seconds
-from thomas_ragx.platform.timing import MILLISECONDS_PER_SECOND
 from thomas_ragx.platform.tracing import ATTR_ORG_ID, ATTR_REQUEST_ID
 from thomas_ragx.registry.factory import create_registry_service
 from thomas_ragx.resources import Resources
@@ -25,6 +24,7 @@ from thomas_ragx.worker.consumer import Handler, StreamConsumer, StreamMessage
 from thomas_ragx.worker.handlers import IngestDeadLetter, IngestHandler, PurgeHandler
 from thomas_ragx.worker.metrics import WorkerMetrics, configure_worker_metrics
 from thomas_ragx.worker.plan import consumer_plan
+from thomas_ragx.worker.recovery import IngestRecovery
 from thomas_ragx.worker.relay import OutboxRelay
 from thomas_ragx.worker.sweeper import Sweeper
 
@@ -100,7 +100,8 @@ async def _run_worker(
         tracer,
         indexing=indexing,
         work_dir=Path(config.work_dir),
-        lease_seconds=config.ingest_visibility_timeout_milliseconds / MILLISECONDS_PER_SECOND,
+        lease_seconds=config.ingest_lease_seconds,
+        job_timeout_seconds=config.ingest_job_deadline_seconds,
         metrics=metrics,
     )
 
@@ -145,6 +146,12 @@ async def _run_worker(
         cutoff_age=config.upload_url_ttl + timedelta(seconds=config.upload_sweep_grace_seconds),
         interval_seconds=config.sweep_interval_seconds,
         metrics=metrics,
+        recovery=IngestRecovery(
+            resources.pool,
+            resources.redis,
+            grace_seconds=config.ingest_recovery_grace_seconds,
+            max_recoveries=config.stream_max_deliveries,
+        ),
     )
     log.info("worker started", consumer=name, ingest_concurrency=config.ingest_concurrency)
     await asyncio.gather(

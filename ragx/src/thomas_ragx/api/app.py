@@ -154,6 +154,7 @@ def create_app(config: Config | None = None, resources: Resources | None = None)
         tracer,
         timeout_seconds=config.tool_timeout_ms / MILLISECONDS_PER_SECOND,
         section_max_chars=config.section_max_chars,
+        section_page_rows=config.section_page_rows,
         outline_max_nodes=config.outline_max_nodes,
         page_default_limit=config.page_default_limit,
         page_max_limit=config.page_max_limit,

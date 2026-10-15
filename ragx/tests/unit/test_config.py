@@ -268,3 +268,14 @@ def test_config_accepts_a_redis_socket_timeout_just_above_the_stream_block() -> 
         stream_block_milliseconds=5000,
     )
     assert config.redis_socket_timeout_seconds == 5.5
+
+
+def test_ingest_deadline_lease_and_reclaim_are_ordered() -> None:
+    # m3: deadline < lease < Redis reclaim, so a crash-reclaimed entry always finds an expired lease.
+    config = Config(minio_access_key="a", minio_secret_key="s")
+    reclaim_seconds = config.ingest_visibility_timeout_milliseconds / 1000
+    margin_seconds = config.stream_visibility_timeout_milliseconds / 1000
+    assert config.ingest_job_deadline_seconds == reclaim_seconds - margin_seconds == 1740
+    assert config.ingest_lease_seconds == reclaim_seconds - margin_seconds / 2 == 1770
+    assert config.ingest_job_deadline_seconds < config.ingest_lease_seconds < reclaim_seconds
+    assert config.ingest_recovery_grace_seconds == margin_seconds

@@ -59,6 +59,7 @@ def pipeline_for(
     embedder: Any = None,
     chat: Any = None,
     models: Any = None,
+    job_timeout_seconds: float = 50.0,  # inside the 60 s lease below, like the derived production deadline
 ) -> IngestPipeline:
     tracer = TracerProvider().get_tracer(__name__)
     parser = ParseService(
@@ -98,4 +99,5 @@ def pipeline_for(
         indexing=indexing,
         work_dir=tmp_path / "work",
         lease_seconds=60.0,
+        job_timeout_seconds=job_timeout_seconds,
     )

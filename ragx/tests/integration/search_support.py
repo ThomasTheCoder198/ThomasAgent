@@ -96,6 +96,7 @@ def tool_service_for(
         TracerProvider().get_tracer(__name__),
         timeout_seconds=20,
         section_max_chars=8000,
+        section_page_rows=64,
         outline_max_nodes=500,
         page_default_limit=20,
         page_max_limit=100,
@@ -109,7 +110,9 @@ async def indexed_corpus(
     qdrant: AsyncQdrantClient,
     tmp_path: Path,
     org_id: str,
+    kb_name: str | None = None,
 ) -> IndexedCorpus:
+    """Index the eval corpus into the org's default KB, or into a new KB named `kb_name` in that org."""
     files: dict[str, UUID] = {}
     async with api_client(pool, minio_config=minio_config) as (client, app):
         await seed_dev_registry(app.state.registry_service)
@@ -120,6 +123,12 @@ async def indexed_corpus(
         )
         assert response.status_code == 200, response.text
         kb_id = UUID(response.json()["data"]["defaultKbId"])
+        if kb_name is not None:
+            created = await client.post(
+                "/v1/knowledge-bases", json={"name": kb_name}, headers=bearer(org_id, "kb:write")
+            )
+            assert created.status_code == 201, created.text
+            kb_id = UUID(created.json()["data"]["id"])
         pipeline = pipeline_for(pool, minio, qdrant, tmp_path)
         for path in sorted((Path(__file__).parents[1] / "eval" / "corpus").iterdir()):
             response = await upload(

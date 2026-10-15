@@ -217,3 +217,35 @@ def test_summary_config_defaults_and_positive_limits(field: str, default: int) -
     for invalid in (0, -1):
         with pytest.raises(ValidationError):
             Config(**{field: invalid}, minio_access_key="a", minio_secret_key="s")
+
+
+def test_redis_socket_timeout_default_outlasts_the_stream_block() -> None:
+    config = Config(minio_access_key="a", minio_secret_key="s")
+    assert config.redis_socket_timeout_seconds * 1000 > config.stream_block_milliseconds
+
+
+@pytest.mark.parametrize(
+    ("timeout_seconds", "block_milliseconds"),
+    [(5.0, 5000), (4.0, 5000), (0.0, 5000), (-1.0, 5000)],
+)
+def test_config_rejects_a_redis_socket_timeout_not_above_the_stream_block(
+    timeout_seconds: float, block_milliseconds: int
+) -> None:
+    # A blocking XREADGROUP that outlasts the socket read timeout raises TimeoutError on every idle poll.
+    with pytest.raises(ValidationError):
+        Config(
+            minio_access_key="a",
+            minio_secret_key="s",
+            redis_socket_timeout_seconds=timeout_seconds,
+            stream_block_milliseconds=block_milliseconds,
+        )
+
+
+def test_config_accepts_a_redis_socket_timeout_just_above_the_stream_block() -> None:
+    config = Config(
+        minio_access_key="a",
+        minio_secret_key="s",
+        redis_socket_timeout_seconds=5.5,
+        stream_block_milliseconds=5000,
+    )
+    assert config.redis_socket_timeout_seconds == 5.5

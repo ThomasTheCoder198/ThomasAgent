@@ -9,7 +9,7 @@ Coordinates API startup and idempotent storage bootstrap.
 - `bootstrap.py`: migrations, the one-time admin account (`admin/`), buckets and the Qdrant check.
 - `ui/`: the `/ui` admin pages for providers, models and roles.
 - `parsing/`: block model, locators, parser registry and local parsers ([README](parsing/README.md)).
-- `resources.py`: Postgres pool, Redis client and MinIO storage lifecycle and readiness.
+- `resources.py`: Postgres pool, Redis client (`create_redis`, the only Redis factory) and MinIO and Qdrant lifecycle and readiness.
 
 ## Dependencies
 - Uses: api, admin, ui, platform, db, kb storage, Postgres, Redis, MinIO, and Qdrant.

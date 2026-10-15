@@ -21,6 +21,16 @@ REDIS_PROTOCOL: Final = 2
 log = structlog.get_logger(__name__)
 
 
+def create_redis(config: Config) -> Redis:
+    """The one place ragx builds a Redis client, so every caller gets the same timeout and protocol."""
+    return Redis.from_url(
+        config.redis_url,
+        decode_responses=True,
+        protocol=REDIS_PROTOCOL,
+        socket_timeout=config.redis_socket_timeout_seconds,
+    )
+
+
 @dataclass
 class Resources:
     pool: Pool
@@ -38,7 +48,7 @@ class Resources:
                 config.database_pool_min_size,
                 config.database_pool_max_size,
             ),
-            redis=Redis.from_url(config.redis_url, decode_responses=True, protocol=REDIS_PROTOCOL),
+            redis=create_redis(config),
             storage=create_storage(config),
             qdrant=AsyncQdrantClient(url=config.qdrant_url, timeout=config.qdrant_timeout_seconds),
             connect_timeout_seconds=config.database_connect_timeout_seconds,

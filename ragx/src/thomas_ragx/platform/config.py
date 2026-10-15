@@ -42,6 +42,7 @@ class Config(BaseSettings):
     database_connect_timeout_seconds: float
     readiness_timeout_seconds: float
     redis_url: str
+    redis_socket_timeout_seconds: float = Field(gt=0)
     vault_master_key: SecretStr
     core_public_keys: dict[str, str]
     app_token_issuer: str
@@ -167,6 +168,17 @@ class Config(BaseSettings):
         if any(not item.startswith(".") or len(item) < MIN_EXTENSION_LENGTH for item in normalized):
             raise ValueError("RAG_LOCAL_FIRST_EXTENSIONS entries must look like '.docx'")
         return normalized
+
+    @model_validator(mode="after")
+    def _redis_socket_timeout_outlasts_the_stream_block(self) -> "Config":
+        # redis-py applies the socket timeout to blocking reads too: XREADGROUP BLOCK at or past it raises
+        # TimeoutError on every idle poll.
+        if self.redis_socket_timeout_seconds * MILLISECONDS_PER_SECOND <= self.stream_block_milliseconds:
+            raise ValueError(
+                "RAG_REDIS_SOCKET_TIMEOUT_SECONDS must exceed RAG_STREAM_BLOCK_MILLISECONDS "
+                "(converted to seconds)"
+            )
+        return self
 
     @model_validator(mode="after")
     def _datalab_timeout_covers_a_poll(self) -> "Config":

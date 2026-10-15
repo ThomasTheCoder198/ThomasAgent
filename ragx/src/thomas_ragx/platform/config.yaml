@@ -15,6 +15,8 @@ database_pool_max_size: 5
 database_connect_timeout_seconds: 10.0
 readiness_timeout_seconds: 2.0
 redis_url: redis://ragx-redis:6379/0
+# Must exceed stream_block_milliseconds (XREADGROUP BLOCK is bound by it); still caps a dead connection.
+redis_socket_timeout_seconds: 15.0
 qdrant_url: http://qdrant:6333
 minio_endpoint: minio:9000
 minio_secure: false

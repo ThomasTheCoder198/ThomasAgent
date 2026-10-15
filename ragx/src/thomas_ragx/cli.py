@@ -11,7 +11,6 @@ from uuid import UUID
 import structlog
 import typer
 import uvicorn
-from redis.asyncio import Redis
 
 from thomas_ragx import bootstrap as bootstrap_module
 from thomas_ragx.api.app import create_app
@@ -34,7 +33,7 @@ from thomas_ragx.platform.tracing import (
 )
 from thomas_ragx.registry.dev_seed import seed_dev_registry
 from thomas_ragx.registry.factory import create_registry_service
-from thomas_ragx.resources import REDIS_PROTOCOL, Resources
+from thomas_ragx.resources import Resources, create_redis
 from thomas_ragx.retrieval.factory import create_search_service
 from thomas_ragx.worker.dlq import DeadLetterReplayer
 from thomas_ragx.worker.metrics import configure_worker_metrics
@@ -143,7 +142,7 @@ def seed_dev() -> None:
 
 
 async def _replay(config: Config, stream: str, entry_ids: list[str] | None) -> None:
-    redis = Redis.from_url(config.redis_url, decode_responses=True, protocol=REDIS_PROTOCOL)
+    redis = create_redis(config)
     try:
         with structlog.contextvars.bound_contextvars(request_id=new_job_id()):
             replayed = await DeadLetterReplayer(redis).replay(stream, entry_ids)

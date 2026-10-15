@@ -38,12 +38,11 @@ The frontend runs on the host, not in compose. From the repo root, use `task web
 or `task web:dev:mock`; `task lint:frontend` and `task test:frontend` also run from there.
 Bun is only the script runner; install with npm and keep `package-lock.json` as the lockfile of record.
 
-| Env               | Where                           | Meaning                                                                                   |
-| ----------------- | ------------------------------- | ----------------------------------------------------------------------------------------- |
-| `WEB_CORE_URL`    | server, build time for rewrites | Base URL of core (default `http://localhost:8080`).                                       |
-| `WEB_RAGX_UI_URL` | server                          | Ragx's model UI, opened in a new tab (dev `http://localhost:8090/ui`). Hidden when unset. |
-| `WEB_BASE_URL`    | Playwright                      | App under test (default `http://localhost:3000`).                                         |
-| `MOCK_CORE_*`     | `mock-core/`                    | See `mock-core/README.md`.                                                                |
+| Env            | Where                           | Meaning                                             |
+| -------------- | ------------------------------- | --------------------------------------------------- |
+| `WEB_CORE_URL` | server, build time for rewrites | Base URL of core (default `http://localhost:8080`). |
+| `WEB_BASE_URL` | Playwright                      | App under test (default `http://localhost:3000`).   |
+| `MOCK_CORE_*`  | `mock-core/`                    | See `mock-core/README.md`.                          |
 
 ## Conventions
 

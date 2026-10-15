@@ -4,7 +4,8 @@
     "loading": "Đang tải…",
     "retry": "Thử lại",
     "cancel": "Huỷ",
-    "save": "Lưu"
+    "save": "Lưu",
+    "dismissNotification": "Đóng thông báo: {title}"
   },
   "routeStatus": {
     "loadingTitle": "Đang mở trang",
@@ -227,9 +228,17 @@
     "problem": {
       "type": "Không hỗ trợ loại tệp này.",
       "size": "Tệp tối đa 50 MB.",
-      "empty": "Tệp rỗng.",
-      "storage": "Kho lưu trữ từ chối tệp (<mono>{code}</mono>).",
-      "storageUnreachable": "Không kết nối được tới kho lưu trữ tệp (<mono>{code}</mono>)."
+      "empty": "Tệp rỗng."
+    },
+    "storage": {
+      "sizeMismatch": "Tệp đã thay đổi sau khi được chọn. Hãy chọn lại (<mono>{code}</mono>).",
+      "denied": "Liên kết tải lên đã hết hạn hoặc bị từ chối. Thử lại để lấy liên kết mới (<mono>{code}</mono>).",
+      "timeout": "Kho lưu trữ đã ngừng chờ tệp. Hãy thử lại (<mono>{code}</mono>).",
+      "busy": "Kho lưu trữ đang bận. Đợi một lát rồi thử lại (<mono>{code}</mono>).",
+      "fault": "Kho lưu trữ gặp lỗi nội bộ. Hãy thử lại (<mono>{code}</mono>).",
+      "unreachable": "Không kết nối được tới kho lưu trữ tệp. Kiểm tra kết nối rồi thử lại (<mono>{code}</mono>).",
+      "interrupted": "Quá trình tải lên bị gián đoạn. Hãy thử lại (<mono>{code}</mono>).",
+      "rejected": "Kho lưu trữ từ chối tệp (<mono>{code}</mono>)."
     },
     "status": {
       "pending": "Đang chờ",
@@ -280,8 +289,6 @@
     "create": "Tạo tổ chức",
     "retry": "Thử lại",
     "settingsSyncing": "cài đặt chưa áp dụng ở ragx",
-    "ragxModels": "Cấu hình model RAG",
-    "opensInNewTab": "(mở trong tab mới)",
     "status": {
       "pending": "Đang chuẩn bị",
       "ready": "Sẵn sàng",

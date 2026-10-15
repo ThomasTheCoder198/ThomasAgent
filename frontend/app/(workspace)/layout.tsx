@@ -14,7 +14,6 @@ import { ShellFrame } from "@/features/shell/ShellFrame";
 import { Sidebar, type NavItem } from "@/features/shell/Sidebar";
 import { isCollapsedValue, SIDEBAR_COOKIE } from "@/features/shell/sidebar-state";
 import { UserMenu } from "@/features/shell/UserMenu";
-import { env } from "@/lib/env";
 import { pathFromHeaders } from "@/lib/request-path";
 
 export default async function WorkspaceLayout({ children }: { children: ReactNode }) {
@@ -57,9 +56,7 @@ export default async function WorkspaceLayout({ children }: { children: ReactNod
           user={user}
           activeHref={path}
           footer={<UserMenu />}
-          org={
-            <OrgPlate orgs={orgs} current={current} failed={!orgsLoaded.ok} ragxUiUrl={env.WEB_RAGX_UI_URL} />
-          }
+          org={<OrgPlate orgs={orgs} current={current} failed={!orgsLoaded.ok} />}
           toggle={<CollapseButton />}
           labels={{
             newChat: t("shell.newChat"),

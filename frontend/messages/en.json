@@ -4,7 +4,8 @@
     "loading": "Loading…",
     "retry": "Retry",
     "cancel": "Cancel",
-    "save": "Save"
+    "save": "Save",
+    "dismissNotification": "Dismiss notification: {title}"
   },
   "routeStatus": {
     "loadingTitle": "Opening page",
@@ -227,9 +228,17 @@
     "problem": {
       "type": "This file type is not supported.",
       "size": "Files can be at most 50 MB.",
-      "empty": "The file is empty.",
-      "storage": "Storage refused the upload (<mono>{code}</mono>).",
-      "storageUnreachable": "Could not reach file storage (<mono>{code}</mono>)."
+      "empty": "The file is empty."
+    },
+    "storage": {
+      "sizeMismatch": "The file changed after it was picked. Pick it again (<mono>{code}</mono>).",
+      "denied": "The upload link expired or was refused. Retry to get a new one (<mono>{code}</mono>).",
+      "timeout": "Storage stopped waiting for the file. Retry (<mono>{code}</mono>).",
+      "busy": "Storage is busy. Wait a moment, then retry (<mono>{code}</mono>).",
+      "fault": "Storage had an internal error. Retry (<mono>{code}</mono>).",
+      "unreachable": "Could not reach file storage. Check the connection, then retry (<mono>{code}</mono>).",
+      "interrupted": "The upload was interrupted. Retry (<mono>{code}</mono>).",
+      "rejected": "Storage refused the upload (<mono>{code}</mono>)."
     },
     "status": {
       "pending": "Waiting",
@@ -280,8 +289,6 @@
     "create": "Create organization",
     "retry": "Retry",
     "settingsSyncing": "settings not applied in ragx yet",
-    "ragxModels": "RAG model settings",
-    "opensInNewTab": "(opens in a new tab)",
     "status": {
       "pending": "Preparing",
       "ready": "Ready",

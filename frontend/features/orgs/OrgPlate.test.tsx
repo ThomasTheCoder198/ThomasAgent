@@ -31,14 +31,13 @@ const demo: Organization = {
   updatedAt: "2026-10-10T00:00:00Z",
 };
 
-function plate(props: { ragxUiUrl?: string }) {
+function plate() {
   return (
     <NextIntlClientProvider locale="en" messages={messages}>
-      <OrgPlate orgs={[demo]} current={demo} {...props} />
+      <OrgPlate orgs={[demo]} current={demo} />
     </NextIntlClientProvider>
   );
 }
-const renderPlate = (props: { ragxUiUrl?: string }) => render(plate(props));
 
 describe("OrgPlate", () => {
   beforeEach(() => {
@@ -73,16 +72,17 @@ describe("OrgPlate", () => {
     expect(container.querySelector("span[aria-hidden]")?.textContent).toBe("");
   });
 
-  it("links to the ragx model UI in a new tab only when configured", async () => {
-    const { rerender } = renderPlate({ ragxUiUrl: "http://localhost:8090/ui" });
+  // Owner decision P14 (2026-10-14): the ragx admin UI is separate; core's menu never links to it.
+  it("has no link out of core in the org menu", async () => {
+    render(plate());
     await userEvent.click(screen.getByRole("button", { name: /Organization: Công ty Demo/ }));
-    const link = await screen.findByRole("menuitem", { name: new RegExp(messages.orgs.ragxModels) });
-    expect(link).toHaveAttribute("href", "http://localhost:8090/ui");
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noopener noreferrer");
-    await userEvent.keyboard("{Escape}");
-    rerender(plate({ ragxUiUrl: undefined }));
-    await userEvent.click(screen.getByRole("button", { name: /Organization: Công ty Demo/ }));
-    expect(screen.queryByRole("menuitem", { name: new RegExp(messages.orgs.ragxModels) })).toBeNull();
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      demo.name,
+      messages.orgs.settings,
+      messages.orgs.new,
+    ]);
+    expect(document.querySelector('a[target="_blank"]')).toBeNull();
+    expect(messages.orgs).not.toHaveProperty("ragxModels");
   });
 });

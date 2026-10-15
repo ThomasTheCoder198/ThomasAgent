@@ -22,8 +22,9 @@ re-checks the org on every request.
 ## The plate and the dialogs
 
 - A plate on the black sign under the brand: the org's name, a status dot and a chevron. On the folded icon rail it shrinks to the org's initial in a roundel.
-- The menu lists every org with its status, then _Org settings_ (current org), _New organization_, and, when `WEB_RAGX_UI_URL` is set, _RAG model settings_ (an external link, new tab, `rel="noopener noreferrer"`). The URL is read in the workspace layout (a server component) and passed down as the `ragxUiUrl` prop; `lib/env.ts` is never imported by client code. The link's placement is owner decision P14 and may move.
+- The menu lists every org with its status, then _Org settings_ (current org) and _New organization_. Core's UI never links to the ragx admin UI (`/ui`, model settings): it is a separate surface (owner decision P14, reversed 2026-10-14). The KB screens under `features/knowledge-bases` are ragx's app surface inside core's shell and reach ragx only through the app proxy.
 - Status dots (Lines Do Jobs): **ready** = solid `sign-ink`, **pending** = hollow ring, **failed** = Apps red. Green stays the KB line's.
+- The settings dialog's **Save** stays disabled until the draft differs from the saved org (trimmed name, external parsing); reverting the edit disables it again, so an unchanged form never sends a PATCH (owner, 2026-10-14). Create mode is always submittable and validates on submit.
 
 ## Synchronous provisioning and Retry
 

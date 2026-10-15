@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronsUpDown, ExternalLink, Plus, Settings2 } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, Settings2 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
@@ -26,8 +26,6 @@ type Props = {
   orgs: Organization[];
   current: Organization | null;
   failed?: boolean;
-  /** Ragx's own model-settings UI; the item is absent when unset. Read on the server, passed down as a prop. */
-  ragxUiUrl?: string;
 };
 
 /** First code point, not UTF-16 unit: slice(0, 1) would split a surrogate pair into a broken glyph. */
@@ -42,7 +40,7 @@ function useLiveCurrentOrg(orgs: Organization[], serverCurrent: Organization | n
 }
 
 /** The org the operator is working in, on the sign under the brand; switching is a link, not a client state. */
-export function OrgPlate({ orgs, current: serverCurrent, failed, ragxUiUrl }: Props) {
+export function OrgPlate({ orgs, current: serverCurrent, failed }: Props) {
   const t = useTranslations("orgs");
   const current = useLiveCurrentOrg(orgs, serverCurrent);
   const [dialog, setDialog] = useState<"create" | "edit" | null>(null);
@@ -99,18 +97,6 @@ export function OrgPlate({ orgs, current: serverCurrent, failed, ragxUiUrl }: Pr
             <Plus aria-hidden className="size-4" />
             {t("new")}
           </DropdownMenuItem>
-          {ragxUiUrl && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <a href={ragxUiUrl} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink aria-hidden className="size-4" />
-                  {t("ragxModels")}
-                  <span className="sr-only"> {t("opensInNewTab")}</span>
-                </a>
-              </DropdownMenuItem>
-            </>
-          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {dialog === "create" && (

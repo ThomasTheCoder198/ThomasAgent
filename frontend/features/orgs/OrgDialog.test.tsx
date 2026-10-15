@@ -12,10 +12,11 @@ const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 const createOrganization = vi.fn();
 const retryOrganization = vi.fn();
+const updateOrganization = vi.fn();
 vi.mock("./api", () => ({
   createOrganization: (...args: unknown[]) => createOrganization(...args),
   retryOrganization: (...args: unknown[]) => retryOrganization(...args),
-  updateOrganization: vi.fn(),
+  updateOrganization: (...args: unknown[]) => updateOrganization(...args),
 }));
 
 function renderDialog() {
@@ -110,5 +111,41 @@ describe("OrgDialog settings", () => {
   it("shows no Retry when ready and synced", () => {
     renderEdit(org({}));
     expect(screen.queryByRole("button", { name: messages.orgs.retry })).toBeNull();
+  });
+});
+
+describe("OrgDialog settings dirty state", () => {
+  const save = () => screen.getByRole("button", { name: messages.common.save });
+  const nameField = () => screen.getByLabelText(messages.orgs.name);
+
+  it("keeps Save disabled until the name differs from the saved one, and again after reverting", async () => {
+    renderEdit(org({}));
+    expect(save()).toBeDisabled();
+    await userEvent.type(nameField(), "  ");
+    expect(save()).toBeDisabled();
+    await userEvent.clear(nameField());
+    await userEvent.type(nameField(), "Gamma");
+    expect(save()).toBeEnabled();
+    await userEvent.clear(nameField());
+    await userEvent.type(nameField(), "Beta");
+    expect(save()).toBeDisabled();
+  });
+  it("enables Save when external parsing is toggled and disables it when toggled back", async () => {
+    renderEdit(org({}));
+    const toggle = screen.getByRole("switch", { name: messages.orgs.externalParsing });
+    await userEvent.click(toggle);
+    expect(save()).toBeEnabled();
+    await userEvent.click(toggle);
+    expect(save()).toBeDisabled();
+  });
+  it("cannot send an unchanged form, and sends a changed one", async () => {
+    updateOrganization.mockResolvedValue(org({ name: "Gamma" }));
+    renderEdit(org({}));
+    await userEvent.type(nameField(), "{Enter}");
+    expect(updateOrganization).not.toHaveBeenCalled();
+    await userEvent.clear(nameField());
+    await userEvent.type(nameField(), "Gamma");
+    await userEvent.click(save());
+    expect(updateOrganization).toHaveBeenCalledWith("o1", { name: "Gamma", externalParsing: true }, "en");
   });
 });

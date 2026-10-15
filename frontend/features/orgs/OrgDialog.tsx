@@ -106,6 +106,10 @@ function useOrgSave(editing: Organization | null, onSaved: () => void) {
 
 const editingOf = (props: Props) => (props.mode === "edit" ? props.org : null);
 
+/** An edit counts only when it would change the saved org, so an unchanged form never sends a PATCH. */
+const changesOrg = (editing: Organization | null, { name, externalParsing }: Draft) =>
+  !editing || name.trim() !== editing.name || externalParsing !== editing.externalParsing;
+
 function useOrgCopy(editing: Organization | null) {
   const t = useTranslations("orgs");
   const common = useTranslations("common");
@@ -124,10 +128,11 @@ export function OrgDialog(props: Props) {
   const retrying = useProvisionRetry(editing);
   const pending = saving.saving || retrying.pending;
   const failure = saving.failure ?? retrying.failure;
+  const dirty = changesOrg(editing, { name, externalParsing });
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    void saving.save({ name, externalParsing });
+    if (dirty) void saving.save({ name, externalParsing });
   }
 
   return (
@@ -152,21 +157,29 @@ export function OrgDialog(props: Props) {
             <ProvisioningState org={retrying.shown} pending={pending} onRetry={retrying.retry} />
           )}
           {failure && <InlineAlert title={failure} />}
-          <FormActions submitLabel={copy.submit} pending={pending} />
+          <FormActions submitLabel={copy.submit} pending={pending} dirty={dirty} />
         </form>
       </DialogContent>
     </Dialog>
   );
 }
 
-function FormActions({ submitLabel, pending }: { submitLabel: string; pending: boolean }) {
+function FormActions({
+  submitLabel,
+  pending,
+  dirty,
+}: {
+  submitLabel: string;
+  pending: boolean;
+  dirty: boolean;
+}) {
   const common = useTranslations("common");
   return (
     <div className="flex flex-wrap justify-end gap-2">
       <DialogClose asChild>
         <Button variant="ghost">{common("cancel")}</Button>
       </DialogClose>
-      <Button type="submit" pending={pending} disabled={pending}>
+      <Button type="submit" pending={pending} disabled={pending || !dirty}>
         {submitLabel}
       </Button>
     </div>

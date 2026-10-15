@@ -7,16 +7,17 @@ async function loadEnv() {
 
 describe("env", () => {
   afterEach(() => vi.unstubAllEnvs());
-  it("reads the optional ragx UI link", async () => {
-    vi.stubEnv("WEB_RAGX_UI_URL", "http://localhost:8090/ui");
-    expect((await loadEnv()).WEB_RAGX_UI_URL).toBe("http://localhost:8090/ui");
+  it("defaults the core URL", async () => {
+    vi.stubEnv("WEB_CORE_URL", undefined);
+    expect((await loadEnv()).WEB_CORE_URL).toBe("http://localhost:8080");
   });
-  it("treats an empty value as unset", async () => {
-    vi.stubEnv("WEB_RAGX_UI_URL", "");
-    expect((await loadEnv()).WEB_RAGX_UI_URL).toBeUndefined();
-  });
-  it("rejects a value that is not a URL", async () => {
-    vi.stubEnv("WEB_RAGX_UI_URL", "ragx-ui");
+  it("rejects a core URL that is not a URL", async () => {
+    vi.stubEnv("WEB_CORE_URL", "core");
     await expect(loadEnv()).rejects.toThrow();
+  });
+  // Owner decision P14 (2026-10-14): core's UI never links to the ragx admin UI.
+  it("does not read a ragx UI link", async () => {
+    vi.stubEnv("WEB_RAGX_UI_URL", "http://localhost:8090/ui");
+    expect(Object.keys(await loadEnv())).toEqual(["WEB_CORE_URL"]);
   });
 });

@@ -91,7 +91,7 @@ keep it stable to preserve access to stored secrets. `CORE_VAULT_KEY_ID` default
 
 Core startup configures M0.2 platform-scoped modules. Their data belongs to the [Platform tenant](../../../docs/glossary.md) (`default`). M1 business tenancy must derive `tenant_id` from trusted context, never client or model parameters.
 
-All config-loading commands also require CORE_SERVICE_TOKEN (currently unused: reserved, its `/internal` role was removed in M1.2) and a different CORE_AUTH_LOGIN_LIMITER_KEY, each with at least 32 characters; values beginning `change-me` are rejected outside dev. The identity test fixtures supply it explicitly. The serve process periodically purges expired sessions across all tenants through the explicit system-level auth method and refreshes `last_seen_at` during authenticated requests. Expiry decisions use the database clock. Each purge run logs with its own `job_` request id and `duration_ms`.
+All config-loading commands also require CORE_AUTH_LOGIN_LIMITER_KEY with at least 32 characters; values beginning `change-me` are rejected outside dev. The identity test fixtures supply it explicitly. The serve process periodically purges expired sessions across all tenants through the explicit system-level auth method and refreshes `last_seen_at` during authenticated requests. Expiry decisions use the database clock. Each purge run logs with its own `job_` request id and `duration_ms`.
 
 `serve` validates the vault key and loads the App signing key (`CORE_APP_SIGNING_KEY` or `_FILE`; it refuses to start without one) before dependency access; `ClientContainer.Ragx` is the ragx caller built from it, bootstraps the owner,
 then injects the guarded provider catalog into the LLM provider service. The route coverage

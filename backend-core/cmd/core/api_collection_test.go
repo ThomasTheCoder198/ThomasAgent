@@ -34,7 +34,6 @@ func TestAPI_GeneratedPostmanCollection(t *testing.T) {
 	t.Setenv("CORE_REDIS_URL", redisURL)
 	t.Setenv("CORE_AUTH_OWNER_EMAIL", "api-test@example.com")
 	t.Setenv("CORE_AUTH_OWNER_PASSWORD", "fixture-password-collection")
-	t.Setenv("CORE_SERVICE_TOKEN", "fixture-api-service-token-with-at-least-32-characters")
 	t.Setenv("CORE_AUTH_LOGIN_LIMITER_KEY", "fixture-api-login-limiter-key-with-at-least-32-characters")
 	t.Setenv("CORE_RAGX_URL", "http://127.0.0.1:1")
 	cfg, err := config.Load()

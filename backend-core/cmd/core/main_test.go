@@ -188,7 +188,7 @@ func TestServe_ListeningLogUsesSharedFields(t *testing.T) {
 				TokenAudience: "ragx", TokenTTL: time.Minute},
 			Ragx: config.RagxConfig{URL: "http://127.0.0.1:1", ConnectTimeout: time.Second, RequestTimeout: time.Second,
 				ResponseHeaderTimeout: time.Second, MaxErrorBodyBytes: 1 << 10, MaxResponseBytes: 1 << 10, ProvisionAttempts: 1},
-			ServiceToken: "test-service-token-with-at-least-32-characters", ProviderHTTPTimeout: time.Second,
+			ProviderHTTPTimeout:      time.Second,
 			ProviderMaxResponseBytes: config.DefaultProviderMaxResponseBytes,
 			ProviderBreaker:          config.BreakerConfig{FailureThreshold: 5, OpenTimeout: time.Second, HalfOpenMaxCalls: 1},
 		},
@@ -231,7 +231,6 @@ const testVaultMasterKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 func setIdentityEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("CORE_VAULT_MASTER_KEY", testVaultMasterKey)
-	t.Setenv("CORE_SERVICE_TOKEN", "test-service-token-with-at-least-32-characters")
 	t.Setenv("CORE_AUTH_LOGIN_LIMITER_KEY", "test-login-limiter-key-with-at-least-32-characters")
 	t.Setenv("CORE_APP_SIGNING_KEY", testSigningKeyPEM(t))
 }

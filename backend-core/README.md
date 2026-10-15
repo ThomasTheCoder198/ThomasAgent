@@ -57,7 +57,7 @@ derive `tenant_id` from trusted context. Owner bootstrap is idempotent.
 
 `CORE_VAULT_MASTER_KEY` is required and must decode to 32 bytes; `serve` validates
 it before opening dependencies or listening. Keep the key stable. `serve` also requires `CORE_APP_SIGNING_KEY` or `CORE_APP_SIGNING_KEY_FILE` (never both) and checks it before opening dependencies; `task core:serve` points at `deploy/ragx/dev-app-signing-key.pem`. All config-loading
-commands also require `CORE_SERVICE_TOKEN` and a different `CORE_AUTH_LOGIN_LIMITER_KEY`, each of at least 32 characters; `change-me*` values are rejected outside dev. `CORE_SERVICE_TOKEN` is currently unused (reserved; its `/internal` role was removed in M1.2) but config validation still requires it. Set `CORE_AUTH_OWNER_EMAIL` and
+commands also require `CORE_AUTH_LOGIN_LIMITER_KEY` of at least 32 characters; `change-me*` values are rejected outside dev. Set `CORE_AUTH_OWNER_EMAIL` and
 `CORE_AUTH_OWNER_PASSWORD` (at least 12 characters) to bootstrap the owner.
 Session/cookie/login settings are documented in [config](internal/platform/config/README.md).
 

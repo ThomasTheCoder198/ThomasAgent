@@ -90,7 +90,7 @@ func NewLoginLimiter(redisClient *redis.Client, authConfig config.AuthConfig, id
 		window:        authConfig.LoginWindow,
 		identityKey:   append([]byte(nil), identityKey...),
 	}
-	limiter.configurationInvalid = len(identityKey) < config.MinimumServiceTokenLength ||
+	limiter.configurationInvalid = len(identityKey) < config.MinimumSecretLength ||
 		limiter.emailAndIPMax < 1 || limiter.emailMax < 1 || limiter.ipMax < 1 || limiter.window <= 0
 	return limiter
 }

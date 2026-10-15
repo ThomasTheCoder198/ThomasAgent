@@ -9,7 +9,6 @@ import (
 
 func setRequired(t *testing.T) {
 	t.Helper()
-	t.Setenv("CORE_SERVICE_TOKEN", "test-service-token-with-at-least-32-characters")
 	t.Setenv("CORE_AUTH_LOGIN_LIMITER_KEY", "test-login-limiter-key-with-at-least-32-characters")
 	t.Setenv("CORE_VAULT_MASTER_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	t.Setenv("CORE_DATABASE_URL", "postgres://u:p@localhost:5432/thomas")
@@ -149,33 +148,23 @@ func TestLoad_AuthDefaults(t *testing.T) {
 	require.Greater(t, cfg.Auth.LoginIPMaxAttempts, cfg.Auth.LoginEmailMaxAttempts)
 	require.Equal(t, 15*time.Minute, cfg.Auth.LoginWindow)
 	require.Equal(t, 12, cfg.Auth.MinPasswordLength)
-	require.Equal(t, "test-service-token-with-at-least-32-characters", cfg.ServiceToken)
-}
-func TestLoad_RequiresServiceToken(t *testing.T) {
-	setRequired(t)
-	t.Setenv("CORE_SERVICE_TOKEN", "")
-	_, err := Load()
-	require.ErrorContains(t, err, "CORE_SERVICE_TOKEN")
 }
 
-func TestLoad_RejectsWeakServiceTokens(t *testing.T) {
-	for _, test := range []struct{ environment, token string }{
-		{"dev", "too-short"},
-		{"prod", "change-me-with-a-sufficiently-long-secret-value"},
-	} {
-		setRequired(t)
-		t.Setenv("CORE_ENV", test.environment)
-		t.Setenv("CORE_SERVICE_TOKEN", test.token)
-		_, err := Load()
-		require.ErrorContains(t, err, "CORE_SERVICE_TOKEN")
-	}
+// The service token was removed (ruling R-ST): an old .env that still sets it must not matter.
+func TestLoad_IgnoresRemovedServiceToken(t *testing.T) {
+	setRequired(t)
+	_, err := Load()
+	require.NoError(t, err)
+	t.Setenv("CORE_SERVICE_TOKEN", "too-short")
+	_, err = Load()
+	require.NoError(t, err)
 }
-func TestLoad_RejectsWeakOrSharedLoginLimiterKeys(t *testing.T) {
+
+func TestLoad_RejectsWeakLoginLimiterKeys(t *testing.T) {
 	for _, test := range []struct{ name, environment, key, wantError string }{
 		{"missing", "dev", "", "CORE_AUTH_LOGIN_LIMITER_KEY"},
 		{"short", "dev", "too-short", "at least 32 characters"},
 		{"placeholder outside dev", "prod", "change-me-with-a-sufficiently-long-secret-value", "change-me"},
-		{"same as service token", "dev", "test-service-token-with-at-least-32-characters", "must differ from CORE_SERVICE_TOKEN"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			setRequired(t)
@@ -279,6 +268,7 @@ func TestLoad_RagxDefaults(t *testing.T) {
 	require.Equal(t, "http://localhost:8090", cfg.Ragx.URL)
 	require.Equal(t, 1, cfg.Ragx.ProvisionAttempts)
 	require.EqualValues(t, 1048576, cfg.Ragx.MaxResponseBytes)
+	require.Equal(t, 60*time.Second, cfg.Ragx.IdleConnTimeout)
 	t.Setenv("CORE_RAGX_URL", "ftp://ragx")
 	_, err = Load()
 	require.ErrorContains(t, err, "CORE_RAGX_URL")
@@ -303,8 +293,8 @@ func TestLoad_AppTokenTTLMustBeWholeSecondsWithinBounds(t *testing.T) {
 func TestLoad_RejectsInvalidRagxSettings(t *testing.T) {
 	for name, value := range map[string]string{
 		"CORE_RAGX_URL": "ragx:8090", "CORE_RAGX_CONNECT_TIMEOUT": "0s", "CORE_RAGX_REQUEST_TIMEOUT": "0s",
-		"CORE_RAGX_RESPONSE_HEADER_TIMEOUT": "0s",
-		"CORE_RAGX_PROVISION_ATTEMPTS":      "0", "CORE_RAGX_MAX_RESPONSE_BYTES": "0", "CORE_RAGX_MAX_ERROR_BODY_BYTES": "0",
+		"CORE_RAGX_RESPONSE_HEADER_TIMEOUT": "0s", "CORE_RAGX_IDLE_CONN_TIMEOUT": "0s",
+		"CORE_RAGX_PROVISION_ATTEMPTS": "0", "CORE_RAGX_MAX_RESPONSE_BYTES": "0", "CORE_RAGX_MAX_ERROR_BODY_BYTES": "0",
 	} {
 		t.Run(name, func(t *testing.T) {
 			setRequired(t)

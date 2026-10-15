@@ -55,13 +55,8 @@ type Caller struct {
 // NewRagxCaller does not use outbound.NewClient: ragx is a configured first-party service on a private address, and
 // that client's whole-request timeout would cut the app proxy's forwards. Deadlines come from the context.
 func NewRagxCaller(cfg config.RagxConfig, signer TokenSigner, recorder outbound.Recorder, log *slog.Logger) (*Caller, error) {
-	base := &http.Transport{
-		Proxy:                 nil,
-		DialContext:           (&net.Dialer{Timeout: cfg.ConnectTimeout}).DialContext,
-		ResponseHeaderTimeout: cfg.ResponseHeaderTimeout,
-	}
 	client := &http.Client{
-		Transport:     outbound.Instrument(base, outbound.TargetRagx, recorder, true),
+		Transport:     outbound.Instrument(newRagxTransport(cfg), outbound.TargetRagx, recorder, true),
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	api, err := NewClient(cfg.URL, WithHTTPClient(client))
@@ -73,6 +68,15 @@ func NewRagxCaller(cfg config.RagxConfig, signer TokenSigner, recorder outbound.
 		return nil, fmt.Errorf("ragx url: %w", err)
 	}
 	return &Caller{api: api, http: client, base: baseURL, signer: signer, log: log, cfg: cfg}, nil
+}
+
+func newRagxTransport(cfg config.RagxConfig) *http.Transport {
+	return &http.Transport{
+		Proxy:                 nil,
+		DialContext:           (&net.Dialer{Timeout: cfg.ConnectTimeout}).DialContext,
+		ResponseHeaderTimeout: cfg.ResponseHeaderTimeout,
+		IdleConnTimeout:       cfg.IdleConnTimeout,
+	}
 }
 
 type call struct {

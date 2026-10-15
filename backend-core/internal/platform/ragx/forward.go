@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
+	"slices"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apptoken"
@@ -51,6 +53,9 @@ func (c *Caller) Forward(ctx context.Context, in ForwardRequest) (ForwardRespons
 	setIfPresent(req.Header, httpx.HeaderContentType, in.ContentType)
 	setIfPresent(req.Header, httpx.HeaderIdempotencyKey, in.IdempotencyKey)
 	setIfPresent(req.Header, httpx.HeaderAcceptLanguage, in.AcceptLanguage)
+	if repeatable(in.Method, in.Path) {
+		markRepeatable(req.Header)
+	}
 	for _, edit := range cl.editors {
 		if err := edit(cl.ctx, req); err != nil {
 			return ForwardResponse{}, errors.ErrInternalError.WithCause(err)
@@ -64,6 +69,26 @@ func (c *Caller) Forward(ctx context.Context, in ForwardRequest) (ForwardRespons
 	}
 	c.logCall(cl, status, traceID, failure)
 	return out, failure
+}
+
+// repeatablePaths are the ragx POSTs that are safe to send twice: confirm is idempotent by fileId (ruling P10) and
+// tool calls only read. Create, presign and delete are never here.
+var repeatablePaths = []*regexp.Regexp{
+	regexp.MustCompile(`^knowledge-bases/[^/]+/files/[^/]+/confirm$`),
+	regexp.MustCompile(`^tools/[^/]+$`),
+}
+
+func repeatable(method, path string) bool {
+	return method == http.MethodPost && slices.ContainsFunc(repeatablePaths, func(p *regexp.Regexp) bool { return p.MatchString(path) })
+}
+
+// markRepeatable lets Go's transport resend the request once when ragx closed the reused keep-alive connection
+// under it (R-EOF). A nil Idempotency-Key entry counts as idempotent to the transport and is never written; a key
+// the browser sent is already there and is kept.
+func markRepeatable(header http.Header) {
+	if _, ok := header[httpx.HeaderIdempotencyKey]; !ok {
+		header[httpx.HeaderIdempotencyKey] = nil
+	}
 }
 
 func setIfPresent(header http.Header, name, value string) {

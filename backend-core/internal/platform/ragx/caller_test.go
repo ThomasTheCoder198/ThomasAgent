@@ -53,7 +53,7 @@ func (f *fakeRecorder) ObserveOutbound(target, outcome string, _ time.Duration) 
 func testConfig(url string) config.RagxConfig {
 	return config.RagxConfig{
 		URL: url, ConnectTimeout: time.Second, RequestTimeout: 200 * time.Millisecond, ResponseHeaderTimeout: time.Second,
-		MaxErrorBodyBytes: 1 << 10, MaxResponseBytes: 1 << 10, ProvisionAttempts: 1,
+		IdleConnTimeout: time.Minute, MaxErrorBodyBytes: 1 << 10, MaxResponseBytes: 1 << 10, ProvisionAttempts: 1,
 	}
 }
 
@@ -75,15 +75,26 @@ func newCaller(t *testing.T, handler http.HandlerFunc) (*Caller, *[]seen, *fakeR
 		handler(w, r)
 	}))
 	t.Cleanup(server.Close)
+	caller, recorder, logs := callerAt(t, server.URL, key)
+	return caller, &requests, recorder, logs
+}
+
+func callerAt(t *testing.T, url string, key ed25519.PrivateKey) (*Caller, *fakeRecorder, *bytes.Buffer) {
+	t.Helper()
+	return callerWith(t, testConfig(url), key)
+}
+
+func callerWith(t *testing.T, cfg config.RagxConfig, key ed25519.PrivateKey) (*Caller, *fakeRecorder, *bytes.Buffer) {
+	t.Helper()
 	signer := apptoken.NewAppTokenSigner(key, config.AppConfig{SigningKeyID: "dev-1", TokenIssuer: "thomas-core", TokenAudience: "ragx", TokenTTL: time.Minute},
 		time.Now, func() string { return "jti-test" })
 	recorder := &fakeRecorder{}
 	var logs bytes.Buffer
 	log, err := logging.NewLogger(&logs, "debug", "test", "test", nil)
 	require.NoError(t, err)
-	caller, err := NewRagxCaller(testConfig(server.URL), signer, recorder, log)
+	caller, err := NewRagxCaller(cfg, signer, recorder, log)
 	require.NoError(t, err)
-	return caller, &requests, recorder, &logs
+	return caller, recorder, &logs
 }
 
 func orgContext() context.Context {

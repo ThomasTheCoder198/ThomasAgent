@@ -17,10 +17,7 @@ task ragx:seed-dev   # embedding role that org provisioning needs
 task up        # core + Postgres/Redis + observability
 task smoke     # health checks, including the upload path through core
 task web:dev   # run in a separate terminal; host frontend, WEB_CORE_URL defaults to http://localhost:8080
-               # set WEB_RAGX_UI_URL=http://localhost:8090/ui to show the ragx model-settings link
 ```
-
-`CORE_SERVICE_TOKEN` in `deploy/core/.env` is currently unused (reserved; its `/internal` role was removed in M1.2) but config validation still requires it.
 
 ## Development checks
 

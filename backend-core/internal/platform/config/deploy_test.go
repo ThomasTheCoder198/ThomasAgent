@@ -94,7 +94,7 @@ func TestCompose_EnvFileProvidesRuntimeValuesWithoutRepeatingDefaults(t *testing
 	require.NoError(t, json.Unmarshal(output, &resolved))
 	for _, service := range []string{"core", "migrate", "outbox-relay"} {
 		environment := resolved.Services[service].Environment
-		require.Equal(t, composeExample(t)["CORE_SERVICE_TOKEN"], environment["CORE_SERVICE_TOKEN"])
+		require.NotContains(t, environment, "CORE_SERVICE_TOKEN", "the service token was removed (R-ST)")
 		require.Contains(t, environment["CORE_DATABASE_URL"], "@postgres:5432/")
 		require.Equal(t, "redis://redis:6379/0", environment["CORE_REDIS_URL"])
 		require.NotContains(t, environment, "CORE_AUTH_LOGIN_MAX_ATTEMPTS", "defaults belong in config.yaml")

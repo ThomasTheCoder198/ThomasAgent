@@ -7,7 +7,7 @@ The only way core calls ragx: the generated client (`client_gen.go`, oapi-codege
 - `NewRagxCaller(cfg, signer, recorder, log)` builds the caller; `TokenSigner` is satisfied by `apptoken.Signer`.
 - `Caller.ProvisionOrg` is the typed call, bounded by `CORE_RAGX_REQUEST_TIMEOUT`.
 - Header names and the Idempotency-Key format come from `httpx`, not local copies.
-- `Caller.Forward(ctx, ForwardRequest)` is the generic data plane behind the app proxy: it uses the route's deadline and caps the response at `CORE_RAGX_MAX_RESPONSE_BYTES`. It is never retried.
+- `Caller.Forward(ctx, ForwardRequest)` is the generic data plane behind the app proxy: it uses the route's deadline and caps the response at `CORE_RAGX_MAX_RESPONSE_BYTES`. Core never retries it itself; see the keep-alive convention below for the one resend Go's transport may do.
 - The generated model `Org` is used as it is.
 
 ## Dependencies
@@ -31,6 +31,7 @@ go test ./internal/platform/ragx/... -count=1
 - Error bodies are read up to `CORE_RAGX_MAX_ERROR_BODY_BYTES`.
 - Typed calls get `CORE_RAGX_REQUEST_TIMEOUT`; `Forward` uses the caller's context, which the HTTP route bounds.
 - Redirects are never followed, and no ambient proxy is used.
+- Keep-alive (R-EOF; ruling F22 reversed by the owner on 2026-10-14): the transport closes idle connections after `CORE_RAGX_IDLE_CONN_TIMEOUT` (60s), below ragx's keep-alive. For a ragx restart or deploy, `Forward` marks the POSTs that are safe to send twice (`knowledge-bases/{kbId}/files/{fileId}/confirm`, idempotent by fileId per ruling P10, and `tools/{name}`) with a nil `Idempotency-Key` entry: Go's transport then resends the request once on a reused connection ragx dropped, and never writes the empty header. GET and HEAD are already resent by Go. Go resends any request that carries an Idempotency-Key, and a browser key is kept; ragx dedupes only the routes that honour it (files: confirm). Create, presign and delete are never marked.
 - Never use `ClientWithResponses`: it buffers whole bodies.
 - Generated names: `OrgId` is a string and `KbId`/`FileId` are UUIDs. The OpenAPI response components are `KbFileResponse` and `KnowledgeBaseResponse`, because `oapi-codegen.yaml` sets `resolve-type-name-collisions`.
 

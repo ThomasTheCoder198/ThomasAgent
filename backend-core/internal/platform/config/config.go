@@ -135,12 +135,14 @@ func (c AppConfig) validate() []error {
 }
 
 // RagxConfig is how core reaches ragx. Typed calls are bounded by RequestTimeout; the app proxy's forward uses the
-// HTTP route's deadline and caps the response body at MaxResponseBytes.
+// HTTP route's deadline and caps the response body at MaxResponseBytes. IdleConnTimeout must stay below ragx's
+// keep-alive, so core drops an idle connection before ragx closes it (ruling F22 reversed, R-EOF).
 type RagxConfig struct {
 	URL                   string        `env:"URL"`
 	ConnectTimeout        time.Duration `env:"CONNECT_TIMEOUT"`
 	RequestTimeout        time.Duration `env:"REQUEST_TIMEOUT"`
 	ResponseHeaderTimeout time.Duration `env:"RESPONSE_HEADER_TIMEOUT"`
+	IdleConnTimeout       time.Duration `env:"IDLE_CONN_TIMEOUT"`
 	MaxErrorBodyBytes     int64         `env:"MAX_ERROR_BODY_BYTES"`
 	MaxResponseBytes      int64         `env:"MAX_RESPONSE_BYTES"`
 	ProvisionAttempts     int           `env:"PROVISION_ATTEMPTS"`
@@ -157,7 +159,7 @@ func (c RagxConfig) validate() []error {
 
 func (c RagxConfig) validateLimits() []error {
 	var errs []error
-	if c.ConnectTimeout <= 0 || c.RequestTimeout <= 0 || c.ResponseHeaderTimeout <= 0 {
+	if c.ConnectTimeout <= 0 || c.RequestTimeout <= 0 || c.ResponseHeaderTimeout <= 0 || c.IdleConnTimeout <= 0 {
 		errs = append(errs, errors.New("CORE_RAGX_*_TIMEOUT values must be > 0"))
 	}
 	if c.MaxErrorBodyBytes < 1 || c.MaxResponseBytes < 1 || c.ProvisionAttempts < 1 {
@@ -283,7 +285,6 @@ type Config struct {
 	ProviderMaxResponseBytes int64             `env:"PROVIDER_MAX_RESPONSE_BYTES"`
 	ProviderPrivateAllowlist []string          `env:"PROVIDER_PRIVATE_ALLOWLIST" envSeparator:","`
 	Auth                     AuthConfig        `envPrefix:"AUTH_"`
-	ServiceToken             string            `env:"SERVICE_TOKEN,required,notEmpty"`
 	Vault                    VaultConfig       `envPrefix:"VAULT_"`
 	App                      AppConfig         `envPrefix:"APP_"`
 	Ragx                     RagxConfig        `envPrefix:"RAGX_"`
@@ -321,7 +322,7 @@ const (
 	MinimumArgonIterations         uint32 = 2
 	ArgonMemoryKiB                 uint32 = 65536
 	DefaultArgonConcurrency               = 4
-	MinimumServiceTokenLength             = 32
+	MinimumSecretLength                   = 32
 	DefaultLoginEmailMaxAttempts          = 20
 	DefaultLoginIPMaxAttempts             = 100
 	DefaultArgonParallelism        uint8  = 1
@@ -406,37 +407,21 @@ func (c Config) validate() error {
 	errs = append(errs, c.App.validate()...)
 	errs = append(errs, c.Ragx.validate()...)
 	errs = append(errs, c.validateProvisionBudget()...)
-	errs = append(errs, c.validateServiceToken()...)
 	errs = append(errs, c.validateLoginLimiterKey()...)
 	errs = append(errs, c.validateProvider()...)
 	errs = append(errs, c.validateLogsEndpoint()...)
 	return errors.Join(errs...)
 }
 
-func (c Config) validateServiceToken() []error {
-	var errs []error
-	if len(c.ServiceToken) < MinimumServiceTokenLength {
-		errs = append(errs, errors.New("CORE_SERVICE_TOKEN must be at least 32 characters"))
-	}
-	if !strings.EqualFold(c.Environment, "dev") && strings.HasPrefix(strings.ToLower(c.ServiceToken), "change-me") {
-		errs = append(errs, errors.New("CORE_SERVICE_TOKEN must not use a change-me value outside dev"))
-	}
-	return errs
-}
-
-// validateLoginLimiterKey keeps the limiter's HMAC key separate from the service token,
-// so leaking hashed limiter identities never helps forge internal calls and vice versa.
+// validateLoginLimiterKey rejects HMAC keys short enough to brute-force the hashed limiter identities.
 func (c Config) validateLoginLimiterKey() []error {
 	var errs []error
 	key := c.Auth.LoginLimiterKey
-	if len(key) < MinimumServiceTokenLength {
+	if len(key) < MinimumSecretLength {
 		errs = append(errs, errors.New("CORE_AUTH_LOGIN_LIMITER_KEY must be at least 32 characters"))
 	}
 	if !strings.EqualFold(c.Environment, "dev") && strings.HasPrefix(strings.ToLower(key), "change-me") {
 		errs = append(errs, errors.New("CORE_AUTH_LOGIN_LIMITER_KEY must not use a change-me value outside dev"))
-	}
-	if key != "" && key == c.ServiceToken {
-		errs = append(errs, errors.New("CORE_AUTH_LOGIN_LIMITER_KEY must differ from CORE_SERVICE_TOKEN"))
 	}
 	return errs
 }

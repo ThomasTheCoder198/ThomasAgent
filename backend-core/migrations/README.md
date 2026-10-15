@@ -20,6 +20,7 @@ the old defaults without modifying row ownership.
 - `20261005000001_vault_aad_version.sql` expands the AAD version constraint to permit version 3; Down intentionally retains that expansion and all encrypted data.
 - `task migrate` applies pending migrations through Compose.
 - `core migrate status` reports applied and pending migration versions.
+- `20261015000001_org_settings_version.sql` adds `organizations.settings_version` (positive bigint, default 1); Down removes it.
 
 ## Dependencies
 - Uses: Go embed and Postgres SQL, interpreted by Goose.

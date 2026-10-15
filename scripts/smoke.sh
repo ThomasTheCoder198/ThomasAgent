@@ -81,7 +81,7 @@ if curl -fsS http://localhost:8090/healthz >/dev/null 2>&1; then
       "$uv_bin" run --directory ragx python ../scripts/app_token_dev.py mint --key "../$dev_key" \
         --kid "${RAGX_DEV_KID:-dev-1}" --org smoke-org --scope "$1" --rid "$2" | tr -d '\r\n'
     }
-    provision_body='{"name":"Smoke","externalParsing":true}'
+    provision_body='{"name":"Smoke","externalParsing":true,"settingsVersion":1}'
     provision() {
       local rid="req_smoke-provision-$(date +%s)-$RANDOM"
       curl -fsS -X PUT -H "Authorization: Bearer $(mint org:provision "$rid")" -H "X-Request-Id: ${rid}" \

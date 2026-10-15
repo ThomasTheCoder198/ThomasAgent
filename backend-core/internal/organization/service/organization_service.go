@@ -19,7 +19,7 @@ import (
 
 // RagxProvisioner is the one ragx call this service makes (satisfied by *ragx.Caller).
 type RagxProvisioner interface {
-	ProvisionOrg(ctx context.Context, name string, externalParsing bool) (ragx.Org, error)
+	ProvisionOrg(ctx context.Context, name string, externalParsing bool, settingsVersion int64) (ragx.Org, error)
 }
 
 type OrganizationService interface {
@@ -160,17 +160,17 @@ func (s *OrganizationServiceImpl) ProvisionOrganization(ctx context.Context, id 
 func (s *OrganizationServiceImpl) provision(ctx context.Context, org model.Organization) (model.Organization, error) {
 	// Ruling P4: a closed browser tab must not leave the outcome unrecorded; each attempt has its own ragx timeout.
 	detached := context.WithoutCancel(ctx)
-	sent := org.Settings
+	sentVersion := org.SettingsVersion
 	var answer ragx.Org
 	err := retry.Do(tenant.WithID(detached, org.ID), s.policy, func(callCtx context.Context) error {
 		var callErr error
-		answer, callErr = s.ragx.ProvisionOrg(callCtx, sent.Name, sent.ExternalParsing)
+		answer, callErr = s.ragx.ProvisionOrg(callCtx, org.Name, org.ExternalParsing, sentVersion)
 		return callErr
 	})
 	if err != nil {
-		return s.repo.MarkSyncFailed(detached, s.pool, org.ID, sent, errors.CodeOf(err))
+		return s.repo.MarkSyncFailed(detached, s.pool, org.ID, sentVersion, errors.CodeOf(err))
 	}
-	return s.repo.MarkSynced(detached, s.pool, org.ID, sent, answer.DefaultKbId)
+	return s.repo.MarkSynced(detached, s.pool, org.ID, answer.SettingsVersion, answer.DefaultKbId)
 }
 
 func (s *OrganizationServiceImpl) audit(ctx context.Context, tx pgx.Tx, action, id string) error {

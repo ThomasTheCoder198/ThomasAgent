@@ -20,3 +20,5 @@ TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/organization/service -count
 
 ## Conventions
 Never hold a transaction across the ragx call: commit the row, then provision. The call runs under the org's own id as tenant (the App token's `oid`) on a context detached from the request's cancellation. Ids that are not UUIDs, including `default`, are `NOT_FOUND` before any query.
+
+`savePatch` skips an unchanged patch, so the repository increments `settings_version` only for a real edit. Provisioning sends that version and records the version ragx returns; the repository handles concurrent completions.

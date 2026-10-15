@@ -118,7 +118,7 @@ async def indexed_corpus(
         await seed_dev_registry(app.state.registry_service)
         response = await client.put(
             f"/v1/orgs/{org_id}",
-            json={"name": "Search", "externalParsing": False},
+            json={"name": "Search", "externalParsing": False, "settingsVersion": 1},
             headers=bearer(org_id, "org:provision"),
         )
         assert response.status_code == 200, response.text

@@ -95,7 +95,7 @@ func TestOrganizationHTTP_CreateProvisionsSynchronously(t *testing.T) {
 	require.Equal(t, org["id"], calls[0].claims["oid"])
 	require.Equal(t, "org:provision", calls[0].claims["scp"])
 	require.Equal(t, "req_org-create-0001", calls[0].claims["rid"])
-	require.JSONEq(t, `{"name":"Acme","externalParsing":true}`, string(calls[0].body))
+	require.JSONEq(t, `{"name":"Acme","externalParsing":true,"settingsVersion":1}`, string(calls[0].body))
 	var action string
 	require.NoError(t, pool.QueryRow(context.Background(), `SELECT action FROM audit_events WHERE target_id = $1`, org["id"]).Scan(&action))
 	require.Equal(t, "organization.create", action)
@@ -136,7 +136,7 @@ func TestOrganizationHTTP_RetryRecoversAnOrgStuckPending(t *testing.T) {
 	res := send(router, http.MethodPost, "/api/v1/orgs/"+id+"/provision", "", nil)
 	require.Equal(t, http.StatusOK, res.Code)
 	require.Equal(t, "ready", dataOf(t, res)["ragxStatus"])
-	require.JSONEq(t, `{"name":"Stuck","externalParsing":false}`, string(fake.calls()[0].body))
+	require.JSONEq(t, `{"name":"Stuck","externalParsing":false,"settingsVersion":1}`, string(fake.calls()[0].body))
 }
 
 func TestOrganizationHTTP_ReadyOrgStaysReadyWhenASettingsSyncFails(t *testing.T) {
@@ -155,7 +155,7 @@ func TestOrganizationHTTP_ReadyOrgStaysReadyWhenASettingsSyncFails(t *testing.T)
 	fake.setResponder(provisionOK)
 	res = send(router, http.MethodPost, "/api/v1/orgs/"+id+"/provision", "", nil)
 	require.Equal(t, true, dataOf(t, res)["settingsSynced"])
-	require.JSONEq(t, `{"name":"Acme Vietnam","externalParsing":true}`, string(fake.calls()[2].body))
+	require.JSONEq(t, `{"name":"Acme Vietnam","externalParsing":true,"settingsVersion":2}`, string(fake.calls()[2].body))
 }
 
 func TestOrganizationHTTP_PatchOfANonReadyOrgOnlyWritesTheRow(t *testing.T) {

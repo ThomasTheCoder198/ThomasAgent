@@ -69,7 +69,12 @@ func TestMigrate_UpAndDown(t *testing.T) {
 		VALUES ('default','thomas.ingest.requested','{}','req_m052migration-0001')`)
 	require.NoError(t, err)
 
-	// Down removes organizations first, then restores trace columns, then removes request IDs, AAD expansion, tenant defaults, hardening, identity/registry and platform.
+	// Down removes the org version first, then organizations, trace columns, request IDs, AAD expansion,
+	// tenant defaults, hardening, identity/registry and platform.
+	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
+	var versionColumns int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_name='organizations' AND column_name='settings_version'`).Scan(&versionColumns))
+	require.Zero(t, versionColumns)
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	require.Error(t, pool.QueryRow(ctx, "SELECT count(*) FROM organizations").Scan(&n))
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
@@ -106,7 +111,7 @@ func TestMigrationStatuses_ReturnsMigrationStates(t *testing.T) {
 	ctx := context.Background()
 	statuses, err := MigrationStatuses(ctx, url, migrations.FS)
 	require.NoError(t, err)
-	require.Len(t, statuses, 8)
+	require.Len(t, statuses, 9)
 	require.EqualValues(t, 20261003000001, statuses[0].Source.Version)
 	require.Equal(t, "20261003000001_platform.sql", statuses[0].Source.Path)
 	require.EqualValues(t, 20261003000002, statuses[1].Source.Version)
@@ -121,6 +126,8 @@ func TestMigrationStatuses_ReturnsMigrationStates(t *testing.T) {
 	require.Equal(t, "20261007000001_drop_trace_columns.sql", statuses[6].Source.Path)
 	require.EqualValues(t, 20261010000001, statuses[7].Source.Version)
 	require.Equal(t, "20261010000001_organizations.sql", statuses[7].Source.Path)
+	require.EqualValues(t, 20261015000001, statuses[8].Source.Version)
+	require.Equal(t, "20261015000001_org_settings_version.sql", statuses[8].Source.Path)
 
 	for _, status := range statuses {
 		require.Equal(t, goose.StatePending, status.State)
@@ -129,15 +136,21 @@ func TestMigrationStatuses_ReturnsMigrationStates(t *testing.T) {
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Up))
 	statuses, err = MigrationStatuses(ctx, url, migrations.FS)
 	require.NoError(t, err)
-	require.Len(t, statuses, 8)
+	require.Len(t, statuses, 9)
 	for _, status := range statuses {
 		require.Equal(t, goose.StateApplied, status.State)
 	}
+	pool, err := Open(ctx, url)
+	require.NoError(t, err)
+	var versionDefault string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT column_default FROM information_schema.columns WHERE table_name = 'organizations' AND column_name = 'settings_version'`).Scan(&versionDefault))
+	require.Equal(t, "1", versionDefault)
+	pool.Close()
 
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	statuses, err = MigrationStatuses(ctx, url, migrations.FS)
 	require.NoError(t, err)
-	require.Len(t, statuses, 8)
+	require.Len(t, statuses, 9)
 	require.Equal(t, goose.StateApplied, statuses[0].State)
 	require.Equal(t, goose.StateApplied, statuses[1].State)
 	require.Equal(t, goose.StateApplied, statuses[2].State)
@@ -145,7 +158,8 @@ func TestMigrationStatuses_ReturnsMigrationStates(t *testing.T) {
 	require.Equal(t, goose.StateApplied, statuses[4].State)
 	require.Equal(t, goose.StateApplied, statuses[5].State)
 	require.Equal(t, goose.StateApplied, statuses[6].State)
-	require.Equal(t, goose.StatePending, statuses[7].State)
+	require.Equal(t, goose.StateApplied, statuses[7].State)
+	require.Equal(t, goose.StatePending, statuses[8].State)
 }
 
 func TestTenantMigrationRequiresExplicitTenantAndRestoresDefaultsOnDown(t *testing.T) {
@@ -162,6 +176,7 @@ func TestTenantMigrationRequiresExplicitTenantAndRestoresDefaultsOnDown(t *testi
 	}
 	_, err = pool.Exec(ctx, `INSERT INTO users (email,password_hash) VALUES ('missing@example.com','hash')`)
 	require.Error(t, err)
+	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
@@ -191,6 +206,7 @@ func TestHardeningUpDownUpPreservesSeededBoundCiphertext(t *testing.T) {
 	sealed := gcm.Seal(nil, nonce, []byte("seeded-provider-secret"), aad)
 	_, err = pool.Exec(ctx, `INSERT INTO secrets (tenant_id,id,key_id,nonce,ciphertext,aad_version) VALUES ('other','11111111-1111-1111-1111-111111111111','v1',$1,$2,2)`, nonce, sealed)
 	require.NoError(t, err)
+	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
@@ -240,6 +256,7 @@ func TestStructuredAADMigrationUpDownUpPreservesVersionThree(t *testing.T) {
 	defer pool.Close()
 	_, err = pool.Exec(ctx, `INSERT INTO secrets (tenant_id,id,key_id,nonce,ciphertext,aad_version) VALUES ('default','11111111-1111-1111-1111-111111111111','v1',$1,$2,3)`, []byte("nonce"), []byte("ciphertext"))
 	require.NoError(t, err, "new envelopes require an expanded version constraint")
+	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))

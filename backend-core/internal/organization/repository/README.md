@@ -5,7 +5,7 @@ SQL for the `organizations` table. Every method takes the pool or the service tr
 
 ## Entry points
 - `OrganizationRepo` (`organization_repository.go`)
-- `MarkSynced` and `MarkSyncFailed`: sync results that apply only while the row still holds the settings that were sent
+- `MarkSynced` compares the version ragx holds with the current row; `MarkSyncFailed` applies only to the version sent. `UpdateSettings` increments `settings_version` once per real change.
 
 ## Dependencies
 - Uses: `organization/model`, `platform/postgres`, `platform/tenant`

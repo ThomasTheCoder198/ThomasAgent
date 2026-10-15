@@ -15,7 +15,7 @@ import (
 )
 
 const organizationColumns = `id, name, external_parsing, ragx_status, ragx_error_code, ragx_default_kb_id,
-	settings_synced, created_at, updated_at`
+	settings_synced, settings_version, created_at, updated_at`
 
 // OrganizationRepo stores organizations. Rows are platform data: every method scopes by the tenant in ctx, which
 // is 'default' for the operator.
@@ -25,8 +25,8 @@ type OrganizationRepo interface {
 	GetOrganizationForUpdate(ctx context.Context, db postgres.DBTX, id string) (model.Organization, error)
 	ListOrganizations(ctx context.Context, db postgres.DBTX) ([]model.Organization, error)
 	UpdateSettings(ctx context.Context, db postgres.DBTX, id string, settings model.Settings) (model.Organization, error)
-	MarkSynced(ctx context.Context, db postgres.DBTX, id string, sent model.Settings, defaultKB uuid.UUID) (model.Organization, error)
-	MarkSyncFailed(ctx context.Context, db postgres.DBTX, id string, sent model.Settings, code errors.Code) (model.Organization, error)
+	MarkSynced(ctx context.Context, db postgres.DBTX, id string, returnedVersion int64, defaultKB uuid.UUID) (model.Organization, error)
+	MarkSyncFailed(ctx context.Context, db postgres.DBTX, id string, sentVersion int64, code errors.Code) (model.Organization, error)
 }
 
 type organizationRepo struct{}
@@ -36,7 +36,7 @@ func NewOrganizationRepo() OrganizationRepo { return organizationRepo{} }
 func scanOrganization(row pgx.Row) (model.Organization, error) {
 	var org model.Organization
 	err := row.Scan(&org.ID, &org.Name, &org.ExternalParsing, &org.RagxStatus, &org.RagxErrorCode, &org.DefaultKnowledgeBaseID,
-		&org.SettingsSynced, &org.CreatedAt, &org.UpdatedAt)
+		&org.SettingsSynced, &org.SettingsVersion, &org.CreatedAt, &org.UpdatedAt)
 	switch {
 	case stderrors.Is(err, pgx.ErrNoRows):
 		return model.Organization{}, errors.ErrNotFound
@@ -103,37 +103,35 @@ func (organizationRepo) UpdateSettings(ctx context.Context, db postgres.DBTX, id
 		return model.Organization{}, err
 	}
 	return scanOrganization(db.QueryRow(ctx, `UPDATE organizations SET name = $3, external_parsing = $4, settings_synced = false,
+		settings_version = settings_version + 1,
 		updated_at = now() WHERE id = $1 AND tenant_id = $2 RETURNING `+organizationColumns, id, tenantID, settings.Name, settings.ExternalParsing))
 }
 
-// MarkSynced records a successful PUT /v1/orgs. ragx now has an org space and a default KB whatever settings were
-// sent, so the org is ready; settings_synced is true only if the row still holds what was sent. The error code is
-// cleared when the row still holds what was sent, or when the org was not ready before (the provisioning failure is
-// no longer true). A ready org whose newer settings failed keeps that failure's code: those settings are still unsynced.
-func (organizationRepo) MarkSynced(ctx context.Context, db postgres.DBTX, id string, sent model.Settings, defaultKB uuid.UUID) (model.Organization, error) {
+// MarkSynced accepts the version ragx actually holds. A late response for an older version cannot clear a newer
+// successful sync or its failure code.
+func (organizationRepo) MarkSynced(ctx context.Context, db postgres.DBTX, id string, returnedVersion int64, defaultKB uuid.UUID) (model.Organization, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
 		return model.Organization{}, err
 	}
-	return scanOrganization(db.QueryRow(ctx, `UPDATE organizations SET ragx_status = $6, ragx_default_kb_id = $5,
-		settings_synced = (name = $3 AND external_parsing = $4),
-		ragx_error_code = CASE WHEN (name = $3 AND external_parsing = $4) OR ragx_status <> $6 THEN '' ELSE ragx_error_code END,
+	return scanOrganization(db.QueryRow(ctx, `UPDATE organizations SET ragx_status = $4, ragx_default_kb_id = $3,
+		settings_synced = CASE WHEN settings_version = $5 THEN true ELSE settings_synced END,
+		ragx_error_code = CASE WHEN settings_version = $5 OR ragx_status <> $4 THEN '' ELSE ragx_error_code END,
 		updated_at = now()
-		WHERE id = $1 AND tenant_id = $2 RETURNING `+organizationColumns, id, tenantID, sent.Name, sent.ExternalParsing, defaultKB, model.RagxStatusReady))
+		WHERE id = $1 AND tenant_id = $2 RETURNING `+organizationColumns, id, tenantID, defaultKB, model.RagxStatusReady, returnedVersion))
 }
 
-// MarkSyncFailed applies only while the row still holds the sent settings: a newer edit owns the row otherwise and
-// reports its own result. A ready org stays ready (its Knowledge Bases keep working).
-func (r organizationRepo) MarkSyncFailed(ctx context.Context, db postgres.DBTX, id string, sent model.Settings, code errors.Code) (model.Organization, error) {
+// MarkSyncFailed applies only to the version the failed call sent, including after settings cycle back to old values.
+func (r organizationRepo) MarkSyncFailed(ctx context.Context, db postgres.DBTX, id string, sentVersion int64, code errors.Code) (model.Organization, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
 		return model.Organization{}, err
 	}
 	org, err := scanOrganization(db.QueryRow(ctx, `UPDATE organizations SET
-		ragx_status = CASE WHEN ragx_status = $6 THEN $6 ELSE $7 END,
-		settings_synced = false, ragx_error_code = $5, updated_at = now()
-		WHERE id = $1 AND tenant_id = $2 AND name = $3 AND external_parsing = $4
-		RETURNING `+organizationColumns, id, tenantID, sent.Name, sent.ExternalParsing, string(code), model.RagxStatusReady, model.RagxStatusFailed))
+		ragx_status = CASE WHEN ragx_status = $5 THEN $5 ELSE $6 END,
+		settings_synced = false, ragx_error_code = $4, updated_at = now()
+		WHERE id = $1 AND tenant_id = $2 AND settings_version = $3
+		RETURNING `+organizationColumns, id, tenantID, sentVersion, string(code), model.RagxStatusReady, model.RagxStatusFailed))
 	if stderrors.Is(err, errors.ErrNotFound) {
 		return r.GetOrganization(ctx, db, id)
 	}

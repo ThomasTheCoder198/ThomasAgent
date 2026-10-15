@@ -192,12 +192,12 @@ func doData[T any](c *Caller, ctx context.Context, operation string, scope appto
 	return body.Data, err
 }
 
-func (c *Caller) ProvisionOrg(ctx context.Context, name string, externalParsing bool) (Org, error) {
+func (c *Caller) ProvisionOrg(ctx context.Context, name string, externalParsing bool, settingsVersion int64) (Org, error) {
 	orgID, err := tenant.ID(ctx)
 	if err != nil {
 		return Org{}, err
 	}
 	return doData[Org](c, ctx, opProvisionOrg, apptoken.ScopeOrgProvision, func(ctx context.Context, editors []RequestEditorFn) (*http.Response, error) {
-		return c.api.ProvisionOrg(ctx, orgID, &ProvisionOrgParams{}, ProvisionOrgJSONRequestBody{Name: name, ExternalParsing: externalParsing}, editors...)
+		return c.api.ProvisionOrg(ctx, orgID, &ProvisionOrgParams{}, ProvisionOrgJSONRequestBody{Name: name, ExternalParsing: externalParsing, SettingsVersion: settingsVersion}, editors...)
 	})
 }

@@ -6,7 +6,7 @@ Owns FastAPI construction, request tracing, error responses, and health endpoint
 ## Entry points
 - `app.py:create_app`: application factory.
 - `health.py`: GET /healthz and GET /readyz.
-- `orgs.py`: org provisioning.
+- `orgs.py`: versioned org provisioning (`settingsVersion` is required in the body and returned).
 - `knowledge_bases.py`: Knowledge Base CRUD.
 - `files.py`: `POST /v1/knowledge-bases/{kbId}/uploads` (presign), `POST …/files/{fileId}/confirm`, `GET …/files/{fileId}/download-url`, file listing, deletion, retry and preview. `HEAD` on the preview answers from a `stat` (status and `Content-Length`, no read of the object).
 - `routing.py`: `api_router`, whose routes answer `HEAD` like `GET`.

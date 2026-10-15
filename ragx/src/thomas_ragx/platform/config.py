@@ -34,6 +34,7 @@ class Config(BaseSettings):
     service_name: str
     http_host: str
     http_port: int
+    http_keep_alive_seconds: int = Field(gt=0)
     log_level: Literal["debug", "info", "warn", "error"]
     otlp_endpoint: str
     phoenix_api_key: SecretStr | None = None

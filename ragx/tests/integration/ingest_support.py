@@ -34,7 +34,7 @@ async def uploaded_file(
         await seed_dev_registry(app.state.registry_service)
         org = await client.put(
             f"/v1/orgs/{ORG}",
-            json={"name": "Ingest", "externalParsing": True},
+            json={"name": "Ingest", "externalParsing": True, "settingsVersion": 1},
             headers=bearer(ORG, "org:provision"),
         )
         kb_id = org.json()["data"]["defaultKbId"]

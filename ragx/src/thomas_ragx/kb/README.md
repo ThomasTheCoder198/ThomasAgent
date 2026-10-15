@@ -23,6 +23,8 @@ uv run pytest -q tests/integration/test_files_api.py
 ```
 
 ## Conventions
+`PUT /v1/orgs/{orgId}` requires a positive `settingsVersion`. Its upsert applies name and `externalParsing` only when the incoming version is newer; the response always reports the stored version so core can recognize an older completion.
+
 `PUT /v1/orgs/{orgId}` is idempotent and creates the default KB ("Mặc định") only on the first call. It needs the embedding role; without it, provisioning returns `LLM_ROLE_NOT_ASSIGNED` and creates nothing. `knowledge_bases.collection_name` (`kb.model.collection_name_for`, `kb_<embedding model id hex>_<dims>`) is written at KB creation and names the KB's Qdrant collection; it is internal and not part of `KnowledgeBaseResponse`. A KB owned by another org is always `KB_NOT_FOUND`. `fileCount` on a KB counts its non-deleted, confirmed files. The upload limit is 50 MB (`RAG_UPLOAD_MAX_BYTES` = 52428800, owner decision 2026-10-11) and the accepted extensions are pinned to `contracts/kb-upload.json` by `tests/unit/test_upload_contract.py`. The default KB cannot be deleted (`CONFLICT`). Delete marks `deleted_at` and queues `thomas.kb.purge.requested`; the worker removes objects and rows. DTOs forbid unknown fields, so a body naming an org returns `VALIDATION_FAILED`.
 
 Ragx never receives file bytes. Upload is presign, POST, confirm (spec ragx-custom-app §14.3):

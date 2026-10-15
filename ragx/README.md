@@ -3,6 +3,8 @@
 ## Purpose
 Owns the Python RAG service foundations, API startup, and storage bootstrap.
 
+Org provisioning accepts only a newer `settingsVersion` and returns the version held. `RAG_HTTP_KEEP_ALIVE_SECONDS` defaults to 75 seconds and must exceed core's `CORE_RAGX_IDLE_CONN_TIMEOUT` (60 seconds).
+
 ## Entry points
 - `ragx serve`: starts the API.
 - `ragx bootstrap`: creates storage buckets.

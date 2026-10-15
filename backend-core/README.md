@@ -3,6 +3,8 @@
 ## Purpose
 Go API and agent runtime for ThomasAgent.
 
+Org settings syncs send a version that increments on every real edit; core marks an org synced only when ragx returns the row's current version. Ragx's keep-alive must exceed core's `CORE_RAGX_IDLE_CONN_TIMEOUT` (60 seconds; ragx defaults to 75 seconds).
+
 ## Entry points
 - `cmd/core`: `serve|migrate|outbox-relay` command family. Implements serve, migrate, outbox-relay, and healthcheck. `serve` needs the App signing key.
 - GET `/healthz`: liveness. GET `/readyz`: injected dependency checks.

@@ -21,6 +21,7 @@ class Org:
     id: str
     name: str
     external_parsing: bool
+    settings_version: int
     default_kb_id: UUID
     created_at: datetime
 

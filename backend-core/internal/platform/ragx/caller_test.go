@@ -28,7 +28,7 @@ import (
 const (
 	testOrg         = "3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21"
 	testRequestID   = "req_7d1f2a3b-4c5d-4e6f-8a9b-0c1d2e3f4a5b"
-	provisionedJSON = `{"data":{"orgId":"3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21","name":"Acme","externalParsing":true,"defaultKbId":"8f14e45f-ceea-467a-9af2-7a1b2c3d4e5f","createdAt":"2026-10-10T00:00:00Z"},"meta":{"requestId":"x"}}`
+	provisionedJSON = `{"data":{"orgId":"3f2b8c1e-9d4a-4b7e-8f21-0c6d5e4a3b21","name":"Acme","externalParsing":true,"settingsVersion":1,"defaultKbId":"8f14e45f-ceea-467a-9af2-7a1b2c3d4e5f","createdAt":"2026-10-10T00:00:00Z"},"meta":{"requestId":"x"}}`
 )
 
 type seen struct {
@@ -112,13 +112,13 @@ func TestCaller_SignsOidFromTenantAndRidEqualToTheSentRequestID(t *testing.T) {
 	caller, requests, recorder, logs := newCaller(t, func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, provisionedJSON)
 	})
-	org, err := caller.ProvisionOrg(orgContext(), "Acme", true)
+	org, err := caller.ProvisionOrg(orgContext(), "Acme", true, 1)
 	require.NoError(t, err)
 	require.Equal(t, "8f14e45f-ceea-467a-9af2-7a1b2c3d4e5f", org.DefaultKbId.String())
 	got := (*requests)[0]
 	require.Equal(t, http.MethodPut, got.method)
 	require.Equal(t, "/v1/orgs/"+testOrg, got.path)
-	require.JSONEq(t, `{"name":"Acme","externalParsing":true}`, string(got.body))
+	require.JSONEq(t, `{"name":"Acme","externalParsing":true,"settingsVersion":1}`, string(got.body))
 	require.Equal(t, testRequestID, got.header.Get("X-Request-Id"))
 	require.Equal(t, testRequestID, got.claims["rid"])
 	require.Equal(t, testOrg, got.claims["oid"])
@@ -135,7 +135,7 @@ func TestCaller_UsesOneFreshJobIDWhenTheContextHasNone(t *testing.T) {
 	caller, requests, _, _ := newCaller(t, func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, provisionedJSON)
 	})
-	_, err := caller.ProvisionOrg(tenant.WithID(context.Background(), testOrg), "Acme", true)
+	_, err := caller.ProvisionOrg(tenant.WithID(context.Background(), testOrg), "Acme", true, 1)
 	require.NoError(t, err)
 	header := (*requests)[0].header.Get("X-Request-Id")
 	require.True(t, strings.HasPrefix(header, requestid.JobPrefix), header)
@@ -144,7 +144,7 @@ func TestCaller_UsesOneFreshJobIDWhenTheContextHasNone(t *testing.T) {
 
 func TestCaller_RequiresTrustedTenant(t *testing.T) {
 	caller, requests, _, _ := newCaller(t, func(http.ResponseWriter, *http.Request) {})
-	_, err := caller.ProvisionOrg(context.Background(), "Acme", true)
+	_, err := caller.ProvisionOrg(context.Background(), "Acme", true, 1)
 	require.ErrorIs(t, err, errors.ErrMissingTenant)
 	require.Empty(t, *requests)
 }
@@ -153,7 +153,7 @@ func TestCaller_PassesCatalogClientErrorsThrough(t *testing.T) {
 	caller, _, _, _ := newCaller(t, func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusNotFound, `{"error":{"code":"LLM_ROLE_NOT_ASSIGNED","message":"x","details":{"role":"embedding"}}}`)
 	})
-	_, err := caller.ProvisionOrg(orgContext(), "Acme", true)
+	_, err := caller.ProvisionOrg(orgContext(), "Acme", true, 1)
 	require.ErrorIs(t, err, errors.ErrLLMRoleNotAssigned)
 	require.Equal(t, map[string]any{"role": "embedding"}, errors.ToAppError(err).Details)
 }
@@ -186,7 +186,7 @@ func TestCaller_MapsFailuresAndCredentialRejectionsToRagxUnavailable(t *testing.
 	} {
 		t.Run(name, func(t *testing.T) {
 			caller, _, _, _ := newCaller(t, respond)
-			_, err := caller.ProvisionOrg(orgContext(), "Acme", true)
+			_, err := caller.ProvisionOrg(orgContext(), "Acme", true, 1)
 			require.ErrorIs(t, err, errors.ErrRagxUnavailable)
 		})
 	}
@@ -197,6 +197,6 @@ func TestCaller_UnreachableRagxIsUnavailable(t *testing.T) {
 	signer := apptoken.NewAppTokenSigner(key, config.AppConfig{SigningKeyID: "k", TokenIssuer: "i", TokenAudience: "a", TokenTTL: time.Minute}, time.Now, uuid.NewString)
 	caller, err := NewRagxCaller(testConfig("http://127.0.0.1:1"), signer, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, err)
-	_, err = caller.ProvisionOrg(orgContext(), "Acme", true)
+	_, err = caller.ProvisionOrg(orgContext(), "Acme", true, 1)
 	require.ErrorIs(t, err, errors.ErrRagxUnavailable)
 }

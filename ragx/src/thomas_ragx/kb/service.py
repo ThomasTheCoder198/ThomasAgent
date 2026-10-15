@@ -32,11 +32,13 @@ class KnowledgeBaseService:
         async with self._pool.connection() as conn, conn.transaction():
             yield conn
 
-    async def provision(self, caller: Caller, org_id: str, name: str, external_parsing: bool) -> Org:
+    async def provision(
+        self, caller: Caller, org_id: str, name: str, external_parsing: bool, settings_version: int
+    ) -> Org:
         if org_id != caller.org_id:
             raise AppError(ErrorCode.FORBIDDEN)
         async with self._transaction() as conn:
-            await repository.upsert_org(conn, org_id, name, external_parsing)
+            await repository.upsert_org(conn, org_id, name, external_parsing, settings_version)
             # The row lock serializes concurrent first provisions; the partial unique index is the backstop.
             org_row = await repository.lock_org(conn, org_id)
             if org_row is None:

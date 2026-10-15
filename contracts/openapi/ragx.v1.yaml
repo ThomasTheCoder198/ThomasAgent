@@ -532,17 +532,19 @@ components:
     OrgProvision:
       type: object
       additionalProperties: false
-      required: [name, externalParsing]
+      required: [name, externalParsing, settingsVersion]
       properties:
         name: { type: string, minLength: 1, maxLength: 200 }
         externalParsing: { type: boolean }
+        settingsVersion: { type: integer, format: int64, minimum: 1 }
     Org:
       type: object
-      required: [orgId, name, externalParsing, defaultKbId, createdAt]
+      required: [orgId, name, externalParsing, settingsVersion, defaultKbId, createdAt]
       properties:
         orgId: { type: string }
         name: { type: string }
         externalParsing: { type: boolean }
+        settingsVersion: { type: integer, format: int64, minimum: 1 }
         defaultKbId: { type: string, format: uuid }
         createdAt: { type: string, format: date-time }
     KnowledgeBaseWrite:

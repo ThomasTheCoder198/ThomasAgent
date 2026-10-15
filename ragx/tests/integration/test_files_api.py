@@ -42,7 +42,7 @@ def minio(minio_config: dict[str, Any]) -> Minio:
 
 async def _kb(client: httpx.AsyncClient, app: Any, org: str = ORG) -> str:
     await seed_dev_registry(app.state.registry_service)
-    body = {"name": "Alpha", "externalParsing": True}
+    body = {"name": "Alpha", "externalParsing": True, "settingsVersion": 1}
     response = await client.put(f"/v1/orgs/{org}", json=body, headers=bearer(org, "org:provision"))
     return str(response.json()["data"]["defaultKbId"])
 

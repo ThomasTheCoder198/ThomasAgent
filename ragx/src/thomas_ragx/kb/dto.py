@@ -21,6 +21,7 @@ class CamelModel(BaseModel):
 class OrgProvisionRequest(CamelModel):
     name: DisplayName
     external_parsing: bool
+    settings_version: StrictInt = Field(gt=0)
 
 
 class KnowledgeBaseWrite(CamelModel):
@@ -31,6 +32,7 @@ class OrgResponse(CamelModel):
     org_id: str
     name: str
     external_parsing: bool
+    settings_version: int
     default_kb_id: UUID
     created_at: datetime
 
@@ -40,6 +42,7 @@ class OrgResponse(CamelModel):
             org_id=org.id,
             name=org.name,
             external_parsing=org.external_parsing,
+            settings_version=org.settings_version,
             default_kb_id=org.default_kb_id,
             created_at=org.created_at,
         )

@@ -56,6 +56,13 @@ def test_config_preserves_renamed_field_defaults(monkeypatch: pytest.MonkeyPatch
     assert config.retry_max_delay_seconds == 10.0
 
 
+def test_http_keep_alive_is_positive_and_longer_than_core_idle_timeout() -> None:
+    config = Config(minio_access_key="a", minio_secret_key="s")
+    assert config.http_keep_alive_seconds == 75
+    with pytest.raises(ValidationError):
+        Config(http_keep_alive_seconds=0, minio_access_key="a", minio_secret_key="s")
+
+
 def test_config_layers_yaml_dotenv_environment_and_constructor(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

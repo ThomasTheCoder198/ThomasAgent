@@ -23,7 +23,7 @@ const (
 	FieldName     = "name"
 )
 
-// Settings are what core sends to ragx; a sync result applies only while the row still holds them (ruling P3).
+// Settings are the editable values core sends to ragx with the row's settings version.
 type Settings struct {
 	Name            string
 	ExternalParsing bool
@@ -36,6 +36,7 @@ type Organization struct {
 	RagxErrorCode          string
 	DefaultKnowledgeBaseID *uuid.UUID
 	SettingsSynced         bool
+	SettingsVersion        int64
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
 }

@@ -213,10 +213,11 @@ def test_serve_installs_provider_and_enforces_content_policy_before_server(
         assert cli.os.environ["OPENINFERENCE_HIDE_OUTPUTS"] == "true"
         return api
 
-    def run(app: SimpleNamespace, *, host: str, port: int, log_config: None) -> None:
+    def run(app: SimpleNamespace, *, host: str, port: int, timeout_keep_alive: int, log_config: None) -> None:
         assert app is api
         assert host == config.http_host
         assert port == config.http_port
+        assert timeout_keep_alive == config.http_keep_alive_seconds
         install.assert_called_once_with(provider)
         provider.shutdown.assert_not_called()
         if server_fails:

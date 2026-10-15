@@ -256,12 +256,14 @@ type Org struct {
 	ExternalParsing bool               `json:"externalParsing"`
 	Name            string             `json:"name"`
 	OrgId           string             `json:"orgId"`
+	SettingsVersion int64              `json:"settingsVersion"`
 }
 
 // OrgProvision defines model for OrgProvision.
 type OrgProvision struct {
 	ExternalParsing bool   `json:"externalParsing"`
 	Name            string `json:"name"`
+	SettingsVersion int64  `json:"settingsVersion"`
 }
 
 // OutlineNode defines model for OutlineNode.

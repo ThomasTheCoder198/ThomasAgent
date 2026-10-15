@@ -36,11 +36,15 @@ def to_kb(row: DictRow) -> KnowledgeBase:
     )
 
 
-async def upsert_org(conn: Connection, org_id: str, name: str, external_parsing: bool) -> None:
+async def upsert_org(
+    conn: Connection, org_id: str, name: str, external_parsing: bool, settings_version: int
+) -> None:
     await conn.execute(
-        b"INSERT INTO orgs (id, name, external_parsing) VALUES (%s, %s, %s) ON CONFLICT (id) DO UPDATE "
-        b"SET name = EXCLUDED.name, external_parsing = EXCLUDED.external_parsing, updated_at = now()",
-        (org_id, name, external_parsing),
+        b"INSERT INTO orgs (id, name, external_parsing, settings_version) VALUES (%s, %s, %s, %s) "
+        b"ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, "
+        b"external_parsing = EXCLUDED.external_parsing, settings_version = EXCLUDED.settings_version, "
+        b"updated_at = now() WHERE orgs.settings_version < EXCLUDED.settings_version",
+        (org_id, name, external_parsing, settings_version),
     )
 
 
@@ -114,6 +118,7 @@ def to_org(row: DictRow, default_kb: UUID) -> Org:
         id=row["id"],
         name=row["name"],
         external_parsing=row["external_parsing"],
+        settings_version=row["settings_version"],
         default_kb_id=default_kb,
         created_at=row["created_at"],
     )

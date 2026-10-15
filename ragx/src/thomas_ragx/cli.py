@@ -77,7 +77,13 @@ def serve() -> None:
     install_global_tracer_provider(api.state.tracer_provider)
     instrument_litellm(api.state.tracer_provider)
     try:
-        uvicorn.run(api, host=config.http_host, port=config.http_port, log_config=None)
+        uvicorn.run(
+            api,
+            host=config.http_host,
+            port=config.http_port,
+            timeout_keep_alive=config.http_keep_alive_seconds,
+            log_config=None,
+        )
     finally:
         api.state.tracer_provider.shutdown()
 

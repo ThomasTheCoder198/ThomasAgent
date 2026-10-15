@@ -359,11 +359,15 @@ export interface components {
         OrgProvision: {
             name: string;
             externalParsing: boolean;
+            /** Format: int64 */
+            settingsVersion: number;
         };
         Org: {
             orgId: string;
             name: string;
             externalParsing: boolean;
+            /** Format: int64 */
+            settingsVersion: number;
             /** Format: uuid */
             defaultKbId: string;
             /** Format: date-time */

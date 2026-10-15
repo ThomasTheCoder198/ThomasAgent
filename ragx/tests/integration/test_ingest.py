@@ -373,7 +373,7 @@ async def test_kb_purge_removes_its_points(
         await seed_dev_registry(app.state.registry_service)
         await client.put(
             f"/v1/orgs/{ORG}",
-            json={"name": "Ingest", "externalParsing": True},
+            json={"name": "Ingest", "externalParsing": True, "settingsVersion": 1},
             headers=bearer(ORG, "org:provision"),
         )
         kb_id = (

@@ -37,7 +37,7 @@ async def _uploaded_file(pool: Pool, minio_config: dict[str, Any], redis_url: st
         await seed_dev_registry(app.state.registry_service)
         org = await client.put(
             f"/v1/orgs/{ORG}",
-            json={"name": "Alpha", "externalParsing": True},
+            json={"name": "Alpha", "externalParsing": True, "settingsVersion": 1},
             headers=bearer(ORG, "org:provision"),
         )
         kb_id = org.json()["data"]["defaultKbId"]

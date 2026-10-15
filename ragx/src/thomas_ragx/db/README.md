@@ -42,3 +42,5 @@ Call `enqueue_outbox` before committing the associated business change. The work
 Migration 0005 indexes doc_nodes.parent_id and kb_tables.node_id for foreign key cascade traversal during outline replacement and purge. The parent index also supports section traversal. This trades insert/storage overhead for bounded child lookup; its down migration removes both indexes.
 
 Migration 0006 (`ingest_attempts`) adds `kb_files.ingest_attempt_id`, the fencing token of the ingest attempt holding the file (Codex I1), `kb_files.ingest_recoveries` (how often the worker sweep re-drove a stalled ingest; reset by an explicit retry), and the index `idx_doc_blocks_file_id_position` that `kb_read_section` pages on (Codex I2). Its down migration drops all three.
+
+Migration 0007 adds `orgs.settings_version bigint NOT NULL DEFAULT 0` with a nonnegative check. Existing orgs get version 0 so the next core PUT at version 1 refreshes their settings; new provision requests carry their positive version. Its down migration removes the check and column.

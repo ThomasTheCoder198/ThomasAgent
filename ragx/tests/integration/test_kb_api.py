@@ -4,10 +4,11 @@ import pytest
 
 from tests.integration.api_client import api_client, bearer
 from thomas_ragx.db.pool import Pool
+from thomas_ragx.kb import repository
 from thomas_ragx.registry.dev_seed import seed_dev_registry
 
 pytestmark = pytest.mark.integration
-PROVISION = {"name": "Alpha Co", "externalParsing": True}
+PROVISION = {"name": "Alpha Co", "externalParsing": True, "settingsVersion": 1}
 
 
 async def _provision(client, app, org_id: str) -> dict[str, object]:  # type: ignore[no-untyped-def]
@@ -27,6 +28,43 @@ async def test_provision_is_idempotent_and_creates_one_default_kb(pool: Pool) ->
     assert [kb["isDefault"] for kb in kbs] == [True]
     assert kbs[0]["embeddingDims"] == 1536
     assert kbs[0]["fileCount"] == 0
+    assert first["settingsVersion"] == second["settingsVersion"] == 1
+
+
+@pytest.mark.parametrize("versions", [(1, 2), (2, 1)])
+async def test_provision_keeps_newer_settings_in_both_arrival_orders(
+    pool: Pool, versions: tuple[int, int]
+) -> None:
+    async with api_client(pool) as (client, app):
+        await seed_dev_registry(app.state.registry_service)
+        responses = []
+        for version in versions:
+            responses.append(
+                await client.put(
+                    "/v1/orgs/org-version-race",
+                    json={
+                        "name": f"Version {version}",
+                        "externalParsing": version == 2,
+                        "settingsVersion": version,
+                    },
+                    headers=bearer("org-version-race", "org:provision"),
+                )
+            )
+    assert [response.status_code for response in responses] == [200, 200]
+    assert responses[-1].json()["data"]["settingsVersion"] == 2
+    assert responses[-1].json()["data"]["name"] == "Version 2"
+
+
+@pytest.mark.parametrize("versions", [(1, 2), (2, 1)])
+async def test_repository_upsert_keeps_newer_version_in_both_arrival_orders(
+    pool: Pool, versions: tuple[int, int]
+) -> None:
+    async with pool.connection() as conn:
+        for version in versions:
+            await repository.upsert_org(conn, "org-repo-version", f"Version {version}", version == 2, version)
+        row = await repository.lock_org(conn, "org-repo-version")
+    assert row is not None
+    assert (row["name"], row["external_parsing"], row["settings_version"]) == ("Version 2", True, 2)
 
 
 async def test_concurrent_first_provisions_create_one_default_kb(pool: Pool) -> None:

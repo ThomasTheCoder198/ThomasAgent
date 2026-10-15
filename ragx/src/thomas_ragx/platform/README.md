@@ -36,6 +36,8 @@ Presigned URLs use four settings: `RAG_S3_PUBLIC_ENDPOINT` (the origin browsers 
 
 Configuration precedence is constructor > process environment > `.env` > `config.yaml`. `load_config` can read a different dotenv path through `RAG_ENV_FILE`. Compose passes `deploy/ragx/.env` through `env_file` and derives only network endpoints and the MinIO/Phoenix credentials shared with other containers. The environment and dotenv sources disable field-name validation so renamed Python attributes cannot create unplanned environment spellings.
 
+`RAG_HTTP_KEEP_ALIVE_SECONDS` is a positive integer (default 75) passed to Uvicorn's `timeout_keep_alive`. It must be greater than core's `CORE_RAGX_IDLE_CONN_TIMEOUT` (default 60 seconds), so core retires an idle connection first.
+
 RAG pipeline settings (M1.3, defaults in `config.yaml`):
 - `RAG_UPLOAD_MAX_BYTES` is 52428800 (50 MB since 2026-10-11); `contracts/kb-upload.json` `maxFileBytes` must equal it.
 - `RAG_INGEST_CONCURRENCY` (2, at least 1) is the number of sequential ingest consumers per worker.

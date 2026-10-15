@@ -20,5 +20,5 @@ async def provision_org(
     service: KbServiceDep,
     request: Request,
 ) -> dict[str, Any]:
-    org = await service.provision(caller, org_id, body.name, body.external_parsing)
+    org = await service.provision(caller, org_id, body.name, body.external_parsing, body.settings_version)
     return success_body(to_json(OrgResponse.from_model(org)), request_id_of(request))

@@ -142,13 +142,14 @@ func provisionOK(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name            string `json:"name"`
 		ExternalParsing bool   `json:"externalParsing"`
+		SettingsVersion int64  `json:"settingsVersion"`
 	}
 	raw, _ := io.ReadAll(r.Body)
 	_ = json.Unmarshal(raw, &body)
 	writeJSONBody(w, http.StatusOK, map[string]any{
 		"data": map[string]any{
 			"orgId": strings.TrimPrefix(r.URL.Path, provisionPathStart), "name": body.Name, "externalParsing": body.ExternalParsing,
-			"defaultKbId": fixedDefaultKB.String(), "createdAt": time.Now().UTC().Format(time.RFC3339),
+			"settingsVersion": body.SettingsVersion, "defaultKbId": fixedDefaultKB.String(), "createdAt": time.Now().UTC().Format(time.RFC3339),
 		},
 		"meta": map[string]any{"requestId": r.Header.Get("X-Request-Id")},
 	})

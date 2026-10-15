@@ -12,9 +12,10 @@ from qdrant_client import AsyncQdrantClient
 from tests.integration.api_client import api_client, bearer
 from tests.integration.search_support import (
     assign_fake_rerank_model,
+    call_tool,
     indexed_corpus,
     registry_for,
-    search_service_for,
+    tool_service_for,
 )
 from thomas_ragx.db.pool import Pool
 from thomas_ragx.retrieval.tool_service import KbToolService
@@ -24,7 +25,7 @@ ORG = "org-tools"
 
 
 async def _call(client, tool: str, body: dict, kb_id: str | None, org: str = ORG):  # type: ignore[no-untyped-def]
-    return await client.post(f"/v1/tools/{tool}", json=body, headers=bearer(org, f"tool:{tool}", kb_id))
+    return await call_tool(client, tool, body, kb_id, org)
 
 
 async def test_kb_search_returns_labelled_blocks(tool_client) -> None:  # type: ignore[no-untyped-def]
@@ -137,16 +138,7 @@ async def tool_client(
     corpus = await indexed_corpus(pool, minio_config, minio, qdrant, tmp_path, ORG)
     registry = registry_for(pool)
     await assign_fake_rerank_model(registry)
-    service = KbToolService(
-        pool,
-        search_service_for(pool, qdrant, tmp_path, registry),
-        TracerProvider().get_tracer(__name__),
-        timeout_seconds=20,
-        section_max_chars=8000,
-        outline_max_nodes=500,
-        page_default_limit=20,
-        page_max_limit=100,
-    )
+    service = tool_service_for(pool, qdrant, tmp_path, registry)
     async with api_client(
         pool, minio_config=minio_config, qdrant_url=qdrant_url, tool_service_override=service
     ) as (client, _):

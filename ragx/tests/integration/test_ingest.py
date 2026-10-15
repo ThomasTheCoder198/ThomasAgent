@@ -13,7 +13,7 @@ from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis
 
 from tests.integration.api_client import api_client, bearer, upload
-from tests.integration.ingest_support import pipeline_for
+from tests.integration.ingest_support import MARKDOWN, ORG, REQUEST_ID, file_row, pipeline_for, uploaded_file
 from tests.rag_fakes import FakeChat, HashEmbedder
 from thomas_ragx.db.outbox import STREAM_INGEST_REQUESTED, STREAM_KB_PURGE_REQUESTED
 from thomas_ragx.db.pool import Pool
@@ -27,47 +27,23 @@ from thomas_ragx.registry.dev_seed import seed_dev_registry
 from thomas_ragx.registry.factory import create_registry_service
 from thomas_ragx.registry.model import Capability, ModelHandle, Role
 from thomas_ragx.retrieval.qdrant_store import QdrantStore, file_condition, tenant_filter
-from thomas_ragx.worker.consumer import StreamConsumer
+from thomas_ragx.worker.consumer import DEAD_LETTER_SUFFIX, StreamConsumer
 from thomas_ragx.worker.handlers import IngestDeadLetter, IngestHandler, PurgeHandler
 from thomas_ragx.worker.relay import OutboxRelay
 
 pytestmark = pytest.mark.integration
-ORG = "org-ingest"
-REQUEST_ID = "req_5b1f0c2e-1d4a-4b7e-8f21-0c6d5e4a3b99"
-MARKDOWN = "# Chính sách\n\nĐoạn mở đầu.\n\n## Đổi trả\n\nTrong 7 ngày.\n".encode()
-
-
-async def _uploaded(pool: Pool, minio_config: dict[str, Any], name: str, content: bytes) -> tuple[str, str]:
-    async with api_client(pool, minio_config=minio_config) as (client, app):
-        await seed_dev_registry(app.state.registry_service)
-        org = await client.put(
-            f"/v1/orgs/{ORG}",
-            json={"name": "Ingest", "externalParsing": True},
-            headers=bearer(ORG, "org:provision"),
-        )
-        kb_id = org.json()["data"]["defaultKbId"]
-        stored = await upload(client, ORG, kb_id, name, content, REQUEST_ID)
-    assert stored.status_code == 200, stored.text
-    return kb_id, stored.json()["data"]["id"]
 
 
 def _job(kb_id: str, file_id: str) -> IngestJob:
     return IngestJob(ORG, uuid.UUID(kb_id), uuid.UUID(file_id), 1, REQUEST_ID)
 
 
-async def _row(pool: Pool, file_id: str) -> dict[str, Any]:
-    async with pool.connection() as conn:
-        row = await (await conn.execute(b"SELECT * FROM kb_files WHERE id = %s", (file_id,))).fetchone()
-    assert row is not None
-    return dict(row)
-
-
 async def test_ingest_parses_a_text_upload_into_blocks_and_marks_it_ready(
     pool: Pool, minio_config: dict[str, Any], minio: Minio, qdrant: AsyncQdrantClient, tmp_path: Any
 ) -> None:
-    kb_id, file_id = await _uploaded(pool, minio_config, "chinh-sach.md", MARKDOWN)
+    kb_id, file_id = await uploaded_file(pool, minio_config, "chinh-sach.md", MARKDOWN)
     await pipeline_for(pool, minio, qdrant, tmp_path).run(_job(kb_id, file_id))
-    row = await _row(pool, file_id)
+    row = await file_row(pool, file_id)
     assert (row["status"], row["degraded"], row["parse_provider"], row["error_code"]) == (
         "ready",
         False,
@@ -105,7 +81,7 @@ async def test_ingest_refuses_an_object_whose_hash_changed(
     qdrant: AsyncQdrantClient,
     tmp_path: Any,
 ) -> None:
-    kb_id, file_id = await _uploaded(pool, minio_config, "a.md", MARKDOWN)
+    kb_id, file_id = await uploaded_file(pool, minio_config, "a.md", MARKDOWN)
     swapped = bytes(reversed(MARKDOWN))  # same size, other bytes: what a reused ticket could store
     minio.put_object(RAW_BUCKET, f"{ORG}/{kb_id}/{file_id}", io.BytesIO(swapped), len(swapped))
     await OutboxRelay(pool, redis, batch_size=10, poll_interval_seconds=0.01).publish_batch()
@@ -121,7 +97,7 @@ async def test_ingest_refuses_an_object_whose_hash_changed(
     )
     await consumer.ensure_group()
     await consumer.poll_once(IngestHandler(pipeline_for(pool, minio, qdrant, tmp_path)))
-    row = await _row(pool, file_id)
+    row = await file_row(pool, file_id)
     assert (row["status"], row["error_code"]) == ("failed", "INGEST_CONTENT_CHANGED")
     async with pool.connection() as conn:
         count = await (
@@ -138,7 +114,7 @@ async def test_corrupt_pdf_fails_with_parse_failed(
     qdrant: AsyncQdrantClient,
     tmp_path: Any,
 ) -> None:
-    _kb_id, file_id = await _uploaded(pool, minio_config, "broken.pdf", b"%PDF-1.7 not really")
+    _kb_id, file_id = await uploaded_file(pool, minio_config, "broken.pdf", b"%PDF-1.7 not really")
     await OutboxRelay(pool, redis, batch_size=10, poll_interval_seconds=0.01).publish_batch()
     consumer = StreamConsumer(
         redis,
@@ -152,15 +128,15 @@ async def test_corrupt_pdf_fails_with_parse_failed(
     )
     await consumer.ensure_group()
     await consumer.poll_once(IngestHandler(pipeline_for(pool, minio, qdrant, tmp_path)))
-    row = await _row(pool, file_id)
+    row = await file_row(pool, file_id)
     assert (row["status"], row["error_code"]) == ("failed", "INGEST_PARSE_FAILED")
-    assert len(await redis.xrange(STREAM_INGEST_REQUESTED + ".dlq")) == 1
+    assert len(await redis.xrange(STREAM_INGEST_REQUESTED + DEAD_LETTER_SUFFIX)) == 1
 
 
 async def test_claim_skips_a_leased_file_and_takes_over_an_expired_lease(
     pool: Pool, minio_config: dict[str, Any], minio: Minio
 ) -> None:
-    kb_id, file_id = await _uploaded(pool, minio_config, "a.md", MARKDOWN)
+    kb_id, file_id = await uploaded_file(pool, minio_config, "a.md", MARKDOWN)
     job = _job(kb_id, file_id)
     async with pool.connection() as conn:
         assert await claim_file(conn, job, 600.0) is not None
@@ -181,7 +157,7 @@ async def test_a_failed_attempt_releases_its_claim_for_the_retry(
     qdrant: AsyncQdrantClient,
     tmp_path: Any,
 ) -> None:
-    _kb_id, file_id = await _uploaded(pool, minio_config, "a.md", MARKDOWN)
+    _kb_id, file_id = await uploaded_file(pool, minio_config, "a.md", MARKDOWN)
     await OutboxRelay(pool, redis, batch_size=10, poll_interval_seconds=0.01).publish_batch()
     pipeline = pipeline_for(pool, minio, qdrant, tmp_path)
     attempts = 0
@@ -207,28 +183,28 @@ async def test_a_failed_attempt_releases_its_claim_for_the_retry(
     )
     await consumer.ensure_group()
     await consumer.poll_once(IngestHandler(pipeline))
-    assert (await _row(pool, file_id))["status"] == "pending"  # released, not stuck in "parsing"
+    assert (await file_row(pool, file_id))["status"] == "pending"  # released, not stuck in "parsing"
     await consumer.poll_once(IngestHandler(pipeline))
-    assert (attempts, (await _row(pool, file_id))["status"]) == (2, "ready")
+    assert (attempts, (await file_row(pool, file_id))["status"]) == (2, "ready")
 
 
 async def test_ingest_skips_a_deleted_or_superseded_job(
     pool: Pool, minio_config: dict[str, Any], minio: Minio, qdrant: AsyncQdrantClient, tmp_path: Any
 ) -> None:
-    kb_id, file_id = await _uploaded(pool, minio_config, "a.md", MARKDOWN)
+    kb_id, file_id = await uploaded_file(pool, minio_config, "a.md", MARKDOWN)
     pipeline = pipeline_for(pool, minio, qdrant, tmp_path)
     await pipeline.run(IngestJob(ORG, uuid.UUID(kb_id), uuid.UUID(file_id), 2, REQUEST_ID))  # wrong version
-    assert (await _row(pool, file_id))["status"] == "pending"
+    assert (await file_row(pool, file_id))["status"] == "pending"
     async with api_client(pool, minio_config=minio_config) as (client, _):
         await client.delete(f"/v1/knowledge-bases/{kb_id}/files/{file_id}", headers=bearer(ORG, "kb:write"))
     await pipeline.run(_job(kb_id, file_id))
-    assert (await _row(pool, file_id))["status"] == "pending"
+    assert (await file_row(pool, file_id))["status"] == "pending"
 
 
 async def test_reingest_replaces_the_previous_outline(
     pool: Pool, minio_config: dict[str, Any], minio: Minio, qdrant: AsyncQdrantClient, tmp_path: Any
 ) -> None:
-    kb_id, file_id = await _uploaded(pool, minio_config, "a.md", MARKDOWN)
+    kb_id, file_id = await uploaded_file(pool, minio_config, "a.md", MARKDOWN)
     pipeline = pipeline_for(pool, minio, qdrant, tmp_path)
     await pipeline.run(_job(kb_id, file_id))
     async with pool.connection() as conn:
@@ -246,7 +222,7 @@ async def test_reingest_replaces_the_previous_outline(
 async def test_ingest_stores_table_grid(
     pool: Pool, minio_config: dict[str, Any], minio: Minio, qdrant: AsyncQdrantClient, tmp_path: Any
 ) -> None:
-    kb_id, file_id = await _uploaded(pool, minio_config, "table.csv", b"Name,Count\nA,2\nB,3\n")
+    kb_id, file_id = await uploaded_file(pool, minio_config, "table.csv", b"Name,Count\nA,2\nB,3\n")
     await pipeline_for(pool, minio, qdrant, tmp_path).run(_job(kb_id, file_id))
     async with pool.connection() as conn:
         table = await (
@@ -275,9 +251,9 @@ async def _points(qdrant: AsyncQdrantClient, pool: Pool, kb_id: str, file_id: st
 async def test_ingest_indexes_chunks_with_tenant_payload_and_writes_the_preview(
     pool: Pool, minio_config: dict[str, Any], minio: Minio, qdrant: AsyncQdrantClient, tmp_path: Any
 ) -> None:
-    kb_id, file_id = await _uploaded(pool, minio_config, "chinh-sach.md", MARKDOWN)
+    kb_id, file_id = await uploaded_file(pool, minio_config, "chinh-sach.md", MARKDOWN)
     await pipeline_for(pool, minio, qdrant, tmp_path).run(_job(kb_id, file_id))
-    row = await _row(pool, file_id)
+    row = await file_row(pool, file_id)
     points = await _points(qdrant, pool, kb_id, file_id)
     assert row["status"] == "ready" and row["chunk_count"] == len(points) > 0
     assert {p.payload["org_id"] for p in points} == {ORG}
@@ -288,7 +264,7 @@ async def test_ingest_indexes_chunks_with_tenant_payload_and_writes_the_preview(
 async def test_ingest_uses_the_kbs_model_after_the_role_changes(
     pool: Pool, minio_config: dict[str, Any], minio: Minio, qdrant: AsyncQdrantClient, tmp_path: Any
 ) -> None:
-    kb_id, file_id = await _uploaded(pool, minio_config, "a.md", MARKDOWN)
+    kb_id, file_id = await uploaded_file(pool, minio_config, "a.md", MARKDOWN)
     service = create_registry_service(Config(minio_access_key="a", minio_secret_key="s"), pool)
     original = (await service.roles())[Role.EMBEDDING]
     assert original is not None
@@ -314,7 +290,7 @@ async def test_dims_mismatch_fails_the_file(
     redis: Redis,
     tmp_path: Any,
 ) -> None:
-    _kb_id, file_id = await _uploaded(pool, minio_config, "a.md", MARKDOWN)
+    _kb_id, file_id = await uploaded_file(pool, minio_config, "a.md", MARKDOWN)
     await OutboxRelay(pool, redis, batch_size=10, poll_interval_seconds=0.01).publish_batch()
     consumer = StreamConsumer(
         redis,
@@ -329,7 +305,7 @@ async def test_dims_mismatch_fails_the_file(
     await consumer.ensure_group()
     short = HashEmbedder(1536, vector_length=1535)
     await consumer.poll_once(IngestHandler(pipeline_for(pool, minio, qdrant, tmp_path, embedder=short)))
-    assert ((await _row(pool, file_id))["status"], (await _row(pool, file_id))["error_code"]) == (
+    assert ((await file_row(pool, file_id))["status"], (await file_row(pool, file_id))["error_code"]) == (
         "failed",
         "INGEST_EMBEDDING_MISMATCH",
     )
@@ -338,7 +314,7 @@ async def test_dims_mismatch_fails_the_file(
 async def test_points_written_after_a_delete_are_removed(
     pool: Pool, minio_config: dict[str, Any], minio: Minio, qdrant: AsyncQdrantClient, tmp_path: Any
 ) -> None:
-    kb_id, file_id = await _uploaded(pool, minio_config, "a.md", MARKDOWN)
+    kb_id, file_id = await uploaded_file(pool, minio_config, "a.md", MARKDOWN)
 
     class DeletingEmbedder(HashEmbedder):
         async def embed(self, model: ModelHandle, texts: Sequence[str]) -> list[list[float]]:
@@ -350,7 +326,7 @@ async def test_points_written_after_a_delete_are_removed(
         _job(kb_id, file_id)
     )
     assert await _points(qdrant, pool, kb_id, file_id) == []
-    assert (await _row(pool, file_id))["status"] != "ready"
+    assert (await file_row(pool, file_id))["status"] != "ready"
 
 
 async def test_new_version_retires_the_old_one(
@@ -361,14 +337,14 @@ async def test_new_version_retires_the_old_one(
     redis: Redis,
     tmp_path: Any,
 ) -> None:
-    kb_id, first = await _uploaded(pool, minio_config, "a.md", MARKDOWN)
+    kb_id, first = await uploaded_file(pool, minio_config, "a.md", MARKDOWN)
     pipeline = pipeline_for(pool, minio, qdrant, tmp_path)
     await pipeline.run(_job(kb_id, first))
     async with api_client(pool, minio_config=minio_config) as (client, _):
         second = (await upload(client, ORG, kb_id, "a.md", MARKDOWN + "\nThêm.\n".encode())).json()["data"]
     assert second["version"] == 2
     await pipeline.run(IngestJob(ORG, uuid.UUID(kb_id), uuid.UUID(second["id"]), 2, REQUEST_ID))
-    assert (await _row(pool, first))["deleted_at"] is not None
+    assert (await file_row(pool, first))["deleted_at"] is not None
     await OutboxRelay(pool, redis, batch_size=10, poll_interval_seconds=0.01).publish_batch()
     purge = StreamConsumer(
         redis,
@@ -433,7 +409,7 @@ async def test_kb_purge_removes_its_points(
 async def test_ingest_writes_section_summaries_when_chat_fast_is_assigned(
     pool: Pool, minio_config: dict[str, Any], minio: Minio, qdrant: AsyncQdrantClient, tmp_path: Any
 ) -> None:
-    kb_id, file_id = await _uploaded(pool, minio_config, "a.md", MARKDOWN)
+    kb_id, file_id = await uploaded_file(pool, minio_config, "a.md", MARKDOWN)
     await pipeline_for(pool, minio, qdrant, tmp_path, chat=FakeChat()).run(_job(kb_id, file_id))
     async with pool.connection() as conn:
         rows = await (
@@ -451,7 +427,7 @@ async def test_ingest_waits_for_kb_purge_through_point_and_row_deletion(
     tmp_path: Any,
     pause_at: str,
 ) -> None:
-    kb_id, file_id = await _uploaded(pool, minio_config, "race.md", MARKDOWN)
+    kb_id, file_id = await uploaded_file(pool, minio_config, "race.md", MARKDOWN)
     embedded, resume_ingest, purge_paused, resume_purge = (asyncio.Event() for _ in range(4))
 
     class PausedEmbedder(HashEmbedder):
@@ -522,7 +498,7 @@ async def test_partial_index_failure_serializes_with_file_purge_and_removes_poin
     qdrant: AsyncQdrantClient,
     tmp_path: Any,
 ) -> None:
-    kb_id, file_id = await _uploaded(pool, minio_config, "partial.md", MARKDOWN)
+    kb_id, file_id = await uploaded_file(pool, minio_config, "partial.md", MARKDOWN)
     first_batch, fail_index = asyncio.Event(), asyncio.Event()
     pipeline = pipeline_for(pool, minio, qdrant, tmp_path)
 
@@ -569,7 +545,7 @@ async def test_delete_during_preview_removes_points_and_the_recreated_preview(
     qdrant: AsyncQdrantClient,
     tmp_path: Any,
 ) -> None:
-    kb_id, file_id = await _uploaded(pool, minio_config, "preview-race.md", MARKDOWN)
+    kb_id, file_id = await uploaded_file(pool, minio_config, "preview-race.md", MARKDOWN)
 
     class DeletingStorage(ObjectStorage):
         async def put_bytes(self, bucket: str, key: str, data: bytes, content_type: str) -> None:
@@ -582,4 +558,4 @@ async def test_delete_during_preview_removes_points_and_the_recreated_preview(
     await pipeline.run(_job(kb_id, file_id))
     assert await _points(qdrant, pool, kb_id, file_id) == []
     assert await ObjectStorage(minio).size_of(PREVIEW_BUCKET, f"{ORG}/{kb_id}/{file_id}.json") is None
-    assert (await _row(pool, file_id))["status"] != "ready"
+    assert (await file_row(pool, file_id))["status"] != "ready"

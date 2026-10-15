@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+import httpx
 from minio import Minio
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.trace import Tracer
@@ -22,6 +23,15 @@ from thomas_ragx.retrieval.qdrant_store import QdrantStore
 from thomas_ragx.retrieval.search_service import SearchService
 from thomas_ragx.retrieval.segmenter import IdentitySegmenter
 from thomas_ragx.retrieval.sparse import SparseEncoder
+from thomas_ragx.retrieval.tool_service import KbToolService
+
+
+async def call_tool(
+    client: httpx.AsyncClient, tool: str, body: dict[str, Any], kb_id: UUID | str | None, org: str
+) -> httpx.Response:
+    """POST a tool route with a token for `org` whose `kb` claim is `kb_id` (None: no claim)."""
+    claim = None if kb_id is None else str(kb_id)
+    return await client.post(f"/v1/tools/{tool}", json=body, headers=bearer(org, f"tool:{tool}", claim))
 
 
 @dataclass(frozen=True)
@@ -74,6 +84,21 @@ def search_service_for(
         result_limit=config.search_result_limit,
         min_score=config.search_min_rerank_score,
         trace_content=trace_content,
+    )
+
+
+def tool_service_for(
+    pool: Pool, qdrant: AsyncQdrantClient, tmp_path: Path, registry: LLMProviderService
+) -> KbToolService:
+    return KbToolService(
+        pool,
+        search_service_for(pool, qdrant, tmp_path, registry),
+        TracerProvider().get_tracer(__name__),
+        timeout_seconds=20,
+        section_max_chars=8000,
+        outline_max_nodes=500,
+        page_default_limit=20,
+        page_max_limit=100,
     )
 
 

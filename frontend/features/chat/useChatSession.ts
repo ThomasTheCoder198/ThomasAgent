@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 
 import type { ModelChoice } from "@/features/registry/types";
 import type { Locale } from "@/i18n/config";
+import { useNotify } from "@/lib/useNotify";
 
 import type { ApprovalDecision } from "./components/ApprovalSign";
 import type { ChatMessage } from "./contract";
@@ -25,6 +26,7 @@ type Options = {
 /** AI SDK `useChat` wired to core's stream, plus the model choice and the approval answer. */
 export function useChatSession({ chatId, initialMessages, modelChoice, conversationPath }: Options) {
   const locale = useLocale() as Locale;
+  const notify = useNotify();
   const [modelId, setModelId] = useState(modelChoice.defaultModelId);
   const transport = useMemo(() => createChatTransport(locale), [locale]);
   const chat = useChat<ChatMessage>({
@@ -32,6 +34,9 @@ export function useChatSession({ chatId, initialMessages, modelChoice, conversat
     messages: initialMessages,
     transport,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    // One handler covers a dropped stream and a failed resume after an approval: both end in `status: "error"`,
+    // where the thread also offers an inline retry.
+    onError: notify.error,
   });
   const views = useMemo(
     () => new Map<string, RunView>(chat.messages.map((m) => [m.id, toRunView(m)])),
@@ -47,7 +52,9 @@ export function useChatSession({ chatId, initialMessages, modelChoice, conversat
 
   function decide({ approvalId, approved, always }: ApprovalDecision) {
     const reason = always ? ALWAYS_ALLOW_REASON : undefined;
-    void chat.addToolApprovalResponse({ id: approvalId, approved, reason, options: requestOptions });
+    Promise.resolve(
+      chat.addToolApprovalResponse({ id: approvalId, approved, reason, options: requestOptions }),
+    ).catch(notify.error);
   }
 
   return {

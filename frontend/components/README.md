@@ -3,14 +3,14 @@
 ## Purpose
 
 Presentational building blocks with no data fetching. `ui/` holds the shadcn/ui controls (Radix underneath)
-restyled to the Editorial Trust system in `DESIGN.md`; `metro/` keeps the tool-line vocabulary components that
-feature code still composes (names are historical).
+restyled to the Editorial Trust system in `DESIGN.md`;
+the top level holds the brand wordmark and the tool-source components that feature code composes.
 
 ## Entry points
 
 - `lines.ts` — the single map from a line (`kb | mcp | cmp | app | model`) to its classes; use it instead of writing colours.
 - `lineIcons.ts` — one glyph per tool line (KB library, MCP plug, Composio workflow, Apps window), shared by the run line, approval signs and Agent settings.
-- `metro/LineBadge.tsx`, `metro/LineDots.tsx`, `metro/BrandMark.tsx`, `metro/RouteStrip.tsx` — line name plate, dots, brand roundel, route map (restyled per page by the feature workers).
+- `BrandMark.tsx` — the wordmark: a 16px violet square and "ThomasAgent" in Newsreader (`labelClassName` lets the rail hide the text). `LineBadge.tsx` — a tool source's name pill in its line colour (`lineBg` + `onLine`, a contrast-checked pair). `LineDots.tsx` — small dots for the sources a conversation or nav item touches.
 - `ui/Button.tsx` — `Button` (`variant`: `default | outline | secondary | ghost | destructive | link`; `size`: `sm | default | lg | hero | icon | icon-sm`; `asChild`; `pending`). Only `default` wears the sticker (ink outline + hard offset shadow, lifts on hover, sinks on press). `pending` sets `aria-busy`, disables the button and puts a `Loader2` spinner before the label (it replaces the glyph on icon sizes). Every size is at least 44px tall below md. An icon-only button needs `aria-label` (and `title`).
 - `ui/Input.tsx`, `ui/Textarea.tsx`, `ui/Label.tsx`, `ui/Select.tsx` — fields on a card fill with the input stroke, 4px radius, 40px (44px below md).
 - `ui/Field.tsx` — `Field` (label above, render-prop control, hint / error / mono footer below; wires `id`, `aria-describedby`, `aria-invalid`) and `SwitchField` (labelled on/off row with a hint).
@@ -21,7 +21,6 @@ feature code still composes (names are historical).
 - `ui/InlineAlert.tsx` — in-place error: destructive text and icon, no box.
 - `ui/Sonner.tsx` — `Toaster` (mounted once in `app/layout.tsx`): bottom right on desktop, top centre below md, card fill, lift shadow, at most `MAX_VISIBLE_TOASTS`, close button. Raise toasts through `lib/notify.ts` / `lib/useNotify.ts`, never `toast()` directly. Sonner's live region is polite, so error notices wrap their text in a `role="alert"` node.
 - `ui/useModalLayer.ts` — focus return and toast-aware outside-press handling shared by Dialog, AlertDialog and Sheet.
-- `ui/useDismiss.ts` — Escape / outside-press closing for the hand-built shell drawer, user menu and evidence panel; goes away when those move to Sheet / DropdownMenu.
 
 ## Dependencies
 
@@ -37,4 +36,4 @@ npx vitest run components lib
 
 ## Conventions
 
-New controls take an accessible name. Colours come from tokens in `app/globals.css` (shadcn names: `bg-background`, `text-muted-foreground`, `border-border`, ...). Shadows: `shadow-sticker` only on the primary button and the composer; `shadow-lift` on floating layers. Tailwind inlines shadow values, so dark-theme shadows are driven by `--lift-ink`, not by redefining `--shadow-lift`. Motion uses the shared keyframes there (`animate-rise | fade | pop | stem | draw | draw-x | depart | hit`), `tw-animate-css` for overlays, and the `ease-out-expo` curve. `prefers-reduced-motion` collapses durations and delays.
+New controls take an accessible name. Colours come from tokens in `app/globals.css` (shadcn names: `bg-background`, `text-muted-foreground`, `border-border`, ...). Shadows: `shadow-sticker` only on the primary button and the composer; `shadow-lift` on floating layers. Tailwind inlines shadow values, so dark-theme shadows are driven by `--lift-ink`, not by redefining `--shadow-lift`. Motion uses the shared keyframes there (`animate-rise | fade | pop | stem | hit`, plus `caret`), `tw-animate-css` for overlays, and the `ease-out-expo` curve. `prefers-reduced-motion` collapses durations and delays.

@@ -1,29 +1,33 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 /** How close to the bottom (px) still counts as "following" the stream. */
 const FOLLOW_THRESHOLD = 120;
 
-/** Keeps the thread pinned to the newest station while streaming, unless the owner scrolled up to read. */
+/**
+ * Keeps the thread pinned to the newest station while streaming, unless the owner scrolled up to read.
+ * Returns a callback ref: the scroller only exists once the first message does (the hero has none), so the
+ * scroll listener must attach whenever the element appears, not just at mount.
+ */
 export function useStickToBottom<T extends HTMLElement>(signal: unknown) {
-  const ref = useRef<T>(null);
+  const element = useRef<T | null>(null);
   const following = useRef(true);
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+  const attach = useCallback((node: T | null) => {
+    element.current = node;
+    if (!node) return;
     const onScroll = () => {
-      following.current = el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_THRESHOLD;
+      following.current = node.scrollHeight - node.scrollTop - node.clientHeight < FOLLOW_THRESHOLD;
     };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
+    node.addEventListener("scroll", onScroll, { passive: true });
+    return () => node.removeEventListener("scroll", onScroll);
   }, []);
 
   useEffect(() => {
-    const el = ref.current;
+    const el = element.current;
     if (el && following.current) el.scrollTop = el.scrollHeight;
   }, [signal]);
 
-  return ref;
+  return attach;
 }

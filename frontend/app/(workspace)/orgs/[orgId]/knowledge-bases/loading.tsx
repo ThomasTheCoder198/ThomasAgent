@@ -1,5 +1,5 @@
-import { RouteStatus } from "@/features/shell/RouteStatus";
+import { KnowledgeBaseListSkeleton } from "@/features/knowledge-bases/components/KnowledgeBaseSkeletons";
 
 export default function Loading() {
-  return <RouteStatus kind="loading" workspace />;
+  return <KnowledgeBaseListSkeleton />;
 }

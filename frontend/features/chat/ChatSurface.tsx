@@ -4,13 +4,14 @@ import { RotateCcw } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/Button";
+import { InlineAlert } from "@/components/ui/InlineAlert";
 import { cn } from "@/lib/cn";
 import type { ModelChoice } from "@/features/registry/types";
 
-import { AssistantMessage, UserMessage } from "./components/AssistantMessage";
+import { AssistantMessage, PendingReply, UserMessage } from "./components/AssistantMessage";
 import { ChatHeader } from "./components/ChatHeader";
+import { HeroIntro, HeroSources } from "./components/ChatHero";
 import { Composer } from "./components/Composer";
-import { NewChatIntro } from "./components/NewChatIntro";
 import type { ChatMessage, ChatScope } from "./contract";
 import { EvidencePanel } from "./evidence/EvidencePanel";
 import type { RunView } from "./run-view";
@@ -29,14 +30,8 @@ export type ChatSurfaceProps = {
   conversationPath: string;
 };
 
-const PENDING_REPLY: ChatMessage = { id: "pending", role: "assistant", parts: [] };
-const noop = () => undefined;
-
-/**
- * Thread and composer share one fluid column that grows with the window. On very wide screens it anchors
- * left (the run line's side) instead of floating as a centred strip; prose keeps its own 75ch measure.
- */
-const CHAT_COLUMN = "mx-auto w-full max-w-240 2xl:mr-auto 2xl:ml-[clamp(2.5rem,6vw,8rem)] 2xl:max-w-288";
+/** Thread, hero and composer share one centred 768px column; gutters are 16px on phones, 24px from md. */
+const CHAT_COLUMN = "mx-auto w-full max-w-3xl px-4 md:px-6";
 
 type Session = ReturnType<typeof useChatSession>;
 type Evidence = ReturnType<typeof useEvidence>;
@@ -44,10 +39,10 @@ type Evidence = ReturnType<typeof useEvidence>;
 function Thread({ session, evidence }: { session: Session; evidence: Evidence }) {
   const t = useTranslations("chat");
   const { messages, busy, status } = session;
+  const lastIndex = messages.length - 1;
   const awaitingFirstChunk = status === "submitted" && messages.at(-1)?.role === "user";
   return (
-    <div className={cn(CHAT_COLUMN, "px-4 md:px-8")}>
-      {messages.length === 0 && <NewChatIntro />}
+    <div className={cn(CHAT_COLUMN, "pt-8")}>
       {messages.map((message, index) =>
         message.role === "user" ? (
           <UserMessage key={message.id} message={message} />
@@ -55,22 +50,22 @@ function Thread({ session, evidence }: { session: Session; evidence: Evidence })
           <AssistantMessage
             key={message.id}
             message={message}
-            streaming={busy && index === messages.length - 1}
+            streaming={busy && index === lastIndex}
             selectedCitation={evidence.messageId === message.id ? evidence.n : undefined}
             onCite={(n) => evidence.cite(message.id, n)}
             onDecide={session.decide}
             onInspect={() => evidence.inspect(message.id)}
+            // The inline alert below already offers the retry after a failed stream.
+            onRegenerate={index === lastIndex && status === "ready" ? session.retry : undefined}
           />
         ),
       )}
-      {awaitingFirstChunk && (
-        <AssistantMessage message={PENDING_REPLY} streaming onCite={noop} onDecide={noop} onInspect={noop} />
-      )}
+      {awaitingFirstChunk && <PendingReply />}
       {status === "error" && (
-        <div role="alert" className="text-destructive mb-6 flex items-center gap-3 text-sm">
-          {t("streamFailed")}
+        <div className="mb-8 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <InlineAlert title={t("streamFailed")} />
           <Button variant="outline" onClick={session.retry}>
-            <RotateCcw aria-hidden className="size-3.5" />
+            <RotateCcw aria-hidden />
             {t("regenerate")}
           </Button>
         </div>
@@ -79,7 +74,10 @@ function Thread({ session, evidence }: { session: Session; evidence: Evidence })
   );
 }
 
-/** The chat route: header, thread with its run lines, composer, and the evidence sign on the right. */
+/**
+ * The chat route: header, then either the hero (empty thread) or the thread, with the composer between them.
+ * The composer keeps one place in the tree and only changes its layout, so its focus survives the first send.
+ */
 export function ChatSurface({
   chatId,
   initialMessages,
@@ -92,6 +90,7 @@ export function ChatSurface({
   const session = useChatSession({ chatId, initialMessages, modelChoice, conversationPath });
   const evidence = useEvidence(false);
   const threadRef = useStickToBottom<HTMLDivElement>(session.messages);
+  const empty = session.messages.length === 0;
   const lastAssistant = session.messages.findLast((m) => m.role === "assistant");
   const lastView = lastAssistant ? session.views.get(lastAssistant.id) : undefined;
   const panelView = evidence.messageId ? session.views.get(evidence.messageId) : lastView;
@@ -105,15 +104,30 @@ export function ChatSurface({
           runId={lastView?.runId}
           onInspect={lastView ? () => evidence.inspect() : undefined}
         />
+        {/*
+          Empty: from md the hero, composer and source chips gather in the vertical middle; below md the hero
+          takes the top third and the composer stays docked at the bottom so the keyboard never covers it.
+        */}
         <div
-          ref={threadRef}
-          className="min-h-0 flex-1 overflow-y-auto [mask-image:linear-gradient(to_bottom,transparent_0,#000_28px)] pt-6.5"
+          className={cn(
+            "flex min-h-0 flex-1 flex-col",
+            empty && "overflow-y-auto md:justify-center md:pb-12",
+          )}
         >
-          <Thread session={session} evidence={evidence} />
-        </div>
-        <div className="from-background/0 to-background bg-gradient-to-b from-0% to-30% pt-3.5 pb-4.5">
-          {/* Same column and same inner padding as the thread, so composer and messages share both edges. */}
-          <div className={cn(CHAT_COLUMN, "px-4 md:px-8")}>
+          {empty ? (
+            <HeroIntro className="order-1 pt-8 pb-6 max-md:flex-1 md:pb-8" />
+          ) : (
+            <div ref={threadRef} className="min-h-0 flex-1 overflow-y-auto">
+              <Thread session={session} evidence={evidence} />
+            </div>
+          )}
+          <div
+            className={cn(
+              CHAT_COLUMN,
+              "shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]",
+              empty && "order-3 md:order-2",
+            )}
+          >
             <Composer
               busy={session.busy}
               onSend={session.send}
@@ -125,6 +139,7 @@ export function ChatSurface({
               contextRatio={contextRatio(lastView, modelChoice, session.modelId)}
             />
           </div>
+          {empty && <HeroSources className="order-2 pb-4 md:order-3 md:pb-0" />}
         </div>
       </div>
       <EvidenceDock evidence={evidence} view={panelView} />

@@ -12,7 +12,6 @@
   },
   "routeStatus": {
     "loadingTitle": "Đang mở trang",
-    "loadingBody": "ThomasAgent đang chuẩn bị nội dung.",
     "errorTitle": "Không tải được trang",
     "errorBody": "Trang hiện không khả dụng. Hãy thử lại sau ít phút.",
     "notFoundTitle": "Không tìm thấy trang",
@@ -27,7 +26,9 @@
     "submit": "Đăng nhập",
     "submitting": "Đang đăng nhập…",
     "logout": "Đăng xuất",
-    "signLine": "Tuyến của bạn: tài liệu, công cụ, câu trả lời có nguồn."
+    "emailRequired": "Nhập email.",
+    "emailInvalid": "Email chưa đúng định dạng.",
+    "passwordRequired": "Nhập mật khẩu."
   },
   "shell": {
     "newChat": "Hội thoại mới",
@@ -47,8 +48,6 @@
     "searchSoon": "Bảng lệnh ⌘K có ở M2"
   },
   "empty": {
-    "chatTitle": "Chưa có hội thoại nào",
-    "chatBody": "Khung chat sẽ được bật ở bản tiếp theo. Trong lúc chờ, bạn có thể thêm provider và model trong Cài đặt.",
     "toolsTitle": "Chưa kết nối công cụ nào",
     "toolsBody": "App, MCP server và Composio sẽ xuất hiện ở đây từ M3.",
     "usageTitle": "Chưa có số liệu",
@@ -57,24 +56,19 @@
   },
   "chat": {
     "newTitle": "Hôm nay bạn cần tra gì?",
-    "newBody": "ThomasAgent trả lời từ Knowledge Base kèm trích dẫn, và chỉ gọi công cụ rủi ro khi bạn cho phép.",
+    "newBody": "Câu trả lời có trích dẫn từ Knowledge Base. Công cụ rủi ro chỉ chạy khi bạn cho phép.",
+    "sourcesLabel": "Nguồn công cụ",
     "placeholder": "Hỏi ThomasAgent… gõ / để chọn công cụ",
     "inputLabel": "Tin nhắn",
     "send": "Gửi",
     "stop": "Dừng",
-    "attach": "Đính kèm",
     "attachSoon": "Đính kèm file có ở M5",
     "model": "Model",
-    "kbScope": "{count, plural, other {# KB}}",
     "toolScope": "{count, plural, other {# tool}}",
     "contextMeter": "Context đã dùng {percent}%",
-    "you": "Bạn",
-    "assistant": "ThomasAgent",
     "thinking": "Suy nghĩ",
     "thinkingLive": "Đang suy nghĩ…",
     "writingLive": "Đang viết câu trả lời…",
-    "toolRunning": "Đang chạy",
-    "toolFailed": "Công cụ lỗi",
     "toolDenied": "Bạn đã từ chối",
     "summary": "{tools, plural, =0 {Đã suy nghĩ} other {Đã suy nghĩ và dùng # công cụ}}",
     "summaryShort": "{tools, plural, =0 {Suy nghĩ} other {Suy nghĩ · # công cụ}}",
@@ -86,19 +80,14 @@
     "toolKbSearch": "Tìm trong KB <b>{source}</b>",
     "toolKbRead": "Đọc mục <b>{section}</b> · {file}",
     "toolGeneric": "<b>{source}</b> · {title}",
-    "arguments": "Tham số",
     "approvalTitle": "Cần bạn duyệt",
     "approve": "Cho phép",
     "deny": "Từ chối",
     "alwaysAllow": "Luôn cho phép",
-    "approved": "Đã cho phép",
-    "denied": "Đã từ chối",
     "copy": "Sao chép",
     "copied": "Đã chép",
     "regenerate": "Thử lại",
     "inspect": "Mở Run Inspector",
-    "share": "Chia sẻ",
-    "more": "Thêm",
     "citation": "Nguồn {n}",
     "streamFailed": "Mất kết nối khi đang trả lời.",
     "tokens": "{count} tok",
@@ -108,11 +97,6 @@
   "agents": {
     "title": "Agents",
     "subtitle": "Mỗi Agent có instructions riêng, đúng một Knowledge Base và các nguồn công cụ của nó.",
-    "colAgent": "Agent",
-    "colKb": "Knowledge Base",
-    "colLines": "Tuyến",
-    "colModel": "Model",
-    "colUpdated": "Cập nhật",
     "toolCount": "{count, plural, other {# công cụ}}",
     "empty": "Chưa có agent nào.",
     "back": "Tất cả Agents",
@@ -136,7 +120,7 @@
     "kbUnknownHint": "Agent đang gắn với {id}, không có trong danh sách của bạn. Hãy chọn một Knowledge Base khác.",
     "modelsLoadFailed": "Không tải được danh sách model hoặc role.",
     "documents": "{count, plural, other {# tài liệu}}",
-    "toolsHint": "Công cụ rủi ro nên để Hỏi trước: Agent dừng ở ga duyệt cho tới khi bạn cho phép.",
+    "toolsHint": "Công cụ rủi ro nên để Hỏi trước: Agent dừng lại chờ bạn cho phép rồi mới chạy.",
     "policyLegend": "Chính sách cho {tool}",
     "policyAuto": "Tự động",
     "policyAsk": "Hỏi trước",
@@ -167,7 +151,6 @@
     "tabSources": "Nguồn",
     "tabInspector": "Inspector",
     "close": "Đóng panel",
-    "openFile": "Mở file",
     "page": "Trang {page}/{total}",
     "pageShort": "tr.{page}",
     "score": "Điểm khớp",
@@ -185,6 +168,7 @@
     "network": "Không kết nối được tới máy chủ."
   },
   "preferences": {
+    "menu": "Tuỳ chọn",
     "theme": "Giao diện",
     "light": "Sáng",
     "dark": "Tối",
@@ -214,8 +198,9 @@
     "create": "Tạo",
     "fileListLabel": "Tài liệu",
     "uploadsLabel": "Tệp đang tải lên",
-    "upload": "Tải tài liệu lên",
-    "dropHint": "hoặc thả tệp vào bất kỳ đâu trên trang",
+    "chooseFiles": "Chọn tệp",
+    "dropTitle": "Thả tệp vào đây để tải lên",
+    "dropHint": "Thả vào bất kỳ đâu trên trang cũng được. Tối đa 50 MB mỗi tệp.",
     "dropHere": "Thả để tải lên",
     "queued": "Đang chờ",
     "preparing": "Đang chuẩn bị…",
@@ -226,8 +211,16 @@
     "retry": "Thử lại",
     "download": "Tải xuống",
     "loadMore": "Xem thêm",
-    "downloadFailed": "Không tạo được liên kết tải xuống.",
+    "fileActions": "Thao tác cho {name}",
     "version": "Phiên bản {version}",
+    "toast": {
+      "created": "Đã tạo “{name}”.",
+      "renamed": "Đã đổi tên thành “{name}”.",
+      "deleted": "Đã xoá “{name}”.",
+      "uploaded": "Đã tải lên “{name}”.",
+      "retried": "Đang thử lại “{name}”.",
+      "orgReady": "“{name}” đã sẵn sàng."
+    },
     "problem": {
       "type": "Không hỗ trợ loại tệp này.",
       "size": "Tệp tối đa 50 MB.",
@@ -251,9 +244,9 @@
       "embedding": "Đang nhúng",
       "indexing": "Đang lập chỉ mục",
       "ready": "Sẵn sàng",
-      "failed": "Lỗi",
-      "degraded": "Sẵn sàng (phân tích cục bộ)"
+      "failed": "Lỗi"
     },
+    "degradedNote": "phân tích cục bộ",
     "emptyTitle": "Tải tài liệu đầu tiên lên",
     "emptyBody": "PDF, Word, Excel, PowerPoint, Markdown, văn bản, HTML hoặc ảnh, tối đa 50 MB mỗi tệp.",
     "orgPending": "Ragx chưa chuẩn bị xong tổ chức này.",
@@ -268,12 +261,8 @@
       "nameTooLong": "Tối đa 200 ký tự.",
       "nameInvalid": "Hãy bỏ ký tự điều khiển khỏi tên.",
       "nameTaken": "Đã có Knowledge Base trùng tên.",
-      "saveFailed": "Không lưu được Knowledge Base.",
-      "deleteFailed": "Không xoá được.",
-      "retryFailed": "Không thử lại được tệp này.",
       "loadMoreFailed": "Không tải thêm được tài liệu.",
-      "pollFailed": "Không làm mới được danh sách tài liệu.",
-      "retryOrgFailed": "Không khởi tạo lại được tổ chức."
+      "pollFailed": "Không làm mới được danh sách tài liệu."
     }
   },
   "orgs": {
@@ -292,6 +281,9 @@
     "create": "Tạo tổ chức",
     "retry": "Thử lại",
     "settingsSyncing": "cài đặt chưa áp dụng ở ragx",
+    "created": "Đã tạo tổ chức.",
+    "saved": "Đã lưu cài đặt tổ chức.",
+    "retried": "Tổ chức đã sẵn sàng.",
     "status": {
       "pending": "Đang chuẩn bị",
       "ready": "Sẵn sàng",
@@ -302,8 +294,7 @@
       "nameTooLong": "Tối đa 200 ký tự.",
       "nameInvalid": "Bỏ ký tự điều khiển khỏi tên.",
       "nameTaken": "Đã có tổ chức trùng tên.",
-      "saveFailed": "Không lưu được tổ chức.",
-      "retryFailed": "Không khởi tạo lại được tổ chức."
+      "notReady": "Tổ chức chưa sẵn sàng ở ragx."
     }
   }
 }

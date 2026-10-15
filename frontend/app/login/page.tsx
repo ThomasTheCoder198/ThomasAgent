@@ -1,51 +1,27 @@
 import { getTranslations } from "next-intl/server";
 
-import { BrandMark } from "@/components/metro/BrandMark";
-import { RouteStrip, type RouteStop } from "@/components/metro/RouteStrip";
+import { BrandMark } from "@/components/BrandMark";
 import { LoginForm } from "@/features/auth/LoginForm";
 import { safeNext } from "@/features/auth/paths";
+import { PreferencesMenu } from "@/features/preferences/PreferencesMenu";
 
-/** Line names are product nouns, kept identical across locales like the sidebar's. */
-const stops: RouteStop[] = [
-  { line: "model", label: "Model" },
-  { line: "kb", label: "Knowledge Base", short: "KB" },
-  { line: "mcp", label: "MCP" },
-  { line: "cmp", label: "Composio" },
-  { line: "app", label: "Apps" },
-];
-
+/** The product's second hero: a centred column on the page background, no card, no side panel. */
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const t = await getTranslations("auth");
   const { next } = await searchParams;
   return (
-    <main className="grid min-h-dvh grid-rows-[auto_1fr] md:grid-cols-[minmax(340px,2fr)_3fr] md:grid-rows-1">
-      <section className="bg-sidebar text-sidebar-foreground flex flex-col gap-8 px-6 py-7 md:justify-between md:gap-10 md:px-10 md:py-10">
-        <BrandMark label="ThomasAgent" className="animate-fade" />
-        <p className="animate-rise max-w-[18ch] text-[clamp(1.35rem,2.6vw,2.5rem)] leading-[1.15] font-semibold tracking-[-0.02em]">
-          {t("signLine")}
-        </p>
-        {/* The page's one authored moment: the owner's line is drawn across the sign as the page opens. */}
-        <div className="animate-draw-x">
-          <RouteStrip stops={stops} />
-        </div>
-      </section>
-      <section className="flex items-start justify-center px-6 py-10 md:items-center md:p-8">
-        {/* The form is the first station of the owner's line: a roundel heading a stem, as on every empty page. */}
-        <div className="relative w-full max-w-sm pl-9">
-          <span
-            aria-hidden
-            className="border-model bg-background animate-pop absolute top-2 left-0 size-5 rounded-full border-[5px] [animation-delay:0.5s]"
-          />
-          <span
-            aria-hidden
-            className="bg-model animate-stem absolute top-7 bottom-1 left-[8.5px] w-[3px] origin-top rounded-b-sm [animation-delay:0.65s]"
-          />
-          <div className="animate-rise">
-            <h1 className="text-[28px] font-bold tracking-[-0.02em]">{t("title")}</h1>
-            <p className="text-muted-foreground mt-1 mb-9">{t("subtitle")}</p>
-            <LoginForm next={safeNext(next)} />
-          </div>
-        </div>
+    <main className="flex min-h-dvh flex-col">
+      <header className="flex h-14 shrink-0 items-center justify-between px-4 md:px-6 lg:px-8">
+        <BrandMark label="ThomasAgent" />
+        <PreferencesMenu />
+      </header>
+      {/* The bottom padding offsets the header, so the form sits on the optical centre of the viewport. */}
+      <section className="animate-rise mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-4 pt-8 pb-16 md:pb-20">
+        <h1 className="font-serif text-[clamp(2rem,4vw,2.75rem)] leading-[1.15] font-medium tracking-[-0.01em]">
+          {t("title")}
+        </h1>
+        <p className="text-muted-foreground mt-3 mb-8">{t("subtitle")}</p>
+        <LoginForm next={safeNext(next)} />
       </section>
     </main>
   );

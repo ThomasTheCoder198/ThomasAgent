@@ -6,14 +6,14 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { Dialog, DialogClose, DialogContent, DialogHeading } from "@/components/ui/Dialog";
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeading } from "@/components/ui/Dialog";
 import { Field } from "@/components/ui/Field";
-import { InlineAlert } from "@/components/ui/InlineAlert";
 import { Input } from "@/components/ui/Input";
 import type { Locale } from "@/i18n/config";
-import { ApiError, describeApiError } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/client";
 import { ErrorCode } from "@/lib/errors/codes.gen";
 import type { KnowledgeBase } from "@/lib/ragx/types";
+import { useNotify } from "@/lib/useNotify";
 import { validateDisplayName, type NameProblem } from "@/lib/validation";
 
 import { createKnowledgeBase, renameKnowledgeBase } from "../api";
@@ -36,10 +36,14 @@ type NameDialogProps = {
   description?: string;
   submitLabel: string;
   initialName: string;
+  /** Resolves when saved (the caller toasts its own success); a rejection is mapped here. */
   onSubmit: (name: string) => Promise<void>;
 };
 
-/** One name field, validated like an organization's name; server field errors map back onto the field. */
+/**
+ * One name field, validated like an organization's name. A name that is already taken stays on the field
+ * (the operator is typing it); every other failure is a catalog toast.
+ */
 function NameDialog({
   onOpenChange,
   title,
@@ -49,10 +53,9 @@ function NameDialog({
   onSubmit,
 }: NameDialogProps) {
   const t = useTranslations("kb");
-  const tErr = useTranslations("errors");
+  const notify = useNotify();
   const [name, setName] = useState(initialName);
   const [nameError, setNameError] = useState<string>();
-  const [failure, setFailure] = useState<string>();
   const [saving, setSaving] = useState(false);
 
   async function submit(event: FormEvent) {
@@ -61,13 +64,12 @@ function NameDialog({
     setNameError(problem ? t(`errors.${PROBLEM_KEY[problem]}`) : undefined);
     if (problem) return;
     setSaving(true);
-    setFailure(undefined);
     try {
       await onSubmit(name.trim());
       onOpenChange(false);
     } catch (err) {
       if (isTaken(err)) setNameError(t("errors.nameTaken"));
-      else setFailure(describeApiError(err, t("errors.saveFailed"), (id) => tErr("requestId", { id })));
+      else notify.error(err);
     } finally {
       setSaving(false);
     }
@@ -77,7 +79,7 @@ function NameDialog({
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeading title={title} description={description} />
-        <form onSubmit={(e) => void submit(e)} noValidate className="flex flex-col gap-5">
+        <form onSubmit={(e) => void submit(e)} noValidate className="flex flex-col gap-4">
           <Field label={t("name")} error={nameError}>
             {(control) => (
               <Input
@@ -89,22 +91,21 @@ function NameDialog({
               />
             )}
           </Field>
-          {failure && <InlineAlert title={failure} />}
-          <div className="flex flex-wrap justify-end gap-2">
+          <DialogFooter>
             <DialogClose asChild>
               <Button variant="ghost">{t("cancel")}</Button>
             </DialogClose>
             <Button type="submit" pending={saving}>
               {submitLabel}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
 
-export function NewKnowledgeBaseDialog({
+function NewKnowledgeBaseDialog({
   orgId,
   onOpenChange,
 }: {
@@ -114,6 +115,7 @@ export function NewKnowledgeBaseDialog({
   const t = useTranslations("kb");
   const locale = useLocale() as Locale;
   const router = useRouter();
+  const notify = useNotify();
   return (
     <NameDialog
       onOpenChange={onOpenChange}
@@ -123,6 +125,7 @@ export function NewKnowledgeBaseDialog({
       initialName=""
       onSubmit={async (name) => {
         const created = await createKnowledgeBase(orgId, { name }, locale);
+        notify.success(t("toast.created", { name: created.name }));
         router.push(kbPage(orgId, created.id));
       }}
     />
@@ -142,6 +145,7 @@ export function RenameKnowledgeBaseDialog({
   const common = useTranslations("common");
   const locale = useLocale() as Locale;
   const router = useRouter();
+  const notify = useNotify();
   return (
     <NameDialog
       onOpenChange={onOpenChange}
@@ -149,7 +153,8 @@ export function RenameKnowledgeBaseDialog({
       submitLabel={common("save")}
       initialName={knowledgeBase.name}
       onSubmit={async (name) => {
-        await renameKnowledgeBase(orgId, knowledgeBase.id, { name }, locale);
+        const renamed = await renameKnowledgeBase(orgId, knowledgeBase.id, { name }, locale);
+        notify.success(t("toast.renamed", { name: renamed.name }));
         router.refresh();
       }}
     />
@@ -162,10 +167,9 @@ export function NewKnowledgeBaseButton({ orgId }: { orgId: string }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      {/* Icon-only on phones so the title keeps its width; the label stays for assistive tech. */}
-      <Button onClick={() => setOpen(true)} className="shrink-0 max-sm:min-w-11 max-sm:px-0">
+      <Button onClick={() => setOpen(true)}>
         <Plus aria-hidden />
-        <span className="max-sm:sr-only">{t("new")}</span>
+        {t("new")}
       </Button>
       {open && <NewKnowledgeBaseDialog orgId={orgId} onOpenChange={setOpen} />}
     </>

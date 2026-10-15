@@ -33,14 +33,14 @@ export function DocumentPageView({ page, citations, selected, onSelect }: Props)
   }, [selected]);
 
   return (
-    <div className="bg-page text-page-ink shadow-page relative rounded px-6.5 pt-6.5 pb-7.5 text-[12.5px] leading-relaxed">
-      <span className="tabular absolute top-3 right-4 text-[10px] opacity-70">{page.page}</span>
+    <div className="bg-page text-page-ink shadow-page relative rounded-sm px-6 pt-6 pb-8 text-[0.8125rem] leading-relaxed">
+      <span className="tabular absolute top-3 right-4 text-[0.6875rem] opacity-70">{page.page}</span>
       {page.blocks.map((block) => {
         const tags = onPage.filter((c) => c.locator?.blockIds.includes(block.id));
         const hit = selectedBlocks.has(block.id);
         if (block.kind === "heading") {
           return (
-            <h3 key={block.id} className="mt-0.5 mb-2 font-bold">
+            <h3 key={block.id} className="mt-1 mb-2 font-semibold">
               {block.text}
             </h3>
           );
@@ -50,12 +50,12 @@ export function DocumentPageView({ page, citations, selected, onSelect }: Props)
             key={block.id}
             ref={hit ? hitRef : undefined}
             className={cn(
-              "outline-kb relative mb-2 rounded-[3px] transition-[background-color,outline-color] duration-300",
+              "outline-kb relative mb-2 rounded-sm transition-[background-color,outline-color] duration-300",
               hit && "bg-page-hit animate-hit outline-2",
             )}
           >
             {tags.length > 0 && (
-              <span className="absolute top-px -left-6.5 flex flex-col gap-0.5">
+              <span className="absolute top-0 -left-8 flex flex-col gap-1">
                 {tags.map((c) => (
                   <CitationRoundel
                     key={c.n}

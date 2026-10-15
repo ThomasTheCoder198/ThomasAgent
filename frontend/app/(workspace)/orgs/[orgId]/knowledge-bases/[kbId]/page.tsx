@@ -1,9 +1,13 @@
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 
 import { FileList } from "@/features/knowledge-bases/components/FileList";
-import { KnowledgeBaseSign } from "@/features/knowledge-bases/components/KnowledgeBaseSign";
-import { LoadFailure } from "@/features/knowledge-bases/components/LoadFailure";
+import { KbPageHeader } from "@/features/knowledge-bases/components/KbPageHeader";
+import { KnowledgeBaseHeader } from "@/features/knowledge-bases/components/KnowledgeBaseHeader";
+import { LoadFailure, ServiceUnavailable } from "@/features/knowledge-bases/components/LoadFailure";
+import { PAGE_COLUMN } from "@/features/knowledge-bases/layout";
 import { getKnowledgeBasePage } from "@/features/knowledge-bases/server";
+import { orgHome } from "@/features/orgs/contract";
 
 export default async function KnowledgeBasePage({
   params,
@@ -15,15 +19,14 @@ export default async function KnowledgeBasePage({
   const kbId = decodeURIComponent(rawKbId);
   const loaded = await getKnowledgeBasePage(orgId, kbId);
   if (!loaded.ok && loaded.notFound) notFound();
+  if (!loaded.ok && loaded.serviceDown) return <ServiceUnavailable requestId={loaded.requestId} />;
   if (!loaded.ok) {
+    const t = await getTranslations("kb");
     return (
       <div className="h-full overflow-y-auto">
-        <div className="mx-auto w-full max-w-272 px-4 py-6 md:px-8">
-          <LoadFailure
-            serviceDown={loaded.serviceDown}
-            message={loaded.message}
-            requestId={loaded.requestId}
-          />
+        <KbPageHeader title={t("title")} back={{ href: orgHome(orgId), label: t("back") }} />
+        <div className={`${PAGE_COLUMN} pb-16`}>
+          <LoadFailure message={loaded.message} requestId={loaded.requestId} />
         </div>
       </div>
     );
@@ -31,7 +34,7 @@ export default async function KnowledgeBasePage({
   const { knowledgeBase, files, cursor } = loaded.data;
   return (
     <div className="h-full overflow-y-auto">
-      <KnowledgeBaseSign orgId={orgId} knowledgeBase={knowledgeBase} />
+      <KnowledgeBaseHeader orgId={orgId} knowledgeBase={knowledgeBase} />
       <FileList
         key={knowledgeBase.id}
         orgId={orgId}

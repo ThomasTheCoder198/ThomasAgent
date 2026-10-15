@@ -1,35 +1,42 @@
+import { Inbox, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { lineBg, lineBorder, type Line } from "@/components/lines";
+import { lineIcons } from "@/components/lineIcons";
+import { isToolLine, lineText, lineTint, type Line } from "@/components/lines";
 import { cn } from "@/lib/cn";
 
-/** One station on its line, not a card: the roundel heads a short stem that leads into the copy. */
+/** Centred empty or status block: a muted icon in a circle, a title, one line of body and an optional action. */
 export function EmptyState({
   title,
   body,
   line,
+  icon,
   level = "h1",
   children,
 }: {
   title: string;
   body: string;
+  /** Tints the icon circle in a tool source's colour. */
   line: Line;
-  /** `h2` when the page already has its own `h1` (a sign band above the station). */
+  /** Defaults to the line's own glyph. */
+  icon?: LucideIcon;
+  /** `h2` when the page already has its own `h1`. */
   level?: "h1" | "h2";
   children?: ReactNode;
 }) {
   const Heading = level;
+  const Icon = icon ?? (isToolLine(line) ? lineIcons[line] : Inbox);
   return (
-    <section className="mx-auto flex max-w-[68ch] items-start gap-5 px-6 py-14 md:px-8 md:py-20">
-      <span className="flex flex-col items-center pt-1" aria-hidden>
-        <span className={cn("bg-card size-5.5 rounded-full border-[5px]", lineBorder[line])} />
-        <span className={cn("animate-draw h-20 w-[3px] rounded-b-sm", lineBg[line])} />
+    <section className="mx-auto flex max-w-xl flex-col items-center gap-3 px-4 py-12 text-center md:px-6 md:py-20">
+      <span
+        aria-hidden
+        className={cn("grid size-12 place-items-center rounded-full", lineTint[line], lineText[line])}
+      >
+        <Icon className="size-8" strokeWidth={1.5} />
       </span>
-      <div>
-        <Heading className="text-[22px] font-bold tracking-[-0.015em]">{title}</Heading>
-        <p className="text-muted-foreground mt-2 leading-relaxed">{body}</p>
-        {children}
-      </div>
+      <Heading className="text-lg font-semibold tracking-tight">{title}</Heading>
+      <p className="text-muted-foreground max-w-[56ch]">{body}</p>
+      {children}
     </section>
   );
 }

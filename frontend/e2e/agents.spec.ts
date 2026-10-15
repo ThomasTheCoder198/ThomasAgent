@@ -24,6 +24,15 @@ test.beforeEach(async ({ request }, testInfo) => {
   await request.post(`${MOCK_CORE_URL}/__mock/reset?agent=${agentFor(testInfo)}`);
 });
 
+test("opens an Agent from its row in the list", async ({ page }, testInfo) => {
+  const agentId = agentFor(testInfo);
+  await signIn(page, "/agents");
+  await page.locator(`a[href="/agents/${agentId}"]`).click();
+  await expect(page).toHaveURL(new RegExp(`/agents/${agentId}$`));
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Tổng quan" })).toHaveAttribute("aria-selected", "true");
+});
+
 test("edits a tool policy, saves it, and the change survives a reload", async ({ page }, testInfo) => {
   await openAgent(page, agentFor(testInfo), "tools");
   const policy = page.getByRole("group", { name: /Gửi email/ });
@@ -38,24 +47,23 @@ test("edits a tool policy, saves it, and the change survives a reload", async ({
 
 test("changes the Knowledge Base binding and keeps it", async ({ page }, testInfo) => {
   await openAgent(page, agentFor(testInfo), "knowledge");
-  const target = page.getByRole("radio", { name: /Hợp đồng nhà cung cấp/ });
-  await target.check({ force: true });
+  await page.getByRole("combobox", { name: "Knowledge" }).click();
+  await page.getByRole("option", { name: /Hợp đồng nhà cung cấp/ }).click();
   await saveButton(page).click();
   await expect(page.getByText("Đã lưu")).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("radio", { name: /Hợp đồng nhà cung cấp/ })).toBeChecked();
+  await expect(page.getByRole("combobox", { name: "Knowledge" })).toHaveText(/Hợp đồng nhà cung cấp/);
 });
 
 test("overrides the chat model and keeps it after reload", async ({ page }, testInfo) => {
   await openAgent(page, agentFor(testInfo), "models");
   const chat = page.getByRole("combobox", { name: "Chat", exact: true });
-  await chat.selectOption({ label: "Claude Sonnet 5.5 · anthropic/claude-sonnet-5.5" });
+  await chat.click();
+  await page.getByRole("option", { name: "Claude Sonnet 5.5 · anthropic/claude-sonnet-5.5" }).click();
   await saveButton(page).click();
   await expect(page.getByText("Đã lưu")).toBeVisible();
   await page.reload();
-  await expect(
-    page.getByRole("combobox", { name: "Chat", exact: true }).locator("option:checked"),
-  ).toHaveText(/Claude Sonnet 5\.5 ·/);
+  await expect(page.getByRole("combobox", { name: "Chat", exact: true })).toHaveText(/Claude Sonnet 5\.5 ·/);
 });
 
 test("blocks saving an empty name and says why", async ({ page }, testInfo) => {
@@ -104,7 +112,8 @@ test("core refuses to bind an Agent to another org's Knowledge Base", async ({ p
 
 test("marks a binding to a Knowledge Base outside this org as unknown", async ({ page }) => {
   await openAgent(page, UNKNOWN_KB_AGENT, "knowledge");
-  await expect(page.getByRole("radio", { name: /Knowledge Base không xác định/ })).toBeChecked();
+  await expect(page.getByRole("combobox", { name: "Knowledge" })).toHaveText(/Knowledge Base không xác định/);
+  await expect(page.getByRole("alert").filter({ hasText: "kb-org-khac" })).toBeVisible();
 });
 
 test("collapses the desktop sidebar to an icon rail and keeps it", async ({ page }, testInfo) => {

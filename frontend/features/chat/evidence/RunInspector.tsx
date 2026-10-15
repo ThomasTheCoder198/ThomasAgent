@@ -21,16 +21,16 @@ export function RunInspector({ stations, usage, runId }: Props) {
   const t = useTranslations("evidence");
   const tChat = useTranslations("chat");
   const locale = useLocale();
-  if (stations.length === 0) return <p className="text-muted-foreground p-5 text-sm">{t("noRun")}</p>;
+  if (stations.length === 0) return <p className="text-muted-foreground p-4 text-sm">{t("noRun")}</p>;
   const seconds = (ms: number | undefined) =>
     ms === undefined ? "–" : tChat("seconds", { seconds: formatSeconds(ms, locale) });
   return (
-    <div className="p-4.5">
-      <div className="mb-3.5 flex items-center gap-3">
+    <div className="p-4">
+      <div className="mb-4 flex items-center gap-3">
         <MiniLine lines={runLines(stations)} />
         {runId && <span className="tabular text-muted-foreground ml-auto text-xs">{runId}</span>}
       </div>
-      <table className="w-full text-[13px]">
+      <table className="w-full text-sm">
         <thead>
           <tr className="text-muted-foreground text-left text-xs">
             <th className="pb-2 font-medium">{t("station")}</th>
@@ -40,7 +40,7 @@ export function RunInspector({ stations, usage, runId }: Props) {
         <tbody>
           {stations.map((station) => (
             <tr key={station.id} className="border-border border-t">
-              <td className="py-2 pr-3">{stationName(station, tChat("thinking"))}</td>
+              <td className="py-2 pr-4">{stationName(station, tChat("thinking"))}</td>
               <td className="tabular text-muted-foreground py-2 text-right text-xs">
                 {seconds(station.kind === "status" ? undefined : station.durationMs)}
               </td>
@@ -49,8 +49,8 @@ export function RunInspector({ stations, usage, runId }: Props) {
         </tbody>
         <tfoot className="tabular text-xs">
           <tr className="border-border border-t font-semibold">
-            <td className="pt-2.5">{t("total")}</td>
-            <td className="pt-2.5 text-right">{seconds(usage?.durationMs ?? totalDurationMs(stations))}</td>
+            <td className="pt-3">{t("total")}</td>
+            <td className="pt-3 text-right">{seconds(usage?.durationMs ?? totalDurationMs(stations))}</td>
           </tr>
           {usage && (
             <tr className="text-muted-foreground">

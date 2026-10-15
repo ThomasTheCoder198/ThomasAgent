@@ -13,7 +13,7 @@ function renderBar(props: Partial<Parameters<typeof SaveBar>[0]>) {
         dirty={false}
         canSave={false}
         errors={{}}
-        save={{ status: "idle" }}
+        saving={false}
         onSave={() => undefined}
         onDiscard={() => undefined}
         {...props}
@@ -35,6 +35,13 @@ describe("SaveBar", () => {
     renderBar({ dirty: true, canSave: true });
     expect(screen.getByText("Có thay đổi chưa lưu")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lưu thay đổi" })).toBeEnabled();
+  });
+
+  it("marks Save busy and locks both actions while a save is in flight", () => {
+    renderBar({ dirty: true, canSave: true, saving: true });
+    expect(screen.getByRole("button", { name: "Đang lưu…" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Đang lưu…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Hoàn tác" })).toBeDisabled();
   });
 
   it("blocks saving and explains why when the name is empty", () => {

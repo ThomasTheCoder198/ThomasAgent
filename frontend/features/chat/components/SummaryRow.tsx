@@ -4,6 +4,7 @@ import { ChevronDown } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 
 import type { Line } from "@/components/lines";
+import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { formatSeconds } from "@/lib/format";
 
@@ -26,23 +27,21 @@ export function SummaryRow({ stations, pendingLine, expanded, onToggle, controls
   const seconds = formatSeconds(totalDurationMs(stations), locale);
   const tools = toolCount(stations);
   return (
-    <button
-      type="button"
+    <Button
+      variant="secondary"
+      size="sm"
       onClick={onToggle}
       aria-expanded={expanded}
       aria-controls={controls}
       aria-label={`${t("summary", { tools })} · ${t("seconds", { seconds })}`}
       title={expanded ? t("hideSteps") : t("showSteps")}
-      className="border-border bg-card text-muted-foreground hover:border-input hover:text-foreground mb-3.5 inline-flex max-w-full items-center gap-2.5 rounded-full border py-1.5 pr-3 pl-2.5 text-[13.5px] transition-colors"
+      className="text-muted-foreground hover:text-foreground mb-4 max-w-full rounded-full text-[0.8125rem] font-medium"
     >
       <MiniLine lines={runLines(stations)} pending={pendingLine} />
       <span className="hidden truncate sm:inline">{t("summary", { tools })}</span>
       <span className="truncate sm:hidden">{t("summaryShort", { tools })}</span>
-      <span className="tabular text-muted-foreground text-xs">{t("seconds", { seconds })}</span>
-      <ChevronDown
-        aria-hidden
-        className={cn("size-4 shrink-0 transition-transform", expanded && "rotate-180")}
-      />
-    </button>
+      <span className="tabular text-xs">{t("seconds", { seconds })}</span>
+      <ChevronDown aria-hidden className={cn("transition-transform", expanded && "rotate-180")} />
+    </Button>
   );
 }

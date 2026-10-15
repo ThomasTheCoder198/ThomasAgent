@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/Button";
 import { InlineAlert } from "@/components/ui/InlineAlert";
 import { EmptyState } from "@/features/shell/EmptyState";
 import { describeApiError } from "@/lib/api/client";
-import { useNotify } from "@/lib/useNotify";
 import type { KbFile } from "@/lib/ragx/types";
+import { useNotify } from "@/lib/useNotify";
 
+import { PAGE_COLUMN } from "../layout";
 import { StorageUploadError } from "../upload";
 import { useFiles } from "../useFiles";
 import { useUploadQueue } from "../useUploadQueue";
@@ -20,7 +21,7 @@ import { useStorageFailureText } from "./useStorageFailureText";
 
 type Props = { orgId: string; kbId: string; initialFiles: KbFile[]; initialCursor: string | null };
 
-/** Upload rows first (trains leaving), then the documents; the list follows ingest while anything is in flight. */
+/** The drop zone, upload rows first (files leaving), then the documents; the list follows ingest while anything is in flight. */
 export function FileList({ orgId, kbId, initialFiles, initialCursor }: Props) {
   const t = useTranslations("kb");
   const tErr = useTranslations("errors");
@@ -33,18 +34,21 @@ export function FileList({ orgId, kbId, initialFiles, initialCursor }: Props) {
     kbId,
     (file) => {
       list.upsert(file);
-      // The sign's file count comes from the server.
+      notify.success(t("toast.uploaded", { name: file.name }));
+      // The header's file count comes from the server.
       router.refresh();
     },
     (file, error) => {
-      // The storage leg has no core response to show, so its failure is announced here (P-F17).
+      // The storage leg has no core response to show, so its failure is announced with the file's name (P-F17);
+      // the other steps answer with a catalog code (and a request id for 5xx) that the shared error toast maps.
       if (error instanceof StorageUploadError) notify.problem(file.name, storageText(error));
+      else notify.error(error);
     },
   );
   const requestId = (id: string) => tErr("requestId", { id });
   const empty = list.files.length === 0 && queue.items.length === 0;
   return (
-    <div className="mx-auto w-full max-w-272 px-4 pb-16 md:px-8">
+    <div className={`${PAGE_COLUMN} pb-16`}>
       <UploadDropZone onFiles={queue.add} />
       {list.pollError !== undefined && (
         <div className="mt-4">
@@ -52,7 +56,7 @@ export function FileList({ orgId, kbId, initialFiles, initialCursor }: Props) {
         </div>
       )}
       {queue.items.length > 0 && (
-        <ul aria-label={t("uploadsLabel")}>
+        <ul aria-label={t("uploadsLabel")} className="border-border mt-6 border-t">
           {queue.items.map((item) => (
             <UploadRow
               key={item.id}
@@ -67,18 +71,20 @@ export function FileList({ orgId, kbId, initialFiles, initialCursor }: Props) {
       {empty ? (
         <EmptyState line="kb" level="h2" title={t("emptyTitle")} body={t("emptyBody")} />
       ) : (
-        <ul aria-label={t("fileListLabel")}>
-          {list.files.map((file) => (
-            <FileRow
-              key={file.id}
-              orgId={orgId}
-              kbId={kbId}
-              file={file}
-              onChange={list.upsert}
-              onRemove={list.remove}
-            />
-          ))}
-        </ul>
+        list.files.length > 0 && (
+          <ul aria-label={t("fileListLabel")} className="border-border mt-6 border-t">
+            {list.files.map((file) => (
+              <FileRow
+                key={file.id}
+                orgId={orgId}
+                kbId={kbId}
+                file={file}
+                onChange={list.upsert}
+                onRemove={list.remove}
+              />
+            ))}
+          </ul>
+        )
       )}
       {list.moreError !== undefined && (
         <div className="mt-4">

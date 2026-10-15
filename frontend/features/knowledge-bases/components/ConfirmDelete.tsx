@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useState, type RefObject } from "react";
 
 import {
   AlertDialog,
@@ -13,32 +13,41 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/AlertDialog";
 import { Button } from "@/components/ui/Button";
-import { InlineAlert } from "@/components/ui/InlineAlert";
-import { describeApiError } from "@/lib/api/client";
+import { useNotify } from "@/lib/useNotify";
 
 type Props = {
   onOpenChange: (open: boolean) => void;
   title: string;
   body: string;
-  /** Resolves when the item is gone; a rejection is shown here with its request id. */
+  /** The success toast's text; a failure is toasted from its catalog code and the dialog stays for another try. */
+  successMessage: string;
+  /** Resolves when the item is gone. */
   onConfirm: () => Promise<void>;
+  /** Where focus goes on close when the opener is gone (a menu item closes with its menu). */
+  returnFocusRef?: RefObject<HTMLElement | null>;
 };
 
-/** Names the item and what goes with it; a refusal (the default KB answers CONFLICT) stays inside the dialog. */
-export function ConfirmDelete({ onOpenChange, title, body, onConfirm }: Props) {
+/** Names the item and what goes with it, and reports the outcome as a toast. */
+export function ConfirmDelete({
+  onOpenChange,
+  title,
+  body,
+  successMessage,
+  onConfirm,
+  returnFocusRef,
+}: Props) {
   const t = useTranslations("kb");
-  const tErr = useTranslations("errors");
+  const notify = useNotify();
   const [pending, setPending] = useState(false);
-  const [failure, setFailure] = useState<string>();
 
   async function confirm() {
     setPending(true);
-    setFailure(undefined);
     try {
       await onConfirm();
+      notify.success(successMessage);
       onOpenChange(false);
     } catch (err) {
-      setFailure(describeApiError(err, t("errors.deleteFailed"), (id) => tErr("requestId", { id })));
+      notify.error(err);
     } finally {
       setPending(false);
     }
@@ -46,12 +55,11 @@ export function ConfirmDelete({ onOpenChange, title, body, onConfirm }: Props) {
 
   return (
     <AlertDialog open onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent returnFocusRef={returnFocusRef}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{body}</AlertDialogDescription>
         </AlertDialogHeader>
-        {failure && <InlineAlert title={failure} />}
         <AlertDialogFooter>
           <AlertDialogCancel variant="ghost">{t("cancel")}</AlertDialogCancel>
           {/* A plain Button, not AlertDialogAction: the dialog must stay open while the request runs or fails. */}

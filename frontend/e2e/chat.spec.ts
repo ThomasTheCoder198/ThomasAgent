@@ -7,8 +7,10 @@ import { RUN_TIMEOUT, signIn } from "./helpers";
  * for approval, the run folds into its summary, and a citation opens its source block.
  * Requires a core (or the fake core in `mock-core/`) that serves the chat stream.
  */
-test("streams a run, waits for approval, then cites its evidence", async ({ page }) => {
+test("streams a run, waits for approval, then cites its evidence", async ({ page }, testInfo) => {
   await signIn(page);
+  await expect(page.getByRole("heading", { level: 2, name: "Hôm nay bạn cần tra gì?" })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Nguồn công cụ" })).toBeVisible();
   await page.getByLabel("Tin nhắn").fill("Chính sách hoàn tiền 2026 thay đổi gì?");
   await page.keyboard.press("Enter");
 
@@ -21,7 +23,10 @@ test("streams a run, waits for approval, then cites its evidence", async ({ page
     timeout: RUN_TIMEOUT,
   });
   await page.getByRole("button", { name: "Nguồn 1" }).first().click();
-  const evidence = page.getByRole("complementary", { name: "Bằng chứng" });
+  // From xl the evidence is a docked column (complementary); below it a modal sheet.
+  const evidence = page.getByRole(testInfo.project.name === "mobile" ? "dialog" : "complementary", {
+    name: "Bằng chứng",
+  });
   await expect(evidence.getByRole("heading", { name: "chinh-sach-hoan-tien-2026.pdf" })).toBeVisible();
   await expect(evidence.getByText(/14 \(mười bốn\) ngày/)).toBeVisible();
 });

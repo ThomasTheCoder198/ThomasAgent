@@ -82,4 +82,16 @@ describe("Sidebar", () => {
       "page",
     );
   });
+
+  it("offers New chat as a link and keeps search disabled until the palette exists", () => {
+    render(<Sidebar items={[]} recents={[]} user={user} labels={labels} activeHref="/chat" />);
+    expect(screen.getByRole("link", { name: labels.newChat })).toHaveAttribute("href", "/chat");
+    expect(screen.getByRole("button", { name: new RegExp(labels.search) })).toBeDisabled();
+  });
+
+  it("keeps the brand and owner name as real text for the folded rail", () => {
+    render(<Sidebar items={[]} recents={[]} user={user} labels={labels} activeHref="/chat" />);
+    expect(screen.getByText("ThomasAgent").className).toMatch(/group-data-\[collapsed=true\]\/shell:sr-only/);
+    expect(screen.getByText("Thomas")).toBeInTheDocument();
+  });
 });

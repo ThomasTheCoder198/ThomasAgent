@@ -1,14 +1,16 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useId, useState } from "react";
 
 import { cn } from "@/lib/cn";
 
 import type { ChatMessage } from "../contract";
-import { isAwaitingApproval, toRunView, travelled, type Segment, type Station } from "../run-view";
+import { isAwaitingApproval, toRunView, travelled, type Segment } from "../run-view";
 import { Answer } from "./Answer";
 import type { ApprovalDecision } from "./ApprovalSign";
 import { MessageFoot } from "./MessageFoot";
+import { OrbNote } from "./OrbNote";
 import { RunLine } from "./RunLine";
 import { SummaryRow } from "./SummaryRow";
 
@@ -19,9 +21,19 @@ type Props = {
   onCite: (n: number) => void;
   onDecide: (decision: ApprovalDecision) => void;
   onInspect: () => void;
+  /** Present only on the newest finished answer. */
+  onRegenerate?: () => void;
 };
 
-const PENDING_STATION: Station = { kind: "reasoning", id: "pending", text: "", live: true };
+/** Before the first part arrives, whether the request is queued or the stream is open but silent. */
+export function PendingReply() {
+  const t = useTranslations("chat");
+  return (
+    <OrbNote state="solving" size={32} live className="mb-8">
+      {t("thinkingLive")}
+    </OrbNote>
+  );
+}
 
 /** While streaming, the newest station is live unless the answer text has taken over. */
 function liveStationId(segments: Segment[], streaming: boolean): string | undefined {
@@ -41,14 +53,13 @@ export function AssistantMessage({
   onCite,
   onDecide,
   onInspect,
+  onRegenerate,
 }: Props) {
+  const t = useTranslations("chat");
   const view = toRunView(message);
   const [expanded, setExpanded] = useState(false);
   const stepsId = useId();
-  const segments: Segment[] =
-    view.segments.length === 0 && streaming
-      ? [{ kind: "steps", id: "pending", stations: [PENDING_STATION] }]
-      : view.segments;
+  const segments = view.segments;
   const liveId = liveStationId(segments, streaming);
   const hasText = segments.some((s) => s.kind === "text");
   // Once the answer exists the opening stations fold into the summary row; later tool stations stay in place.
@@ -56,9 +67,10 @@ export function AssistantMessage({
   const paused = isAwaitingApproval(view.stations);
   const pendingLine = view.stations.find((s) => s.kind === "tool" && s.state === "awaiting");
   const citationNumbers = view.citations.map((c) => c.n);
+  if (segments.length === 0 && streaming) return <PendingReply />;
 
   return (
-    <article className="mb-7" aria-busy={streaming}>
+    <article className="mb-8" aria-busy={streaming}>
       {segments.map((segment, index) => {
         if (segment.kind === "text") {
           return (
@@ -108,8 +120,18 @@ export function AssistantMessage({
           />
         );
       })}
+      {streaming && segments.at(-1)?.kind === "text" && (
+        <OrbNote state="composing" size={20} className="mt-2 text-[0.8125rem]">
+          {t("writingLive")}
+        </OrbNote>
+      )}
       {!streaming && hasText && !paused && (
-        <MessageFoot text={plainText(segments)} usage={view.usage} onInspect={onInspect} />
+        <MessageFoot
+          text={plainText(segments)}
+          usage={view.usage}
+          onInspect={onInspect}
+          onRegenerate={onRegenerate}
+        />
       )}
     </article>
   );
@@ -118,8 +140,8 @@ export function AssistantMessage({
 export function UserMessage({ message }: { message: ChatMessage }) {
   const text = message.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n");
   return (
-    <div className="animate-rise mb-5.5 flex justify-end">
-      <p className="border-border bg-card max-w-[78%] rounded-[14px_14px_4px_14px] border px-3.75 py-2.75 whitespace-pre-wrap">
+    <div className="animate-rise mb-8 flex justify-end">
+      <p className="border-border bg-card max-w-[80%] rounded-lg rounded-br-sm border px-4 py-3 text-[0.9375rem] break-words whitespace-pre-wrap">
         {text}
       </p>
     </div>

@@ -1,50 +1,34 @@
 "use client";
 
-import { ThinkingOrb } from "thinking-orbs";
-
-import { lineBorder, lineTint, type Line } from "@/components/lines";
+import { lineBorder, type Line } from "@/components/lines";
 import { cn } from "@/lib/cn";
 
-export type OrbState = "solving" | "searching" | "connecting" | "composing";
-
-const ORB_SIZE = 20;
-
-/** Spec §10.1: searching for KB, connecting for MCP/Composio/Apps, solving while thinking, composing while writing. */
-export function orbFor(line: Line): OrbState {
-  if (line === "kb") return "searching";
-  if (line === "model") return "solving";
-  return "connecting";
-}
+import { AgentOrb, orbFor } from "./AgentOrb";
 
 type Props = {
   line: Line;
   live?: boolean;
-  orb?: OrbState;
   tone?: "default" | "error" | "awaiting" | "muted";
 };
 
-/** A station on the run line: a roundel in the line's colour, or a Thinking Orb while it is the live station. */
-export function StationMarker({ line, live = false, orb, tone = "default" }: Props) {
+/** A station on the run line: a roundel ringed in the line's colour, or a Thinking Orb while it is the live one. */
+export function StationMarker({ line, live = false, tone = "default" }: Props) {
   if (live) {
     return (
-      // The current stop outweighs every finished one: a thick ring in the line's colour around the orb.
+      // The current stop outweighs every finished one: the orb sits inside a ring in the line's colour.
       <span
-        className={cn(
-          "grid size-7 place-items-center rounded-full border-[3px]",
-          lineBorder[line],
-          lineTint[line],
-        )}
+        className={cn("bg-card grid size-7 place-items-center rounded-full border-[3px]", lineBorder[line])}
       >
-        <ThinkingOrb state={orb ?? orbFor(line)} size={ORB_SIZE} />
+        <AgentOrb state={orbFor(line)} size={20} tint={line} />
       </span>
     );
   }
   return (
     <span
       className={cn(
-        // "Awaiting" is a thin hollow ring everywhere (here and in the mini line): the train has not reached it.
-        "bg-card block size-4.5 rounded-full",
-        tone === "awaiting" ? "border-2" : "border-4",
+        // A dashed ring is a stop the run has not reached yet (waiting for approval).
+        "bg-card block size-5 rounded-full border-[3px]",
+        tone === "awaiting" && "border-dashed",
         tone === "error" ? "border-app" : tone === "muted" ? "border-border" : lineBorder[line],
       )}
     />

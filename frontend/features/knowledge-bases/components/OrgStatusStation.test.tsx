@@ -11,6 +11,8 @@ import { OrgStatusStation } from "./OrgStatusStation";
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("thinking-orbs", () => ({ ThinkingOrb: () => <span data-testid="orb" /> }));
+const notify = { success: vi.fn(), error: vi.fn(), info: vi.fn(), problem: vi.fn() };
+vi.mock("@/lib/useNotify", () => ({ useNotify: () => notify }));
 const retryOrganization = vi.fn();
 vi.mock("@/features/orgs/api", () => ({
   retryOrganization: (...args: unknown[]) => retryOrganization(...args),
@@ -37,6 +39,8 @@ function renderStation(over: Partial<Organization>) {
   );
 }
 
+const retryButton = () => screen.getByRole("button", { name: messages.kb.retryOrg });
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.useFakeTimers();
@@ -54,31 +58,44 @@ describe("OrgStatusStation", () => {
     expect(screen.getByText(messages.kb.orgPendingStalled)).toBeInTheDocument();
   });
 
-  it("always offers Retry, which provisions once and refreshes", async () => {
+  it("offers Retry to a pending org only once it stalled; Retry provisions once, toasts and refreshes", async () => {
     retryOrganization.mockResolvedValue(org({ ragxStatus: "ready" }));
     renderStation({});
-    await act(async () => void fireEvent.click(screen.getByRole("button", { name: messages.kb.retryOrg })));
+    expect(screen.queryByRole("button", { name: messages.kb.retryOrg })).not.toBeInTheDocument();
+    act(() => void vi.advanceTimersByTime(FILE_POLL_INTERVAL_MS * ORG_PENDING_MAX_REFRESHES));
+    refresh.mockClear();
+    await act(async () => void fireEvent.click(retryButton()));
     expect(retryOrganization).toHaveBeenCalledTimes(1);
     expect(retryOrganization).toHaveBeenCalledWith("o1", "en");
+    expect(notify.success).toHaveBeenCalledTimes(1);
     expect(refresh).toHaveBeenCalled();
   });
 
-  it("shows a failed org in red with its code and Retry, and no self-refresh", () => {
+  it("shows a failed org with its code in mono and Retry at once, and no self-refresh", () => {
     renderStation({ ragxStatus: "failed", ragxErrorCode: "LLM_ROLE_NOT_ASSIGNED" });
-    expect(screen.getByText("LLM_ROLE_NOT_ASSIGNED")).toBeInTheDocument();
+    expect(screen.getByText("LLM_ROLE_NOT_ASSIGNED").className).toMatch(/tabular/);
     expect(screen.getByText(messages.kb.orgFailed)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: messages.kb.retryOrg })).toBeInTheDocument();
+    expect(retryButton()).toBeInTheDocument();
+    expect(screen.queryByTestId("orb")).not.toBeInTheDocument();
     act(() => void vi.advanceTimersByTime(FILE_POLL_INTERVAL_MS * 3));
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it("shows the request id when Retry fails", async () => {
+  it("does not toast success when provisioning answers failed again, and still refreshes", async () => {
+    retryOrganization.mockResolvedValue(org({ ragxStatus: "failed", ragxErrorCode: "X" }));
+    renderStation({ ragxStatus: "failed", ragxErrorCode: "X" });
+    await act(async () => void fireEvent.click(retryButton()));
+    expect(notify.success).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("toasts the failure, which carries the request id for 5xx, when Retry fails", async () => {
     const { ApiError } = await import("@/lib/api/client");
-    retryOrganization.mockRejectedValue(
-      new ApiError("RAGX_UNAVAILABLE" as never, "Down", 503, undefined, "req_abcdefgh"),
-    );
+    const error = new ApiError("RAGX_UNAVAILABLE" as never, "Down", 503, undefined, "req_abcdefgh");
+    retryOrganization.mockRejectedValue(error);
     renderStation({ ragxStatus: "failed", ragxErrorCode: "RAGX_UNAVAILABLE" });
-    await act(async () => void fireEvent.click(screen.getByRole("button", { name: messages.kb.retryOrg })));
-    expect(screen.getByRole("alert")).toHaveTextContent("req_abcdefgh");
+    await act(async () => void fireEvent.click(retryButton()));
+    expect(notify.error).toHaveBeenCalledWith(error);
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

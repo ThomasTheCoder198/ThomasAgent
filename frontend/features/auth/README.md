@@ -5,17 +5,18 @@
 Owner sign-in and the server-side session check. Cookies (`thomas_session`, `thomas_csrf`) are set by core;
 this module never stores credentials or tokens.
 
-Login errors include the request ID when core supplies one, using the current language.
+Sign-in follows the form rules of `frontend/AGENTS.md`: missing or malformed fields (`credentials.ts`) are explained in place, and a rejected sign-in is an error toast with the catalog message for the code in the current language (the request ID shows for 5xx only).
 
 ## Entry points
 
-- `LoginForm.tsx` — posts to `POST /api/v1/auth/login` and follows `next`.
+- `LoginForm.tsx` — validates, posts to `POST /api/v1/auth/login` and follows `next`; failures go through `useNotify().error`. `app/login/page.tsx` is the second hero: a centred, card-less column with the Newsreader title and a `PreferencesMenu` for theme and language.
+- `credentials.ts` — `validateCredentials` (email required and shaped like an address, password required).
 - `session.ts` — `requireUser(nextPath)` for server layouts; redirects to `/login?next=…` on `UNAUTHENTICATED` / `AUTH_SESSION_EXPIRED`.
 - `paths.ts` — auth endpoints, routes, `safeNext` (same-origin only), cookie name used by `proxy.ts`.
 
 ## Dependencies
 
-- Uses: `lib/api/client`, `lib/api/server`, core auth endpoints (M0.2).
+- Uses: `lib/api/client`, `lib/api/server`, `lib/useNotify`, `features/preferences`, core auth endpoints (M0.2).
 - Used by: `app/login`, `app/(workspace)/layout.tsx`, `proxy.ts`, `features/shell/UserMenu`.
 
 ## Run & test

@@ -1,29 +1,34 @@
 "use client";
 
 import { Folder, ScanSearch } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { MenuButton } from "@/features/shell/MenuButton";
+import { pageOwnsHeader } from "@/features/shell/shell-menu";
 
 type Props = { title: string; folder?: string; runId?: string; onInspect?: () => void };
 
-/** The conversation's sign: on phones it is the only bar (menu, title, run id, inspector). */
+/**
+ * The conversation's bar: title, folder, run id and the inspector. Below md it carries the shell's menu
+ * button only when the shell leaves the mobile bar to this page, so phones never get two bars.
+ */
 export function ChatHeader({ title, folder, runId, onInspect }: Props) {
   const t = useTranslations("chat");
+  const ownsMobileBar = pageOwnsHeader(usePathname() ?? "");
   return (
-    <header className="border-border bg-background flex h-13 shrink-0 items-center gap-2.5 border-b px-3 md:h-14.5 md:gap-3 md:px-7">
-      <MenuButton />
-      <h1 className="min-w-0 truncate text-[16px] font-bold tracking-[-0.012em] md:text-[19px]">{title}</h1>
+    <header className="border-border bg-background flex h-14 shrink-0 items-center gap-3 border-b px-4 md:px-6">
+      {ownsMobileBar && <MenuButton />}
+      <h1 className="min-w-0 truncate text-base leading-snug font-semibold md:text-lg">{title}</h1>
       {folder && (
-        <span className="border-border bg-card text-muted-foreground hidden shrink-0 items-center gap-1.5 rounded-full border px-2.25 py-0.75 text-[12.5px] sm:inline-flex">
-          <Folder aria-hidden className="size-3.5" />
+        <Badge variant="outline" className="hidden sm:inline-flex">
+          <Folder aria-hidden />
           {folder}
-        </span>
+        </Badge>
       )}
-      {runId && (
-        <span className="tabular text-muted-foreground shrink-0 text-[11px] md:text-xs">{runId}</span>
-      )}
+      {runId && <span className="tabular text-muted-foreground shrink-0 text-xs">{runId}</span>}
       {onInspect && (
         <Button
           variant="ghost"
@@ -33,7 +38,7 @@ export function ChatHeader({ title, folder, runId, onInspect }: Props) {
           onClick={onInspect}
           className="ml-auto"
         >
-          <ScanSearch aria-hidden className="size-4" />
+          <ScanSearch aria-hidden />
         </Button>
       )}
     </header>

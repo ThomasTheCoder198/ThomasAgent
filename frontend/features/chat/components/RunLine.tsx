@@ -44,7 +44,7 @@ function StationHeading({ station, live }: { station: Station; live: boolean }) 
   else if (station.kind === "reasoning") label = live ? t("thinkingLive") : t("thinking");
   else label = <ToolLabel station={station} />;
   return (
-    <div className={cn("flex items-center gap-2 text-sm leading-snug", live && "font-semibold")}>
+    <div className={cn("flex min-h-7 items-center gap-2 text-sm", live && "font-semibold")}>
       <StationIcon station={station} />
       <span className="min-w-0">{label}</span>
       {duration !== undefined && !live && (
@@ -69,35 +69,42 @@ function isLive(station: Station, liveId: string | undefined) {
   return station.kind !== "tool" || station.state === "running";
 }
 
-/** The signature move: the agent's work as a vertical line in the message gutter, one station per streamed part. */
+/**
+ * The signature move: the agent's work as a vertical line in the message gutter, one station per streamed
+ * part. Each station is its own two-column grid (marker + stem | content), so the stem always reaches the
+ * next marker however tall the content grows.
+ */
 export function RunLine({ stations, liveId, onDecide, deciding }: RunLineProps) {
   return (
-    <ol className="relative my-1 mb-4 pl-[34px]">
+    <ol className="mb-4">
       {stations.map((station, index) => {
         const line = stationLine(station);
         const live = isLive(station, liveId);
         const last = index === stations.length - 1;
         return (
-          <li key={station.id} className={cn("animate-rise relative", last ? "pb-1" : "pb-4")}>
-            {!last && (
-              // The stem grows down to the next station when that station arrives.
-              <span
-                aria-hidden
-                className={cn(
-                  "animate-stem absolute top-5 -bottom-0.5 -left-6 w-[3px] origin-top rounded-sm",
-                  lineBg[line],
-                )}
-              />
-            )}
-            <span className={cn("absolute", live ? "-top-[3px] -left-9" : "top-0.5 -left-[31px]")}>
-              <StationMarker line={line} live={live} tone={markerTone(station)} />
-            </span>
-            <StationHeading station={station} live={live} />
-            {station.kind === "reasoning" && station.text && <ReasoningBody station={{ ...station, live }} />}
-            {station.kind === "tool" && station.state === "awaiting" && (
-              <ApprovalSign station={station as ToolStation} onDecide={onDecide} disabled={deciding} />
-            )}
-            {station.kind === "tool" && station.state !== "awaiting" && <ToolBody station={station} />}
+          <li key={station.id} className="animate-rise grid grid-cols-[1.75rem_1fr] gap-x-3">
+            <div aria-hidden className="flex flex-col items-center">
+              <span className="grid h-7 place-items-center">
+                <StationMarker line={line} live={live} tone={markerTone(station)} />
+              </span>
+              {!last && (
+                // The stem grows down to the next station when that station arrives; the negative margins tuck
+                // it under this roundel and into the next slot so the line reads as one.
+                <span
+                  className={cn("animate-stem -my-1 w-[3px] flex-1 origin-top rounded-sm", lineBg[line])}
+                />
+              )}
+            </div>
+            <div className={cn("min-w-0", !last && "pb-4")}>
+              <StationHeading station={station} live={live} />
+              {station.kind === "reasoning" && station.text && (
+                <ReasoningBody station={{ ...station, live }} />
+              )}
+              {station.kind === "tool" && station.state === "awaiting" && (
+                <ApprovalSign station={station as ToolStation} onDecide={onDecide} disabled={deciding} />
+              )}
+              {station.kind === "tool" && station.state !== "awaiting" && <ToolBody station={station} />}
+            </div>
           </li>
         );
       })}

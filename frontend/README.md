@@ -47,7 +47,7 @@ Bun is only the script runner; install with npm and keep `package-lock.json` as 
 ## Conventions
 
 - Data never flows through a mock inside app code: the UI always speaks HTTP to core. `mock-core/` is a separate fake core; switching to the real one is only `WEB_CORE_URL`.
-- Layers: `components/` presentational primitives (`ui/` is shadcn/ui on Radix; `metro/` the tool-line components), `features/*` feature modules, `lib/` cross-cutting helpers, `hooks/` shared React hooks. Feature components take view props; protocol knowledge lives in one mapper (`features/chat/run-view.ts`).
+- Layers: `components/` presentational primitives (`ui/` is shadcn/ui on Radix; top-level brand and tool-line components), `features/*` feature modules, `lib/` cross-cutting helpers, `hooks/` shared React hooks. Feature components take view props; protocol knowledge lives in one mapper (`features/chat/run-view.ts`).
 - Every string comes from `messages/{vi,en}.json` (parity test). Line colours come from `components/lines.ts`; never hand-write a line colour.
 - Outcomes surface as toasts through `lib/useNotify.ts` (`success`, `info`, `error`, `problem`): `error(err)` shows the localized catalog message for an `ApiError` code (a network message for anything else) and the request id in mono for 5xx; errors stay until dismissed, confirmations leave after 4s. Field-level validation stays in place (`components/ui/Field.tsx`).
 - Standard controls come from shadcn/ui (`components.json`, `components/ui/*`); do not hand-roll them. The CLI writes kebab-case file names, so add components in a scratch directory and copy them in as PascalCase.

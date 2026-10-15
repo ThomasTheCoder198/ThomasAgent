@@ -7,11 +7,11 @@ import { useEffect, useRef, useState, type FormEvent, type RefObject } from "rea
 import { Button } from "@/components/ui/Button";
 import { Dialog, DialogClose, DialogContent, DialogHeading } from "@/components/ui/Dialog";
 import { Field, SwitchField } from "@/components/ui/Field";
-import { InlineAlert } from "@/components/ui/InlineAlert";
 import { Input } from "@/components/ui/Input";
 import type { Locale } from "@/i18n/config";
-import { ApiError, describeApiError } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/client";
 import { ErrorCode } from "@/lib/errors/codes.gen";
+import { useNotify } from "@/lib/useNotify";
 
 import { createOrganization, retryOrganization, updateOrganization } from "./api";
 import { orgHome, validateOrgName, type Organization, type OrgNameProblem } from "./contract";
@@ -39,43 +39,59 @@ function takenName(err: unknown): boolean {
   );
 }
 
+/**
+ * Core answers 200 even when ragx did not come up, so an org that is not ready and synced gets a problem toast.
+ * The error code is not repeated there: the dialog's status line and the org's station already show it.
+ */
+function useProvisionProblem() {
+  const t = useTranslations("orgs");
+  const notify = useNotify();
+  return (org: Organization): boolean => {
+    if (org.ragxStatus === "ready" && org.settingsSynced) return false;
+    notify.problem(t("errors.notReady"));
+    return true;
+  };
+}
+
 /** Retry provisioning; `shown` is core's answer at once, and the refresh brings the same state to the sidebar. */
 function useProvisionRetry(org: Organization | null) {
   const t = useTranslations("orgs");
-  const tErr = useTranslations("errors");
   const locale = useLocale() as Locale;
   const router = useRouter();
+  const notify = useNotify();
+  const reportProblem = useProvisionProblem();
   const [retried, setRetried] = useState<Organization>();
-  const [failure, setFailure] = useState<string>();
   const [pending, setPending] = useState(false);
 
   async function retry() {
     if (!org) return;
     setPending(true);
-    setFailure(undefined);
     try {
-      setRetried(await retryOrganization(org.id, locale));
+      const next = await retryOrganization(org.id, locale);
+      setRetried(next);
+      // A retry that comes back not ready did not do its job: no "done" toast.
+      if (!reportProblem(next)) notify.success(t("retried"));
       router.refresh();
     } catch (err) {
-      setFailure(describeApiError(err, t("errors.retryFailed"), (id) => tErr("requestId", { id })));
+      notify.error(err);
     } finally {
       setPending(false);
     }
   }
 
-  return { shown: retried ?? org, retry, failure, pending };
+  return { shown: retried ?? org, retry, pending };
 }
 
 type Draft = { name: string; externalParsing: boolean };
 
-/** Validate, save and navigate; the field error and the failure alert are the only things the form shows. */
+/** Validate, save and navigate; the name error stays in the field, every other outcome is a toast. */
 function useOrgSave(editing: Organization | null, onSaved: () => void) {
   const t = useTranslations("orgs");
-  const tErr = useTranslations("errors");
   const locale = useLocale() as Locale;
   const router = useRouter();
+  const notify = useNotify();
+  const reportProblem = useProvisionProblem();
   const [nameError, setNameError] = useState<string>();
-  const [failure, setFailure] = useState<string>();
   const [saving, setSaving] = useState(false);
 
   async function save({ name, externalParsing }: Draft) {
@@ -83,25 +99,27 @@ function useOrgSave(editing: Organization | null, onSaved: () => void) {
     setNameError(problem ? t(`errors.${NAME_PROBLEM_KEY[problem]}`) : undefined);
     if (problem) return;
     setSaving(true);
-    setFailure(undefined);
     try {
       const input = { name: name.trim(), externalParsing };
       const saved = editing
         ? await updateOrganization(editing.id, input, locale)
         : await createOrganization(input, locale);
+      // The save itself succeeded either way; a not-ready org adds its own problem toast after the confirmation.
+      notify.success(editing ? t("saved") : t("created"));
+      reportProblem(saved);
       onSaved();
       if (!editing) router.push(orgHome(saved.id));
       // The shell layout stays mounted across the navigation, so its org list and plate need a server refresh either way.
       router.refresh();
     } catch (err) {
       if (takenName(err)) setNameError(t("errors.nameTaken"));
-      else setFailure(describeApiError(err, t("errors.saveFailed"), (id) => tErr("requestId", { id })));
+      else notify.error(err);
     } finally {
       setSaving(false);
     }
   }
 
-  return { save, nameError, failure, saving };
+  return { save, nameError, saving };
 }
 
 const editingOf = (props: Props) => (props.mode === "edit" ? props.org : null);
@@ -127,7 +145,6 @@ export function OrgDialog(props: Props) {
   const saving = useOrgSave(editing, () => props.onOpenChange(false));
   const retrying = useProvisionRetry(editing);
   const pending = saving.saving || retrying.pending;
-  const failure = saving.failure ?? retrying.failure;
   const dirty = changesOrg(editing, { name, externalParsing });
 
   function submit(event: FormEvent) {
@@ -139,7 +156,7 @@ export function OrgDialog(props: Props) {
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent returnFocusRef={props.returnFocusRef}>
         <DialogHeading title={copy.title} description={copy.description} />
-        <form onSubmit={submit} noValidate className="flex flex-col gap-5">
+        <form onSubmit={submit} noValidate className="flex flex-col gap-6">
           <Field label={t("name")} error={saving.nameError}>
             {(control) => (
               <Input
@@ -160,7 +177,6 @@ export function OrgDialog(props: Props) {
           {retrying.shown && (
             <ProvisioningState org={retrying.shown} pending={pending} onRetry={retrying.retry} />
           )}
-          {failure && <InlineAlert title={failure} />}
           <FormActions submitLabel={copy.submit} pending={pending} dirty={dirty} />
         </form>
       </DialogContent>

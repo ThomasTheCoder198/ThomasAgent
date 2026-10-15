@@ -10,10 +10,10 @@ type Props = {
   className?: string;
 };
 
-/** A numbered roundel in its source line's colour; selecting it opens the exact cited block. */
+/** A 20px numbered roundel in its source line's colour; selecting it opens the exact cited block. */
 export function CitationRoundel({ n, label, line = "kb", selected = false, onSelect, className }: Props) {
   const look = cn(
-    "tabular inline-grid h-[19px] min-w-[19px] place-items-center rounded-full px-1 text-[10.5px] leading-none font-semibold",
+    "tabular inline-grid size-5 place-items-center rounded-full text-[0.6875rem] leading-none font-semibold",
     lineBg[line],
     onLine[line],
     className,
@@ -33,7 +33,8 @@ export function CitationRoundel({ n, label, line = "kb", selected = false, onSel
       onClick={() => onSelect(n)}
       className={cn(
         look,
-        "ease-out-expo mx-0.5 -translate-y-px align-middle transition-transform duration-200 hover:scale-[1.18] focus-visible:scale-[1.18] aria-pressed:scale-[1.18]",
+        // The glyph stays 20px; below md an invisible halo brings the hit area to the 44px touch floor.
+        "ease-out-expo ring-offset-background aria-pressed:ring-ring relative mx-0.5 -translate-y-px align-middle transition-transform duration-200 hover:scale-110 focus-visible:scale-110 aria-pressed:ring-2 aria-pressed:ring-offset-2 max-md:after:absolute max-md:after:-inset-3 max-md:after:content-['']",
       )}
     >
       {n}

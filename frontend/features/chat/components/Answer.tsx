@@ -41,28 +41,28 @@ function CiteRef({ n }: { n: string | number }) {
 }
 
 const components = {
-  p: ({ children }) => <p className="mb-3 max-w-[75ch] last:mb-0">{children}</p>,
+  p: ({ children }) => <p className="mb-4 max-w-[70ch] text-pretty last:mb-0">{children}</p>,
   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-  h3: ({ children }) => <h3 className="mt-5 mb-2 text-base font-bold tracking-[-0.005em]">{children}</h3>,
-  ul: ({ children }) => <ul className="mb-3 ml-5 list-disc space-y-1">{children}</ul>,
-  ol: ({ children }) => <ol className="mb-3 ml-5 list-decimal space-y-1">{children}</ol>,
+  h3: ({ children }) => <h3 className="mt-6 mb-2 text-lg leading-snug font-semibold">{children}</h3>,
+  ul: ({ children }) => <ul className="mb-4 ml-6 max-w-[70ch] list-disc space-y-1">{children}</ul>,
+  ol: ({ children }) => <ol className="mb-4 ml-6 max-w-[70ch] list-decimal space-y-1">{children}</ol>,
   a: ({ children, href }) => (
-    <a href={href} target="_blank" rel="noreferrer" className="text-mcp underline">
+    <a href={href} target="_blank" rel="noreferrer" className="text-primary underline">
       {children}
     </a>
   ),
   table: ({ children }) => (
-    <div className="border-border bg-card animate-fade my-2 mb-3.5 overflow-x-auto rounded-[10px] border">
+    <div className="border-border bg-card animate-fade my-4 overflow-x-auto rounded-sm border">
       <table className="w-full border-collapse text-sm">{children}</table>
     </div>
   ),
   th: ({ children }) => (
-    <th className="border-border bg-secondary text-muted-foreground border-b px-3.5 py-2.25 text-left text-[12.5px] font-semibold">
+    <th className="border-border bg-muted text-foreground border-b px-3 py-2 text-left text-[0.8125rem] font-semibold">
       {children}
     </th>
   ),
   td: ({ children }) => (
-    <td className="border-border border-b px-3.5 py-2.5 align-top first:w-[30%] first:font-semibold [tr:last-child_&]:border-b-0">
+    <td className="border-border border-b px-3 py-2 align-top first:w-[30%] first:font-semibold [tr:last-child_&]:border-b-0">
       {children}
     </td>
   ),
@@ -76,7 +76,7 @@ export const Answer = memo(function Answer({ text, streaming, citationNumbers, s
   const cite = useMemo(() => ({ selected, onCite }), [selected, onCite]);
   return (
     <CiteContext.Provider value={cite}>
-      <div className="animate-fade text-base leading-[1.7] md:text-[16.5px]">
+      <div className="animate-fade text-base leading-[1.7]">
         <ReactMarkdown remarkPlugins={plugins} components={components}>
           {text}
         </ReactMarkdown>

@@ -35,18 +35,24 @@ function renderTab(knowledgeBases: Parameters<typeof KnowledgeTab>[0]["knowledge
 }
 
 describe("KnowledgeTab", () => {
-  it("shows a checked 'unknown' row when the bound KB is not in the list", () => {
+  it("keeps the binding visible as 'unknown' when the bound KB is not in the list", () => {
     renderTab({ ok: true, data: [{ id: "kb-1", name: "Chính sách", documents: 3, updatedAt: "" }] });
-    const unknown = screen.getByRole("radio", { name: /Knowledge Base không xác định/ });
-    expect(unknown).toBeChecked();
-    expect(screen.getByText(/kb-gone/)).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /Chính sách/ })).not.toBeChecked();
+    expect(screen.getByRole("combobox", { name: "Knowledge" })).toHaveTextContent(
+      "Knowledge Base không xác định",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(/kb-gone/);
+  });
+
+  it("shows the bound KB by name, without a warning, when the list contains it", () => {
+    renderTab({ ok: true, data: [{ id: "kb-gone", name: "Chính sách", documents: 3, updatedAt: "" }] });
+    expect(screen.getByRole("combobox", { name: "Knowledge" })).toHaveTextContent(/Chính sách/);
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("shows the load failure instead of an empty list", () => {
     renderTab({ ok: false, message: "Lỗi máy chủ" });
     expect(screen.getByRole("alert")).toHaveTextContent("Không tải được danh sách Knowledge Base.");
     expect(screen.getByRole("alert")).toHaveTextContent("Lỗi máy chủ");
-    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByRole("combobox")).toBeNull();
   });
 });

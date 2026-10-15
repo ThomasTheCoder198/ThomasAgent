@@ -48,6 +48,7 @@ export default async function WorkspaceLayout({ children }: { children: ReactNod
         closeMenu: t("shell.closeMenu"),
         collapse: t("shell.collapse"),
         expand: t("shell.expand"),
+        drawerTitle: t("shell.nav"),
       }}
       sidebar={
         <Sidebar

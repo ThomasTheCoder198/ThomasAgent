@@ -1,79 +1,54 @@
 "use client";
 
-import { Check } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 
 import type { DraftErrors } from "../draft";
-import type { SaveState } from "../useAgentEditor";
 
 type Props = {
   dirty: boolean;
   canSave: boolean;
   errors: DraftErrors;
-  save: SaveState;
+  saving: boolean;
   onSave: () => void;
   onDiscard: () => void;
 };
 
-function StatusText({ save, errors }: Pick<Props, "save" | "errors">) {
-  const t = useTranslations("agents");
-  if (save.status === "saved") {
-    return (
-      <span className="flex items-center gap-2 text-sm font-medium">
-        <Check aria-hidden className="text-kb animate-pop size-4" />
-        {t("saved")}
-      </span>
-    );
-  }
-  if (save.status === "error")
-    return <span className="text-destructive text-sm font-medium">{save.message}</span>;
-  if (errors.name) return <span className="text-destructive text-sm font-medium">{t("nameRequired")}</span>;
-  return <span className="text-muted-foreground text-sm">{t("unsaved")}</span>;
-}
-
 /**
- * Rises from the bottom only while something is unsaved (or just saved). When hidden it leaves the
- * accessibility tree entirely (`inert` + `aria-hidden`), and its live region only speaks real changes.
+ * Rises from the bottom only while something is unsaved. When hidden it leaves the accessibility tree
+ * entirely (`inert` + `aria-hidden`), and its live region only speaks real changes. The save outcome is a
+ * toast (success or the catalog error), so the bar itself only ever says "unsaved" or why Save is blocked.
  */
-export function SaveBar({ dirty, canSave, errors, save, onSave, onDiscard }: Props) {
+export function SaveBar({ dirty, canSave, errors, saving, onSave, onDiscard }: Props) {
   const t = useTranslations("agents");
-  const visible = dirty || save.status === "saved" || save.status === "error";
   return (
     <div
-      inert={!visible}
-      aria-hidden={!visible || undefined}
+      inert={!dirty}
+      aria-hidden={!dirty || undefined}
       className={cn(
-        "ease-out-expo pointer-events-none sticky bottom-0 z-10 px-4 pb-4 transition-[transform,opacity] duration-300 md:px-8",
-        visible ? "translate-y-0 opacity-100" : "translate-y-full opacity-0",
+        "ease-out-expo pointer-events-none sticky bottom-0 z-10 px-4 pb-4 transition-[transform,opacity] duration-300 md:px-6 lg:px-8",
+        dirty ? "translate-y-0 opacity-100" : "translate-y-full opacity-0",
       )}
     >
-      <div className="bg-sidebar text-sidebar-foreground shadow-lift pointer-events-auto mx-auto flex max-w-272 flex-wrap items-center gap-3 rounded-xl px-4 py-3">
+      <div className="bg-card border-outline shadow-lift pointer-events-auto mx-auto flex max-w-5xl flex-wrap items-center gap-3 rounded-lg border px-4 py-3">
         <div aria-live="polite" className="min-w-0">
-          {visible && <StatusText save={save} errors={errors} />}
+          {dirty &&
+            (errors.name ? (
+              <span className="text-destructive text-sm font-medium">{t("nameRequired")}</span>
+            ) : (
+              <span className="text-muted-foreground text-sm">{t("unsaved")}</span>
+            ))}
         </div>
-        {dirty && (
-          <div className="ml-auto flex gap-2">
-            <Button
-              variant="ghost"
-              onClick={onDiscard}
-              disabled={save.status === "saving"}
-              className="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-            >
-              {t("discard")}
-            </Button>
-            <Button
-              onClick={onSave}
-              disabled={!canSave || save.status === "saving"}
-              pending={save.status === "saving"}
-              className="bg-sidebar-foreground text-sidebar hover:bg-sidebar-foreground/90"
-            >
-              {save.status === "saving" ? t("saving") : t("save")}
-            </Button>
-          </div>
-        )}
+        <div className="ml-auto flex gap-2">
+          <Button variant="ghost" onClick={onDiscard} disabled={saving}>
+            {t("discard")}
+          </Button>
+          <Button onClick={onSave} disabled={!canSave || saving} pending={saving}>
+            {saving ? t("saving") : t("save")}
+          </Button>
+        </div>
       </div>
     </div>
   );

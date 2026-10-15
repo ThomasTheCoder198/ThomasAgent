@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 
 import { useShellMenu } from "./shell-menu";
 
-/** Opens the mobile sidebar drawer; renders nothing on desktop or outside the workspace shell. */
+/** Opens the mobile sidebar drawer (a Sheet); renders nothing on desktop or outside the workspace shell. */
 export function MenuButton() {
   const menu = useShellMenu();
   if (!menu) return null;
@@ -16,10 +16,10 @@ export function MenuButton() {
       size="icon"
       aria-label={menu.label}
       title={menu.label}
+      aria-haspopup="dialog"
       aria-expanded={menu.expanded}
-      aria-controls="workspace-sidebar"
       onClick={menu.open}
-      className="-ml-1.5 md:hidden"
+      className="md:hidden"
     >
       <Menu aria-hidden className="size-5" />
     </Button>

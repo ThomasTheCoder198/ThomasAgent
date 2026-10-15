@@ -1,14 +1,16 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { Field } from "@/components/ui/Field";
 import { InlineAlert } from "@/components/ui/InlineAlert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { SettingsSection } from "@/components/ui/SettingsSection";
 import type { Loaded } from "@/lib/api/loaded";
 import type { Capability, Model, RoleAssignment } from "@/features/registry/types";
 
 import { agentRoles, type AgentRole } from "../contract";
+import { INHERIT_VALUE, toSelectValue, withOverride } from "../model-choice";
 import type { TabProps } from "./tabs";
 
 const roleCapability: Record<AgentRole, Capability> = {
@@ -21,9 +23,6 @@ const roleKeys = {
   "chat.fast": { label: "roleChatFast", hint: "roleChatFastHint" },
   vision: { label: "roleVision", hint: "roleVisionHint" },
 } as const;
-/** The select's value for "no override, inherit the platform role". */
-const INHERIT = "";
-
 type Props = TabProps & { models: Loaded<Model[]>; roles: Loaded<RoleAssignment[]> };
 
 export function ModelsTab({ draft, update, models: loadedModels, roles: loadedRoles }: Props) {
@@ -38,45 +37,39 @@ export function ModelsTab({ draft, update, models: loadedModels, roles: loadedRo
   }
   const models = loadedModels.data;
   const roles = loadedRoles.data;
-  function setOverride(role: AgentRole, modelId: string) {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- dropped on purpose: the role inherits again
-    const { [role]: _removed, ...rest } = draft.overrides;
-    update({ overrides: modelId === INHERIT ? rest : { ...rest, [role]: modelId } });
-  }
   return (
     <>
-      <p className="text-muted-foreground max-w-[70ch] pt-2 pb-2 text-[13.5px]">{t("modelsHint")}</p>
+      <p className="text-muted-foreground max-w-[70ch] text-sm">{t("modelsHint")}</p>
       {agentRoles.map((role) => {
         const keys = roleKeys[role];
         const platformModel = models.find((m) => m.id === roles.find((r) => r.role === role)?.modelId);
         const choices = models.filter((m) => m.capabilities.includes(roleCapability[role]));
-        const selectId = `role-${role}`;
         return (
           <SettingsSection key={role} title={t(keys.label)} hint={t(keys.hint)}>
-            <label htmlFor={selectId} className="sr-only">
-              {t(keys.label)}
-            </label>
-            <div className="relative max-w-md">
-              <select
-                id={selectId}
-                value={draft.overrides[role] ?? INHERIT}
-                onChange={(e) => setOverride(role, e.target.value)}
-                className="border-input bg-card text-foreground focus-visible:border-foreground w-full cursor-pointer appearance-none rounded-lg border py-2.5 pr-9 pl-3 text-[15px] outline-none"
-              >
-                <option value={INHERIT}>
-                  {platformModel ? t("inherit", { model: platformModel.displayName }) : t("inheritNone")}
-                </option>
-                {choices.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.displayName} · {m.modelRef}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                aria-hidden
-                className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2"
-              />
-            </div>
+            <Field label={t(keys.label)} hideLabel>
+              {(control) => (
+                <Select
+                  value={toSelectValue(draft.overrides[role])}
+                  onValueChange={(selected) =>
+                    update({ overrides: withOverride(draft.overrides, role, selected) })
+                  }
+                >
+                  <SelectTrigger {...control} className="w-full max-w-md">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={INHERIT_VALUE}>
+                      {platformModel ? t("inherit", { model: platformModel.displayName }) : t("inheritNone")}
+                    </SelectItem>
+                    {choices.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.displayName} · {m.modelRef}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </Field>
           </SettingsSection>
         );
       })}

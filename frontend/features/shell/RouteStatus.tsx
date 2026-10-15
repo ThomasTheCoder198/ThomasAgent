@@ -1,12 +1,15 @@
 "use client";
 
+import { SearchX, ServerCrash } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useTransition } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 
+import { EmptyState } from "./EmptyState";
 import { MenuButton } from "./MenuButton";
 import { pageOwnsHeader } from "./shell-menu";
 
@@ -19,71 +22,68 @@ type Props = {
   retry?: () => void;
 };
 
-function StatusAction({ kind, requestId, retry }: Pick<Props, "kind" | "requestId" | "retry">) {
+const SKELETON_ROWS = 4;
+
+/** The shape of a workspace page (title, description, a few rows), so loading does not jump into place. */
+function PageSkeleton() {
+  const t = useTranslations("routeStatus");
+  return (
+    <div role="status" aria-live="polite" aria-busy="true">
+      <span className="sr-only">{t("loadingTitle")}</span>
+      <div aria-hidden className="mx-auto w-full max-w-5xl px-4 pt-6 md:px-6 md:pt-10 lg:px-8">
+        <Skeleton className="h-8 w-48 md:h-9" />
+        <Skeleton className="mt-3 h-4 w-full max-w-md" />
+        <div className="mt-8 flex flex-col gap-3">
+          {Array.from({ length: SKELETON_ROWS }, (_, index) => (
+            <Skeleton key={index} className="h-16 w-full" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ServiceError({ requestId, retry }: Pick<Props, "requestId" | "retry">) {
   const t = useTranslations("routeStatus");
   const common = useTranslations("common");
   const errors = useTranslations("errors");
   const [pending, startTransition] = useTransition();
-
-  if (kind === "loading") {
-    return (
-      <div className="bg-input relative mt-6 h-0.5 w-28 overflow-hidden rounded-full" aria-hidden>
-        <span className="animate-depart bg-foreground absolute inset-y-0 left-0 w-2/5 rounded-full" />
-      </div>
-    );
-  }
-  if (kind === "notFound") {
-    return (
-      <Link
-        href="/chat"
-        className="text-foreground focus-visible:outline-ring mt-6 inline-flex min-h-10 items-center rounded-lg font-semibold underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
-      >
-        {t("backToWorkspace")}
-      </Link>
-    );
-  }
   return (
-    <>
-      {requestId && (
-        <p className="text-muted-foreground tabular mt-3 text-xs break-all">
-          {errors("requestId", { id: requestId })}
-        </p>
-      )}
-      {retry && (
-        <Button pending={pending} onClick={() => startTransition(retry)} className="mt-6">
-          {common("retry")}
-        </Button>
-      )}
-    </>
+    <div role="alert">
+      <EmptyState line="app" icon={ServerCrash} title={t("errorTitle")} body={t("errorBody")}>
+        {requestId && (
+          <p className="text-muted-foreground tabular text-xs break-all">
+            {errors("requestId", { id: requestId })}
+          </p>
+        )}
+        {retry && (
+          <Button pending={pending} onClick={() => startTransition(retry)} className="mt-3">
+            {common("retry")}
+          </Button>
+        )}
+      </EmptyState>
+    </div>
   );
 }
 
-/** Route states keep the Metro station motif without pretending that failed data is an empty list. */
-export function RouteStatus({ kind, workspace = false, requestId, retry }: Props) {
+function NotFound() {
   const t = useTranslations("routeStatus");
+  return (
+    <EmptyState line="model" icon={SearchX} title={t("notFoundTitle")} body={t("notFoundBody")}>
+      <Button asChild variant="outline" className="mt-3">
+        <Link href="/chat">{t("backToWorkspace")}</Link>
+      </Button>
+    </EmptyState>
+  );
+}
+
+/**
+ * Route boundaries: a skeleton while a page loads, a retryable service error (never a 404) when the backend
+ * fails, and a 404 only for a missing route or resource.
+ */
+export function RouteStatus({ kind, workspace = false, requestId, retry }: Props) {
   const pathname = usePathname();
   const showMenu = workspace && pageOwnsHeader(pathname);
-  const status = {
-    loading: {
-      title: t("loadingTitle"),
-      body: t("loadingBody"),
-      ring: "border-foreground",
-      stem: "bg-foreground",
-    },
-    error: { title: t("errorTitle"), body: t("errorBody"), ring: "border-app", stem: "bg-app" },
-    notFound: {
-      title: t("notFoundTitle"),
-      body: t("notFoundBody"),
-      ring: "border-foreground",
-      stem: "bg-foreground",
-    },
-  }[kind];
-  const accessibility = {
-    loading: { role: "status", live: "polite" as const, busy: true },
-    error: { role: "alert", live: undefined, busy: undefined },
-    notFound: { role: undefined, live: undefined, busy: undefined },
-  }[kind];
-
   return (
     <div className={workspace ? "h-full overflow-y-auto" : "min-h-dvh"}>
       {showMenu && (
@@ -91,22 +91,9 @@ export function RouteStatus({ kind, workspace = false, requestId, retry }: Props
           <MenuButton />
         </div>
       )}
-      <section
-        role={accessibility.role}
-        aria-live={accessibility.live}
-        aria-busy={accessibility.busy}
-        className="mx-auto flex w-full max-w-[68ch] items-start gap-5 px-4 py-14 md:px-8 md:py-20"
-      >
-        <span className="flex shrink-0 flex-col items-center pt-1" aria-hidden>
-          <span className={`bg-card size-5.5 rounded-full border-[5px] ${status.ring}`} />
-          <span className={`mt-0.5 h-16 w-[3px] rounded-b-sm ${status.stem}`} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-[22px] font-bold tracking-[-0.015em]">{status.title}</h1>
-          <p className="text-muted-foreground mt-2 leading-relaxed">{status.body}</p>
-          <StatusAction kind={kind} requestId={requestId} retry={retry} />
-        </div>
-      </section>
+      {kind === "loading" && <PageSkeleton />}
+      {kind === "error" && <ServiceError requestId={requestId} retry={retry} />}
+      {kind === "notFound" && <NotFound />}
     </div>
   );
 }

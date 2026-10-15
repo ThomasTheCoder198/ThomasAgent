@@ -1,11 +1,14 @@
 "use client";
 
-import { ArrowUp, ChevronDown, Paperclip, Square } from "lucide-react";
+import { ArrowUp, Paperclip, Square } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 
-import { LineDots } from "@/components/metro/LineDots";
+import { lineBg } from "@/components/lines";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { Textarea } from "@/components/ui/Textarea";
 import type { Model } from "@/features/registry/types";
 import { cn } from "@/lib/cn";
 import { formatPercent, PERCENT } from "@/lib/format";
@@ -23,8 +26,8 @@ type Props = {
   contextRatio: number;
 };
 
-const pill =
-  "border-border bg-secondary text-muted-foreground inline-flex items-center gap-1.75 rounded-full border px-2.5 py-1.25 text-[12.5px] whitespace-nowrap";
+/** The composer's pills share one 32px height; the Select trigger and the badges must line up. */
+const PILL = "h-8 px-3 text-[0.8125rem] font-normal";
 
 function ModelPicker({
   models,
@@ -34,22 +37,52 @@ function ModelPicker({
   const t = useTranslations("chat");
   if (models.length === 0) return null;
   return (
-    <label className={cn(pill, "focus-within:outline-ring relative pr-7 focus-within:outline-2")}>
-      <span className="bg-model size-2 rounded-full" aria-hidden />
-      <span className="sr-only">{t("model")}</span>
-      <select
-        value={modelId}
-        onChange={(event) => onModelChange(event.target.value)}
-        className="text-muted-foreground max-w-36 cursor-pointer appearance-none truncate bg-transparent outline-none"
+    <Select value={modelId} onValueChange={onModelChange}>
+      <SelectTrigger
+        size="sm"
+        aria-label={t("model")}
+        className={cn(
+          PILL,
+          "border-border text-muted-foreground max-w-48 min-w-0 rounded-full bg-transparent",
+        )}
       >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
         {models.map((m) => (
-          <option key={m.id} value={m.id}>
+          <SelectItem key={m.id} value={m.id}>
             {m.displayName}
-          </option>
+          </SelectItem>
         ))}
-      </select>
-      <ChevronDown aria-hidden className="pointer-events-none absolute right-2 size-3.5" />
-    </label>
+      </SelectContent>
+    </Select>
+  );
+}
+
+function ScopePills({ scope }: { scope: ChatScope }) {
+  const t = useTranslations("chat");
+  return (
+    <>
+      <Badge variant="outline" className={cn(PILL, "hidden max-w-44 sm:inline-flex")} title={scope.kb.name}>
+        <span className="bg-kb size-2 shrink-0 rounded-full" aria-hidden />
+        <span className="truncate">{scope.kb.name}</span>
+      </Badge>
+      <Badge
+        variant="outline"
+        className={cn(PILL, "hidden md:inline-flex")}
+        title={scope.toolSources.map((s) => s.name).join(", ")}
+      >
+        <span className="flex items-center gap-1" aria-hidden>
+          {scope.toolSources.map((source) => (
+            <span
+              key={`${source.line}-${source.name}`}
+              className={cn("size-2 rounded-full", lineBg[source.line])}
+            />
+          ))}
+        </span>
+        {t("toolScope", { count: scope.toolSources.length })}
+      </Badge>
+    </>
   );
 }
 
@@ -65,9 +98,9 @@ function ContextMeter({ ratio }: { ratio: number }) {
       aria-valuenow={ratio}
       aria-label={t("contextMeter", { percent })}
       title={t("contextMeter", { percent })}
-      className="tabular text-muted-foreground ml-auto hidden items-center gap-2 text-[11px] sm:flex"
+      className="tabular text-muted-foreground ml-auto hidden items-center gap-2 text-xs sm:flex"
     >
-      <span className="bg-border h-1.25 w-18.5 overflow-hidden rounded-full">
+      <span className="bg-border h-1 w-16 overflow-hidden rounded-full">
         <span
           className="bg-foreground block h-full rounded-full"
           style={{ width: `${Math.min(ratio, 1) * PERCENT}%` }}
@@ -78,6 +111,7 @@ function ContextMeter({ ratio }: { ratio: number }) {
   );
 }
 
+/** The one surface with a sticker: a card with an ink outline, whatever the thread above it holds. */
 export function Composer({
   busy,
   onSend,
@@ -107,37 +141,23 @@ export function Composer({
   return (
     <form
       onSubmit={submit}
-      className="border-input bg-card focus-within:border-foreground rounded-2xl border py-3 pr-3 pl-4 transition-colors"
+      className="border-outline bg-card shadow-sticker-lg focus-within:ring-ring ring-offset-background rounded-lg border-[1.5px] focus-within:ring-2 focus-within:ring-offset-2"
     >
-      <textarea
+      <Textarea
         value={text}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={onKeyDown}
         rows={1}
         aria-label={t("inputLabel")}
         placeholder={t("placeholder")}
-        className="text-foreground block field-sizing-content max-h-48 min-h-6.5 w-full resize-none bg-transparent text-[15px] outline-none focus-visible:outline-none"
+        className="max-h-48 min-h-12 resize-none rounded-none border-0 bg-transparent px-4 pt-4 pb-2 outline-none focus-visible:outline-none"
       />
-      <div className="mt-2 flex items-center gap-1.5">
+      <div className="flex items-center gap-2 px-3 pb-3">
         <Button variant="ghost" size="icon" aria-label={t("attachSoon")} title={t("attachSoon")} disabled>
-          <Paperclip aria-hidden className="size-4" />
+          <Paperclip aria-hidden />
         </Button>
         <ModelPicker models={models} modelId={modelId} onModelChange={onModelChange} />
-        {scope && (
-          <>
-            <span className={cn(pill, "hidden max-w-44 sm:inline-flex")} title={scope.kb.name}>
-              <span className="bg-kb size-2 shrink-0 rounded-full" aria-hidden />
-              <span className="truncate">{scope.kb.name}</span>
-            </span>
-            <span
-              className={cn(pill, "hidden md:inline-flex")}
-              title={scope.toolSources.map((s) => s.name).join(", ")}
-            >
-              <LineDots lines={scope.toolSources.map((s) => s.line)} size="md" />
-              {t("toolScope", { count: scope.toolSources.length })}
-            </span>
-          </>
-        )}
+        {scope && <ScopePills scope={scope} />}
         <ContextMeter ratio={contextRatio} />
         {busy ? (
           <Button
@@ -158,7 +178,7 @@ export function Composer({
             disabled={!canSend}
             className="ml-auto rounded-full sm:ml-0"
           >
-            <ArrowUp aria-hidden className="size-4.5" />
+            <ArrowUp aria-hidden />
           </Button>
         )}
       </div>

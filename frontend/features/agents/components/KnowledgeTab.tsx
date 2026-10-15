@@ -1,54 +1,21 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import type { ReactNode } from "react";
 
+import { Field } from "@/components/ui/Field";
 import { InlineAlert } from "@/components/ui/InlineAlert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { SettingsSection } from "@/components/ui/SettingsSection";
 import type { Loaded } from "@/lib/api/loaded";
-import { cn } from "@/lib/cn";
 
 import type { KnowledgeBaseSummary } from "../contract";
 import type { TabProps } from "./tabs";
-
-type OptionProps = {
-  id: string;
-  selected: boolean;
-  onSelect: () => void;
-  tone?: "kb" | "warn";
-  children: ReactNode;
-};
-
-function KbOption({ id, selected, onSelect, tone = "kb", children }: OptionProps) {
-  const warn = tone === "warn";
-  return (
-    <label
-      className={cn(
-        "has-focus-visible:outline-ring flex cursor-pointer items-center gap-3 rounded-lg border px-3.5 py-3 transition-[background-color,border-color] duration-200 has-focus-visible:outline-2",
-        selected && !warn && "border-kb bg-kb-tint",
-        selected && warn && "border-app bg-app-tint",
-        !selected && "border-border hover:border-input",
-      )}
-    >
-      <input type="radio" name="kb" value={id} checked={selected} onChange={onSelect} className="sr-only" />
-      <span
-        aria-hidden
-        className={cn(
-          "bg-card size-4.5 shrink-0 rounded-full transition-[border-width,border-color] duration-200",
-          selected ? "border-[5px]" : "border-input border-2",
-          selected && (warn ? "border-app" : "border-kb"),
-        )}
-      />
-      {children}
-    </label>
-  );
-}
 
 type Props = TabProps & { knowledgeBases: Loaded<KnowledgeBaseSummary[]> };
 
 /**
  * Exactly one KB per Agent. A load failure is shown as an error, never as an empty list; a binding to a KB the
- * list does not contain (deleted, or another tenant's) is shown as its own "unknown" row so it cannot hide.
+ * list does not contain (deleted, or another tenant's) stays selectable as its own "unknown" item so it cannot hide.
  */
 export function KnowledgeTab({ agent, draft, update, knowledgeBases }: Props) {
   const t = useTranslations("agents");
@@ -61,41 +28,31 @@ export function KnowledgeTab({ agent, draft, update, knowledgeBases }: Props) {
   }
   const list = knowledgeBases.data;
   const storedIsKnown = list.some((kb) => kb.id === agent.kbId);
+  const unknownSelected = !storedIsKnown && draft.kbId === agent.kbId;
   return (
     <SettingsSection title={t("tabKnowledge")} hint={t("kbHint")}>
-      <fieldset>
-        <legend className="sr-only">{t("tabKnowledge")}</legend>
-        <div className="flex flex-col gap-1.5">
-          {!storedIsKnown && (
-            <KbOption
-              id={agent.kbId}
-              tone="warn"
-              selected={draft.kbId === agent.kbId}
-              onSelect={() => update({ kbId: agent.kbId })}
-            >
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium">{t("kbUnknown")}</span>
-                <span className="text-muted-foreground block text-xs">
-                  {t("kbUnknownHint", { id: agent.kbId })}
-                </span>
-              </span>
-            </KbOption>
+      <div className="flex flex-col gap-3">
+        <Field label={t("tabKnowledge")} hideLabel>
+          {(control) => (
+            <Select value={draft.kbId} onValueChange={(kbId) => update({ kbId })}>
+              <SelectTrigger {...control} className="w-full max-w-md">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {!storedIsKnown && <SelectItem value={agent.kbId}>{t("kbUnknown")}</SelectItem>}
+                {list.map((kb) => (
+                  <SelectItem key={kb.id} value={kb.id}>
+                    {kb.name} · {t("documents", { count: kb.documents })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
-          {list.map((kb) => (
-            <KbOption
-              key={kb.id}
-              id={kb.id}
-              selected={draft.kbId === kb.id}
-              onSelect={() => update({ kbId: kb.id })}
-            >
-              <span className="min-w-0 flex-1 truncate text-sm font-medium">{kb.name}</span>
-              <span className="tabular text-muted-foreground text-xs">
-                {t("documents", { count: kb.documents })}
-              </span>
-            </KbOption>
-          ))}
-        </div>
-      </fieldset>
+        </Field>
+        {unknownSelected && (
+          <InlineAlert title={t("kbUnknown")} detail={t("kbUnknownHint", { id: agent.kbId })} />
+        )}
+      </div>
     </SettingsSection>
   );
 }

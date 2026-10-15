@@ -14,7 +14,8 @@ this module only speaks to it through core. Preview UI arrives with M1.3.
 - `useUploadQueue.ts` — sequential queue `{ items, add, cancel, retry, dismiss }` with per-step retry.
 - `useFiles.ts` — paging, `upsert` / `remove`, and polling while a file is in flight.
 - `server.ts` — page loaders returning `KbLoad<T>` (`notFound`, `serviceDown`, `requestId`); `api.ts` — client mutations.
-- `components/` — `KnowledgeBaseList`, `KnowledgeBaseSign`, `KnowledgeBaseDialogs` (`NewKnowledgeBaseButton`), `ConfirmDelete`, `FileList`, `FileRow`, `FileStatusMark`, `UploadRow`, `UploadDropZone`, `OrgStatusStation`, `LoadFailure`.
+- `layout.ts` — `PAGE_COLUMN` (the `max-w-5xl` content column with the 16/24/32px gutters) and the Thinking Orb sizes (32 for the org status block, 20 inside a badge).
+- `components/` — `KbPageHeader` (the detail screen's header with back link and meta row, plus its skeleton; the list uses the shell `PageHeader`), `KnowledgeBaseList`, `KnowledgeBaseHeader` (the detail header with Rename and Delete), `KnowledgeBaseDialogs` (`NewKnowledgeBaseButton`, create/rename), `ConfirmDelete`, `KnowledgeBaseSkeletons` (the two `loading.tsx` screens), `FileList`, `FileRow`, `FileStatusBadge`, `UploadRow`, `UploadDropZone`, `OrgStatusStation`, `LoadFailure` (`ServiceUnavailable` and the inline `LoadFailure`).
 - Routes: `app/(workspace)/orgs/[orgId]/layout.tsx` (404 for an unknown org; `OrgStatusStation` while the org is not `ready`), `.../knowledge-bases` and `.../knowledge-bases/[kbId]`; `/knowledge-bases` redirects to the current org's list.
 
 ## Data path
@@ -37,29 +38,53 @@ Preparing, then byte progress, then Finishing. Failures: presign and confirm are
 storage step is a `StorageUploadError` with the S3 code and **no request id** (MinIO has none). `storage-errors.ts`
 maps it (S3 code, else HTTP status) to one of `kb.storage.*` (size mismatch for `EntityTooLarge` or `EntityTooSmall`, link denied or expired, timeout,
 busy, storage fault, unreachable, interrupted, otherwise refused); `FileList` announces it in an error toast titled
-with the file name, and the row repeats it quietly (no second `role=alert`) beside Retry (P-F17, owner 2026-10-14).
+with the file name. A presign or confirm failure is announced by the shared error toast (`useNotify().error`: the
+catalog message, the request id for 5xx). In both cases the row repeats the failure quietly (no second `role=alert`)
+beside Retry and Dismiss (P-F17, owner 2026-10-14). A finished upload toasts `kb.toast.uploaded`.
 An abort the user did not cause is `INTERRUPTED`; the user's Cancel is never a failure. Files that fail the
-client check (type, size, empty) offer Dismiss only.
+client check (type, size, empty) never reach the network, so no toast fires: their row is the alert, and offers
+Dismiss only.
 
-## Download
+## Mutations and toasts
+
+Create, rename, delete (KB and file), retry (file and org) and upload all report through `useNotify()`: a success
+toast from `kb.toast.*`, and `notify.error(err)` for a failure. The only failure that stays on screen is a taken KB
+name (a field error in the dialog, where the operator is typing it); delete dialogs stay open after a failure so the
+operator can retry. Org Retry toasts success only when provisioning answers `ready`; a `failed` answer is the
+station itself after the refresh.
+
+## Download and row actions
 
 A button calls `GET .../download-url` through the proxy and then `window.location.assign(url)`. The URL is presigned
 by ragx with `attachment` and `application/octet-stream`, so the browser saves the file without leaving the page.
+From `md` a row's Download, Retry (failed files) and Delete are inline icon buttons; below `md` they fold into one
+DropdownMenu named `kb.fileActions`. The two sets are switched by CSS (not a media-query hook), so the server render
+is right on phones too; the delete dialog returns focus to the menu button because the menu item is gone.
 
 ## Polling and states
 
 While any file is outside `FINAL_FILE_STATUSES` (`ready`, `failed`, `degraded`) and the tab is visible, the first page is
-re-read every `FILE_POLL_INTERVAL_MS`. A failed poll keeps the last rows and shows an inline notice with the request id.
-`degraded` shows the KB ring like `ready`. "Service unavailable" is decided by `status >= 500`, never by the code
-`RAGX_UNAVAILABLE` (core shows 5xx as `INTERNAL_ERROR`).
+re-read every `FILE_POLL_INTERVAL_MS`. A failed poll keeps the last rows and shows an inline notice with the request id
+(a read, not a mutation, so no toast).
 
-Org stations: `pending` keeps the Thinking Orb and refreshes at most `ORG_PENDING_MAX_REFRESHES` times (about a minute),
-then shows a static ring and the stalled copy; `failed` shows the code in mono. Both always offer Retry, which calls
-`retryOrganization` (synchronous) and refreshes.
+File status is a Badge (`FileStatusBadge`): ready and `degraded` are the success tint (a degraded file adds the
+"parsed locally" note beside the badge, because the pill clips), failed is the destructive tint with the error code in
+mono, parsing to indexing are the secondary badge with the step and a 20px `working` Thinking Orb (agent work), and
+`pending` is the same badge without an orb.
+
+Loading: both routes have `loading.tsx` skeletons shaped like the header and rows (`KnowledgeBaseSkeletons`, announced
+once as a status). Errors: a 404 is the app's not-found page; a status >= 500 (decided by status, never by the code
+`RAGX_UNAVAILABLE`, because core shows 5xx as `INTERNAL_ERROR`) replaces the whole page with `ServiceUnavailable`
+(retryable, request id in mono, one heading); any other refusal shows `LoadFailure` under the header.
+
+Org stations: `pending` shows a 32px Thinking Orb in a centred block and refreshes at most `ORG_PENDING_MAX_REFRESHES`
+times (about a minute); then the orb becomes a static clock mark with the stalled copy, and only then does Retry
+appear. `failed` shows a destructive mark, the code in mono and Retry at once. Retry calls `retryOrganization`
+(synchronous) and refreshes.
 
 ## Dependencies
 
-- Uses: `features/orgs` (`getOrganization`, `retryOrganization`, `orgHome`), `features/shell`, `components/ui`, `components/metro`, `lib/api`, `lib/ragx`, `lib/validation`.
+- Uses: `features/orgs` (`getOrganization`, `retryOrganization`, `orgHome`), `features/shell` (`PageHeader`, `MenuButton`, `EmptyState`, `RouteStatus`), `components/ui`, `components/lines`, `lib/api`, `lib/notify`, `lib/ragx`, `lib/validation`.
 - Used by: the `app/(workspace)/orgs/[orgId]` routes and the sidebar's Knowledge Base entry.
 
 ## Run & test

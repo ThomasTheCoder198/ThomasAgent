@@ -1,73 +1,55 @@
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { getLocale, getTranslations } from "next-intl/server";
+import { getTranslations } from "next-intl/server";
 
-import { LineDots } from "@/components/metro/LineDots";
-import { formatDateTime } from "@/lib/format";
+import { EmptyState } from "@/features/shell/EmptyState";
 
+import { AgentMeta } from "./components/AgentMeta";
 import type { AgentSummary } from "./contract";
 
-const COLUMNS = "md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,1fr)_9.5rem_1rem]";
-
-/** A departure board of Agents: one ruled row each, every column a fact the operator scans for. */
+/**
+ * Ruled rows, one per Agent, the whole row a link. Wide screens put the name beside what the Agent is built
+ * from; on phones the facts stack under the name so nothing is squeezed.
+ */
 export async function AgentList({ agents }: { agents: AgentSummary[] }) {
   const t = await getTranslations("agents");
-  const locale = await getLocale();
-  if (agents.length === 0) return <p className="text-muted-foreground py-10">{t("empty")}</p>;
+  if (agents.length === 0)
+    return <EmptyState level="h2" line="model" title={t("empty")} body={t("subtitle")} />;
   return (
-    <div role="table" aria-label={t("title")} className="text-sm">
-      <div
-        role="row"
-        className={`text-muted-foreground border-border hidden gap-5 border-b px-3 pb-2.5 text-xs font-medium md:grid ${COLUMNS}`}
-      >
-        <span role="columnheader">{t("colAgent")}</span>
-        <span role="columnheader">{t("colKb")}</span>
-        <span role="columnheader">{t("colLines")}</span>
-        <span role="columnheader">{t("colModel")}</span>
-        <span role="columnheader">{t("colUpdated")}</span>
-        <span aria-hidden />
-      </div>
+    <ul aria-label={t("title")} className="-mx-3">
       {agents.map((agent, index) => (
-        <Link
+        <li
           key={agent.id}
-          href={`/agents/${encodeURIComponent(agent.id)}`}
-          role="row"
           style={{ animationDelay: `calc(${index} * var(--stagger))` }}
-          className={`animate-rise group border-border hover:bg-card grid grid-cols-[1fr_auto] items-center gap-x-5 gap-y-1.5 border-b px-3 py-4 transition-colors ${COLUMNS}`}
+          className="animate-rise"
         >
-          <span role="cell" className="min-w-0">
-            <span className="block truncate text-[15px] font-semibold">{agent.name}</span>
-            <span className="text-muted-foreground block truncate">{agent.description}</span>
-          </span>
-          <span
-            role="cell"
-            className="text-muted-foreground col-start-1 flex min-w-0 items-center gap-2 md:col-start-auto"
+          <Link
+            href={`/agents/${encodeURIComponent(agent.id)}`}
+            className="group border-border hover:bg-accent/50 flex min-h-11 items-center gap-4 border-b px-3 py-3 transition-colors md:py-4"
           >
-            <span aria-hidden className="bg-kb size-2 shrink-0 rounded-full" />
-            <span className="truncate">{agent.kb.name}</span>
-          </span>
-          <span
-            role="cell"
-            className="text-muted-foreground col-start-1 flex items-center gap-2 md:col-start-auto"
-          >
-            <LineDots lines={agent.lines} size="md" />
-            {t("toolCount", { count: agent.toolCount })}
-          </span>
-          <span
-            role="cell"
-            className="tabular text-muted-foreground col-start-1 truncate text-xs md:col-start-auto"
-          >
-            {agent.chatModel}
-          </span>
-          <span role="cell" className="tabular text-muted-foreground col-start-1 text-xs md:col-start-auto">
-            {formatDateTime(agent.updatedAt, locale)}
-          </span>
-          <ChevronRight
-            aria-hidden
-            className="text-muted-foreground group-hover:text-foreground col-start-2 row-span-5 row-start-1 size-4 transition-transform group-hover:translate-x-0.5 md:col-start-auto md:row-auto"
-          />
-        </Link>
+            <span className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center md:gap-6">
+              <span className="min-w-0 md:flex-1">
+                <span className="block truncate text-base font-semibold">{agent.name}</span>
+                {agent.description && (
+                  <span className="text-muted-foreground block truncate text-sm">{agent.description}</span>
+                )}
+              </span>
+              <span className="min-w-0 md:max-w-[55%] md:shrink-0">
+                <AgentMeta
+                  kbName={agent.kb.name}
+                  lines={agent.lines}
+                  toolCount={agent.toolCount}
+                  model={agent.chatModel}
+                />
+              </span>
+            </span>
+            <ChevronRight
+              aria-hidden
+              className="text-muted-foreground group-hover:text-foreground size-4 shrink-0 transition-transform group-hover:translate-x-0.5"
+            />
+          </Link>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }

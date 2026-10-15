@@ -8,6 +8,7 @@ Next.js routes and route boundaries for the ThomasAgent frontend. The root layou
 
 - `layout.tsx` — root document and providers.
 - `loading.tsx`, `error.tsx`, `not-found.tsx` — full-viewport states while a layout loads, when it fails, and for unknown URLs.
+- `login/` — the sign-in hero: a centred column with a Newsreader title (`features/auth`).
 - `(workspace)/` — authenticated workspace shell and its route states.
 - `(workspace)/orgs/[orgId]/` — an organization's routes. `layout.tsx` answers 404 for an unknown org and shows the pending/failed station until ragx has prepared it; `knowledge-bases` is the KB list and `knowledge-bases/[kbId]` a KB's documents (`features/knowledge-bases`). `(workspace)/knowledge-bases` only redirects to the current org's list.
 

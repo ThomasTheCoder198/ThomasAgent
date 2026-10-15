@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -62,16 +62,32 @@ describe("UploadRow failures", () => {
     expect(screen.getByRole("button", { name: messages.kb.cancel })).toBeInTheDocument();
   });
 
-  it("shows a presign or confirm failure with its request id", () => {
+  it("states a presign or confirm failure quietly with its request id, because its toast already alerted", () => {
     const error = new ApiError(ErrorCode.INTERNAL_ERROR, "Service down.", 503, undefined, "req_abcdefgh");
     renderRow(failed({ failedStep: "confirm", error }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Service down. (Request ID: req_abcdefgh)");
+    expect(screen.getByText("Service down. (Request ID: req_abcdefgh)")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: messages.kb.retry })).toBeInTheDocument();
   });
 
-  it("offers Dismiss only for a file that failed the client check", () => {
+  it("offers Retry and Dismiss as labelled buttons on a failed row", () => {
+    renderRow(failed({ failedStep: "storage", error: new StorageUploadError(503, "SlowDown") }));
+    fireEvent.click(screen.getByRole("button", { name: messages.kb.retry }));
+    fireEvent.click(screen.getByRole("button", { name: messages.kb.dismiss }));
+    expect(handlers.onRetry).toHaveBeenCalledTimes(1);
+    expect(handlers.onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers Dismiss only for a file that failed the client check, and alerts because no toast did", () => {
     renderRow(failed({ problem: "type" }));
-    expect(screen.getByText(messages.kb.problem.type)).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(messages.kb.problem.type);
     expect(screen.queryByRole("button", { name: messages.kb.retry })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: messages.kb.dismiss })).toBeInTheDocument();
+  });
+
+  it("shows byte progress as a progressbar with a mono percentage", () => {
+    renderRow({ ...failed({}), state: "uploading", file: new File(["abcd"], "a.md"), loaded: 2 });
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "50");
+    expect(screen.getByText("50%").className).toMatch(/tabular/);
   });
 });

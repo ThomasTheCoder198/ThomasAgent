@@ -3,7 +3,7 @@
 import { ShieldAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
 
-import { LineBadge } from "@/components/metro/LineBadge";
+import { LineBadge } from "@/components/LineBadge";
 import { lineIcons } from "@/components/lineIcons";
 import { SegmentedChoice } from "@/components/ui/SegmentedChoice";
 
@@ -24,11 +24,10 @@ function ToolRow({
 }) {
   const t = useTranslations("agents");
   return (
-    <li className="border-border flex flex-col gap-3 border-b py-3.5 last:border-b-0 sm:flex-row sm:items-center">
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-          <span className="text-sm font-semibold">{tool.title}</span>
-          <code className="tabular text-muted-foreground text-xs">{tool.name}</code>
+    <li className="border-border grid gap-4 border-b py-6 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-8">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h3 className="text-base font-semibold">{tool.title}</h3>
           {tool.risky && (
             <span className="text-destructive inline-flex items-center gap-1 text-xs font-medium">
               <ShieldAlert aria-hidden className="size-3.5" />
@@ -36,9 +35,10 @@ function ToolRow({
             </span>
           )}
         </div>
-        <p className="text-muted-foreground mt-0.5 text-[13.5px]">{tool.description}</p>
+        <code className="tabular text-muted-foreground mt-1 block text-xs break-all">{tool.name}</code>
+        <p className="text-muted-foreground mt-1 text-sm leading-relaxed">{tool.description}</p>
       </div>
-      <div className="w-full sm:w-72">
+      <div className="min-w-0 sm:max-w-sm">
         <SegmentedChoice<ToolPolicy>
           legend={t("policyLegend", { tool: tool.title })}
           hideLegend
@@ -59,13 +59,15 @@ function SourceGroup({
   const t = useTranslations("agents");
   return (
     <section className="animate-rise">
-      <header className="flex items-center gap-2.5">
-        <LineBadge line={source.line} icon={lineIcons[source.line]}>
-          {source.name}
-        </LineBadge>
-        <span className="text-muted-foreground text-xs">{t(kindKey[source.kind])}</span>
+      <header className="border-border flex items-center gap-3 border-b pb-3">
+        <h2 className="contents">
+          <LineBadge line={source.line} icon={lineIcons[source.line]}>
+            {source.name}
+          </LineBadge>
+        </h2>
+        <span className="text-muted-foreground text-sm">{t(kindKey[source.kind])}</span>
       </header>
-      <ul className="mt-1">
+      <ul>
         {source.tools.map((tool) => (
           <ToolRow
             key={tool.id}
@@ -82,8 +84,8 @@ function SourceGroup({
 export function ToolsTab({ agent, draft, update }: TabProps) {
   const t = useTranslations("agents");
   return (
-    <div className="flex flex-col gap-8 pt-2">
-      <p className="text-muted-foreground max-w-[70ch] text-[13.5px]">{t("toolsHint")}</p>
+    <div className="flex flex-col gap-12">
+      <p className="text-muted-foreground max-w-[70ch] text-sm">{t("toolsHint")}</p>
       {agent.toolSources.map((source) => (
         <SourceGroup key={source.id} source={source} draft={draft} update={update} />
       ))}

@@ -20,7 +20,7 @@ export function Caret() {
   return (
     <span
       aria-hidden
-      className="bg-foreground animate-caret ml-0.5 inline-block h-[1.05em] w-0.5 align-[-3px]"
+      className="bg-foreground animate-caret ml-0.5 inline-block h-[1.05em] w-0.5 align-[-0.1875rem]"
     />
   );
 }
@@ -29,7 +29,7 @@ export function ReasoningBody({ station }: { station: ReasoningStation }) {
   return (
     <p
       className={cn(
-        "mt-1.5 max-w-[62ch] text-[13.5px] leading-relaxed",
+        "mt-1 max-w-prose text-sm leading-relaxed",
         station.live ? "text-foreground" : "text-muted-foreground",
       )}
     >
@@ -44,22 +44,22 @@ function KbSearchBody({ station }: { station: ToolStation }) {
   const input = station.input as Partial<KbSearchInput>;
   const output = station.output as KbSearchOutput | undefined;
   return (
-    <div className="mt-1.5 text-[13.5px]">
+    <div className="mt-1 text-sm">
       {input.query && (
-        <span className="bg-kb-tint text-foreground inline-block rounded-md px-2.5 py-0.5 text-[13px]">
+        <span className="bg-kb-tint text-foreground inline-block rounded-sm px-2 py-1 text-[0.8125rem]">
           “{input.query}”
         </span>
       )}
       {output && (
-        <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-1.5 text-[13px]">
+        <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-2 text-[0.8125rem]">
           {t("chunks", { chunks: output.chunks, docs: output.documents.length })}
           {output.documents.map((doc) => (
             <span
               key={doc}
               title={doc}
-              className="border-border bg-card inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[12.5px]"
+              className="border-border bg-card inline-flex items-center gap-1 rounded-sm border px-2 py-1 text-xs"
             >
-              <FileText aria-hidden className="size-3.25" />
+              <FileText aria-hidden className="size-3" />
               {tail(doc)}
             </span>
           ))}
@@ -83,15 +83,15 @@ function ToolOutcome({ station }: { station: ToolStation }) {
   const link = typeof output[LINK_FIELD] === "string" ? output[LINK_FIELD] : undefined;
   if (ids.length === 0 && !link && !station.ownerApproved) return null;
   return (
-    <p className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13.5px]">
+    <p className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
       {ids.map((id) => (
-        <span key={id} className="tabular text-foreground text-[12.5px] font-medium">
+        <span key={id} className="tabular text-foreground text-xs">
           {id}
         </span>
       ))}
       {station.ownerApproved && (
         <span className="inline-flex items-center gap-1">
-          <Check aria-hidden className="text-kb size-3.5" />
+          <Check aria-hidden className="text-success size-3.5" />
           {t("approvedNote")}
         </span>
       )}
@@ -100,7 +100,7 @@ function ToolOutcome({ station }: { station: ToolStation }) {
           href={link}
           target="_blank"
           rel="noreferrer"
-          className="text-mcp inline-flex items-center gap-1 hover:underline"
+          className="text-primary inline-flex items-center gap-1 hover:underline"
         >
           {t("openLink", { source: station.source })}
           <ExternalLink aria-hidden className="size-3.5" />
@@ -112,10 +112,9 @@ function ToolOutcome({ station }: { station: ToolStation }) {
 
 export function ToolBody({ station }: { station: ToolStation }) {
   const t = useTranslations("chat");
-  if (station.state === "error")
-    return <p className="text-destructive mt-1.5 text-[13.5px]">{station.errorText}</p>;
+  if (station.state === "error") return <p className="text-destructive mt-1 text-sm">{station.errorText}</p>;
   if (station.state === "denied")
-    return <p className="text-muted-foreground mt-1.5 text-[13.5px]">{t("toolDenied")}</p>;
+    return <p className="text-muted-foreground mt-1 text-sm">{t("toolDenied")}</p>;
   if (station.name === KB_TOOLS.search) return <KbSearchBody station={station} />;
   if (station.name === KB_TOOLS.readSection) return null;
   return <ToolOutcome station={station} />;

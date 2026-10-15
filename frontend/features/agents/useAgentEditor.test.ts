@@ -1,11 +1,16 @@
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentDetail } from "./contract";
 import { useAgentEditor } from "./useAgentEditor";
 
-const { apiFetch, refresh } = vi.hoisted(() => ({ apiFetch: vi.fn(), refresh: vi.fn() }));
-vi.mock("@/lib/api/client", () => ({ apiFetch, ApiError: class extends Error {} }));
+const { apiFetch, refresh, notify } = vi.hoisted(() => ({
+  apiFetch: vi.fn(),
+  refresh: vi.fn(),
+  notify: { success: vi.fn(), error: vi.fn() },
+}));
+vi.mock("@/lib/api/client", () => ({ apiFetch }));
+vi.mock("@/lib/useNotify", () => ({ useNotify: () => notify }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("next-intl", () => ({ useLocale: () => "vi", useTranslations: () => (key: string) => key }));
 
@@ -32,11 +37,8 @@ function deferred<T>() {
 beforeEach(() => {
   apiFetch.mockReset();
   refresh.mockReset();
-});
-
-afterEach(() => {
-  vi.useRealTimers();
-  vi.restoreAllMocks();
+  notify.success.mockReset();
+  notify.error.mockReset();
 });
 
 describe("useAgentEditor", () => {
@@ -76,26 +78,26 @@ describe("useAgentEditor", () => {
     expect(apiFetch).not.toHaveBeenCalled();
   });
 
-  it("clears the saved-flash timer on the next save and on unmount", async () => {
-    vi.useFakeTimers();
-    const clear = vi.spyOn(globalThis, "clearTimeout");
-    apiFetch.mockImplementation(async (_path: string, init: { body: string }) => ({
-      ...agent,
-      ...JSON.parse(init.body),
-    }));
-    const { result, unmount } = renderHook(() => useAgentEditor(agent));
-
-    act(() => result.current.update({ instructions: "Một" }));
+  it("confirms a successful save with a success toast and refreshes the page data", async () => {
+    apiFetch.mockResolvedValueOnce({ ...agent, instructions: "Mới" });
+    const { result } = renderHook(() => useAgentEditor(agent));
+    act(() => result.current.update({ instructions: "Mới" }));
     await act(() => result.current.persist());
-    expect(result.current.save.status).toBe("saved");
+    expect(notify.success).toHaveBeenCalledWith("saved");
+    expect(notify.error).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
 
-    const before = clear.mock.calls.length;
-    act(() => result.current.update({ instructions: "Hai" }));
+  it("reports a failed save by toast and keeps the draft so the owner can retry", async () => {
+    const failure = new Error("boom");
+    apiFetch.mockRejectedValueOnce(failure);
+    const { result } = renderHook(() => useAgentEditor(agent));
+    act(() => result.current.update({ instructions: "Mới" }));
     await act(() => result.current.persist());
-    expect(clear.mock.calls.length).toBeGreaterThan(before);
-
-    const beforeUnmount = clear.mock.calls.length;
-    unmount();
-    expect(clear.mock.calls.length).toBeGreaterThan(beforeUnmount);
+    expect(notify.error).toHaveBeenCalledWith(failure);
+    expect(notify.success).not.toHaveBeenCalled();
+    expect(result.current.saving).toBe(false);
+    expect(result.current.dirty).toBe(true);
+    expect(result.current.draft.instructions).toBe("Mới");
   });
 });

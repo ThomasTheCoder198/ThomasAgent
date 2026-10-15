@@ -3,7 +3,7 @@
 import { createContext, useContext } from "react";
 
 export type ShellMenu = {
-  /** Mobile drawer. */
+  /** Mobile drawer (a Sheet). */
   open: () => void;
   label: string;
   expanded: boolean;

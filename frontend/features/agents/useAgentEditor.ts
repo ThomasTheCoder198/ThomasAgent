@@ -2,10 +2,11 @@
 
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import type { Locale } from "@/i18n/config";
-import { apiFetch, describeApiError as apiErrorText } from "@/lib/api/client";
+import { apiFetch } from "@/lib/api/client";
+import { useNotify } from "@/lib/useNotify";
 
 import { AGENT_PATHS, type AgentDetail } from "./contract";
 import {
@@ -16,24 +17,6 @@ import {
   isDirty,
   type AgentDraft,
 } from "./draft";
-
-export type SaveState =
-  { status: "idle" } | { status: "saving" } | { status: "saved" } | { status: "error"; message: string };
-
-const SAVED_FLASH_MS = 2200;
-
-/** The "Saved" confirmation fades after a moment; its timer dies with the next save or the component. */
-function useSavedFlash(onExpire: () => void) {
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  return {
-    cancel: () => clearTimeout(timer.current),
-    start: () => {
-      clearTimeout(timer.current);
-      timer.current = setTimeout(onExpire, SAVED_FLASH_MS);
-    },
-  };
-}
 
 /** Sends only what changed; the server answers with the stored Agent. */
 function patchAgent(agent: AgentDetail, draft: AgentDraft, locale: Locale) {
@@ -47,46 +30,44 @@ function patchAgent(agent: AgentDetail, draft: AgentDraft, locale: Locale) {
 /**
  * Local draft of one Agent plus the PATCH that persists exactly what changed. While a save is in flight the
  * draft is frozen (the form is disabled and `update` is ignored), so the server's answer can replace the
- * draft without dropping anything typed after the snapshot was sent.
+ * draft without dropping anything typed after the snapshot was sent. The outcome is reported by toast; a
+ * failed save keeps the draft, so the owner can retry without retyping.
  */
 export function useAgentEditor(initial: AgentDetail) {
   const locale = useLocale() as Locale;
-  const t = useTranslations("errors");
+  const t = useTranslations("agents");
+  const notify = useNotify();
   const router = useRouter();
   const [agent, setAgent] = useState(initial);
   const [draft, setDraft] = useState<AgentDraft>(() => fromDetail(initial));
-  const [save, setSave] = useState<SaveState>({ status: "idle" });
+  const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
-  const flash = useSavedFlash(() => setSave((s) => (s.status === "saved" ? { status: "idle" } : s)));
 
   function update(change: Partial<AgentDraft>) {
     if (savingRef.current) return;
     setDraft((current) => ({ ...current, ...change }));
-    setSave((s) => (s.status === "saving" ? s : { status: "idle" }));
   }
 
   function discard() {
     if (savingRef.current) return;
     setDraft(fromDetail(agent));
-    setSave({ status: "idle" });
   }
 
   async function persist() {
     if (savingRef.current || !canSaveDraft(agent, draft)) return;
     savingRef.current = true;
-    flash.cancel();
-    setSave({ status: "saving" });
+    setSaving(true);
     try {
       const saved = await patchAgent(agent, draft, locale);
       setAgent(saved);
       setDraft(fromDetail(saved));
-      setSave({ status: "saved" });
+      notify.success(t("saved"));
       router.refresh();
-      flash.start();
     } catch (err) {
-      setSave({ status: "error", message: apiErrorText(err, t("generic"), (id) => t("requestId", { id })) });
+      notify.error(err);
     } finally {
       savingRef.current = false;
+      setSaving(false);
     }
   }
 
@@ -96,8 +77,7 @@ export function useAgentEditor(initial: AgentDetail) {
     errors: draftErrors(draft),
     dirty: isDirty(agent, draft),
     canSave: canSaveDraft(agent, draft),
-    saving: save.status === "saving",
-    save,
+    saving,
     update,
     discard,
     persist,

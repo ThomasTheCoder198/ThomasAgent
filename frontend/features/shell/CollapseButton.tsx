@@ -19,7 +19,7 @@ function useShortcutHint() {
   );
 }
 
-/** Desktop-only toggle between the full sign and the icon rail. */
+/** Desktop-only toggle between the full sidebar and the icon rail. */
 export function CollapseButton() {
   const menu = useShellMenu();
   const hint = useShortcutHint();
@@ -32,7 +32,6 @@ export function CollapseButton() {
       aria-label={`${label} (${hint})`}
       title={`${label} (${hint})`}
       aria-expanded={!menu.collapsed}
-      aria-controls="workspace-sidebar"
       onClick={menu.toggleCollapsed}
       className="hidden md:inline-flex"
     >

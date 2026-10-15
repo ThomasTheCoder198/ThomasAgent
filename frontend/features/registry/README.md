@@ -12,4 +12,4 @@ model picker uses them so no model is hardcoded. Provider/model management scree
 ## Dependencies
 
 - Uses: `contracts/openapi/core.v1.yaml` (by hand until an OpenAPI type generator lands).
-- Used by: `features/chat`, `mock-core/catalog.ts`.
+- Used by: `features/chat`, `features/agents` (model overrides), `mock-core/catalog.ts`.

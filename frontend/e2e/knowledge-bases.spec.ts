@@ -10,6 +10,9 @@ const READY_TIMEOUT_MS = 45_000;
 const NO_REQUEST_WINDOW_MS = 1000;
 const S3_UPLOAD = /__mock\/s3\/kb-raw$/;
 
+/** The documents list only: Sonner toasts are list items too, so a bare listitem locator would match them. */
+const fileRows = (page: Page) => page.getByRole("list", { name: "Tài liệu" }).getByRole("listitem");
+
 const unique = (testInfo: TestInfo, label: string) => `${label}-${testInfo.project.name}-${Date.now()}`;
 
 /** On phones the sidebar is a drawer: open it. Decided by project, because the button renders after hydration. */
@@ -60,7 +63,7 @@ test("uploads a file: presign, bytes straight to storage, confirm, then it reach
   const storageRequest = await toStorage;
   expect(storageRequest.method()).toBe("POST");
   expect(await storageRequest.headerValue("cookie")).toBeNull();
-  await expect(page.getByRole("listitem").filter({ hasText: name }).getByText("Sẵn sàng")).toBeVisible({
+  await expect(fileRows(page).filter({ hasText: name }).getByText("Sẵn sàng")).toBeVisible({
     timeout: READY_TIMEOUT_MS,
   });
   expect(apiBodies).toEqual([]);
@@ -82,10 +85,10 @@ test("rejects an unsupported type locally, without any request", async ({ page }
 
 test("the default Knowledge Base cannot be deleted", async ({ page }, testInfo) => {
   await openDemoDefaultKb(page, testInfo);
-  // File rows have their own Delete buttons; the sign band is the <header>.
-  const sign = page.locator("header");
-  await expect(sign.getByRole("button", { name: "Đổi tên" })).toBeVisible();
-  await expect(sign.getByRole("button", { name: "Xoá" })).toHaveCount(0);
+  // File rows have their own Delete buttons; the page header is the <header>.
+  const header = page.locator("header");
+  await expect(header.getByRole("button", { name: "Đổi tên" })).toBeVisible();
+  await expect(header.getByRole("button", { name: "Xoá" })).toHaveCount(0);
 });
 
 test("creates a Knowledge Base and lands on its page", async ({ page }, testInfo) => {
@@ -101,6 +104,7 @@ test("creates a Knowledge Base and lands on its page", async ({ page }, testInfo
   await page.getByRole("button", { name: "Tạo", exact: true }).click();
   await expect(page).toHaveURL(/\/orgs\/[^/]+\/knowledge-bases\/[^/]+$/);
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  await expect(page.locator("[data-sonner-toast]").filter({ hasText: "Đã tạo" })).toBeVisible();
 });
 
 test("an org ragx could not prepare shows the red station, and Retry opens its Knowledge Bases", async ({
@@ -129,13 +133,44 @@ test("downloads a file with its own name", async ({ page }, testInfo) => {
     buffer: Buffer.from(`# ${name}
 `),
   });
-  const row = page
-    .getByRole("listitem")
+  // From md the row's actions are inline buttons; on phones they fold into one menu.
+  const mobile = testInfo.project.name === "mobile";
+  const row = fileRows(page)
     .filter({ hasText: name })
-    .filter({ has: page.getByRole("button", { name: "Tải xuống" }) });
+    .filter({ has: page.getByRole("button", { name: mobile ? `Thao tác cho ${name}` : "Tải xuống" }) });
   const download = page.waitForEvent("download");
-  await row.getByRole("button", { name: "Tải xuống" }).click();
+  if (mobile) {
+    await row.getByRole("button", { name: `Thao tác cho ${name}` }).click();
+    await page.getByRole("menuitem", { name: "Tải xuống" }).click();
+  } else {
+    await row.getByRole("button", { name: "Tải xuống" }).click();
+  }
   expect((await download).suggestedFilename()).toBe(name);
+});
+
+test("deletes a file after confirming, with a success toast", async ({ page }, testInfo) => {
+  const name = `${unique(testInfo, "delete")}.md`;
+  await openDemoDefaultKb(page, testInfo);
+  await page.locator('input[type="file"]').setInputFiles({
+    name,
+    mimeType: "text/markdown",
+    buffer: Buffer.from(`# ${name}
+`),
+  });
+  await expect(page.locator("[data-sonner-toast]").filter({ hasText: "Đã tải lên" })).toBeVisible({
+    timeout: READY_TIMEOUT_MS,
+  });
+  const mobile = testInfo.project.name === "mobile";
+  const row = fileRows(page).filter({ hasText: name });
+  if (mobile) {
+    await row.getByRole("button", { name: `Thao tác cho ${name}` }).click();
+    await page.getByRole("menuitem", { name: "Xoá" }).click();
+  } else {
+    await row.getByRole("button", { name: "Xoá" }).click();
+  }
+  await page.getByRole("alertdialog").getByRole("button", { name: "Xoá" }).click();
+  await expect(page.locator("[data-sonner-toast]").filter({ hasText: "Đã xoá" })).toBeVisible();
+  await expect(fileRows(page).filter({ hasText: name })).toHaveCount(0);
 });
 
 test("a file storage refuses shows a toast with the mapped message, the S3 code and no request id", async ({

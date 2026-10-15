@@ -7,22 +7,29 @@ import { Button } from "@/components/ui/Button";
 import { InlineAlert } from "@/components/ui/InlineAlert";
 import { RouteStatus } from "@/features/shell/RouteStatus";
 
-type Props = { serviceDown: boolean; message: string; requestId?: string };
+/**
+ * Ragx or core is down or unreachable (status >= 500): the whole page is the retryable service error, with
+ * the request id in mono. It replaces the page, header included, so there is one heading and one menu button.
+ */
+export function ServiceUnavailable({ requestId }: { requestId?: string }) {
+  const router = useRouter();
+  return <RouteStatus kind="error" workspace requestId={requestId} retry={() => router.refresh()} />;
+}
 
-/** `serviceDown` (a 5xx or unreachable) is the retryable service error; any other refusal shows core's own words. */
-export function LoadFailure({ serviceDown, message, requestId }: Props) {
+/** Any other refusal (not a 404, not a 5xx) shows core's own words under the page header, with Retry. */
+export function LoadFailure({ message, requestId }: { message: string; requestId?: string }) {
   const t = useTranslations("kb");
   const tErr = useTranslations("errors");
   const router = useRouter();
-  if (serviceDown) {
-    return <RouteStatus kind="error" workspace requestId={requestId} retry={() => router.refresh()} />;
-  }
   return (
     <div className="flex flex-col items-start gap-4 py-6">
-      <InlineAlert
-        title={t("loadFailed")}
-        detail={requestId ? `${message} ${tErr("requestId", { id: requestId })}` : message}
-      />
+      <InlineAlert title={t("loadFailed")} detail={message}>
+        {requestId && (
+          <p className="text-muted-foreground tabular mt-0.5 text-xs break-all">
+            {tErr("requestId", { id: requestId })}
+          </p>
+        )}
+      </InlineAlert>
       <Button variant="outline" onClick={() => router.refresh()}>
         {t("retry")}
       </Button>

@@ -5,12 +5,13 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/cn";
 
 import { UPLOAD_ACCEPT } from "../upload-rules";
 
 const hasFiles = (event: DragEvent) => event.dataTransfer?.types.includes("Files") ?? false;
 
-/** Any file dragged over the page counts: while dragging, a dashed outline covers the window (Escape clears it). */
+/** Any file dragged over the page counts: while dragging, the drop zone and an outline around the window light up (Escape clears it). */
 function useWindowDrop(onFiles: (files: File[]) => void) {
   const [dragging, setDragging] = useState(false);
   const onFilesRef = useRef(onFiles);
@@ -54,6 +55,7 @@ function useWindowDrop(onFiles: (files: File[]) => void) {
   return dragging;
 }
 
+/** A dashed drop target with a Choose files button; dropping anywhere on the page works too. */
 export function UploadDropZone({ onFiles }: { onFiles: (files: File[]) => void }) {
   const t = useTranslations("kb");
   const input = useRef<HTMLInputElement>(null);
@@ -66,7 +68,12 @@ export function UploadDropZone({ onFiles }: { onFiles: (files: File[]) => void }
   }
 
   return (
-    <div className="border-border flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-3 py-4">
+    <div
+      className={cn(
+        "border-input flex flex-col items-center gap-3 rounded-sm border border-dashed px-4 py-8 text-center transition-colors",
+        dragging && "border-primary bg-accent",
+      )}
+    >
       <input
         ref={input}
         type="file"
@@ -77,19 +84,17 @@ export function UploadDropZone({ onFiles }: { onFiles: (files: File[]) => void }
         tabIndex={-1}
         aria-hidden
       />
-      <Button onClick={() => input.current?.click()}>
-        <Upload aria-hidden className="size-4" />
-        {t("upload")}
+      <Upload aria-hidden className="text-muted-foreground size-6" />
+      <div>
+        <p className="text-sm font-medium">{dragging ? t("dropHere") : t("dropTitle")}</p>
+        <p className="text-muted-foreground mt-1 text-[0.8125rem]">{t("dropHint")}</p>
+      </div>
+      <Button variant="outline" onClick={() => input.current?.click()}>
+        {t("chooseFiles")}
       </Button>
-      <span className="text-muted-foreground text-[13px]">{t("dropHint")}</span>
       {dragging && (
-        <div
-          aria-hidden
-          className="bg-card/85 pointer-events-none fixed inset-0 z-30 grid place-items-center p-4"
-        >
-          <div className="border-input text-foreground grid size-full place-items-center rounded-xl border-2 border-dashed text-lg font-semibold">
-            {t("dropHere")}
-          </div>
+        <div aria-hidden className="pointer-events-none fixed inset-0 z-30 p-4">
+          <div className="border-primary size-full rounded-sm border-2 border-dashed" />
         </div>
       )}
     </div>

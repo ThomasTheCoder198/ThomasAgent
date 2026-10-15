@@ -3,9 +3,10 @@ import { Search, SquarePen } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { BrandMark } from "@/components/metro/BrandMark";
-import { LineDots } from "@/components/metro/LineDots";
+import { BrandMark } from "@/components/BrandMark";
+import { LineDots } from "@/components/LineDots";
 import type { Line, ToolLine } from "@/components/lines";
+import { Button } from "@/components/ui/Button";
 import type { SessionUser } from "@/features/auth/types";
 import { cn } from "@/lib/cn";
 
@@ -37,7 +38,7 @@ type Props = {
   labels: SidebarLabels;
   activeHref: string;
   footer?: ReactNode;
-  /** The org plate, under the brand. */
+  /** The org switcher, under the brand. */
   org?: ReactNode;
   /** Desktop collapse control, rendered beside the brand. */
   toggle?: ReactNode;
@@ -45,16 +46,23 @@ type Props = {
 };
 
 const NEW_CHAT_HREF = "/chat";
+/** 40px rows (44px below md); the current page is a card with a 1px outline and a violet icon. */
 const rowLink =
-  "hover:bg-sidebar-accent aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-sidebar-foreground flex items-center rounded-md transition-colors";
+  "group/row hover:bg-sidebar-accent aria-[current=page]:bg-card aria-[current=page]:border-outline flex min-h-10 items-center rounded-md border border-transparent text-sm transition-colors duration-150 max-md:min-h-11";
+
+/** Folded to the icon rail (desktop only): text stays for screen readers, decoration goes. */
+const RAIL_TEXT = "md:group-data-[collapsed=true]/shell:sr-only";
+const RAIL_GONE = "md:group-data-[collapsed=true]/shell:hidden";
+const RAIL_CENTER =
+  "md:group-data-[collapsed=true]/shell:justify-center md:group-data-[collapsed=true]/shell:px-0";
 
 function Recents({ recents, labels, activeHref }: Pick<Props, "recents" | "labels" | "activeHref">) {
   return (
     <>
-      <h2 className="text-muted-foreground mx-2.5 mt-5.5 mb-2 text-xs font-semibold">{labels.recents}</h2>
-      <ul className="-mx-1 flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-1">
+      <h2 className="text-muted-foreground px-3 pt-6 pb-2 text-[0.8125rem] font-medium">{labels.recents}</h2>
+      <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
         {recents.length === 0 && (
-          <li className="text-muted-foreground px-2.5 text-xs leading-relaxed">{labels.recentsEmpty}</li>
+          <li className="text-muted-foreground px-3 text-[0.8125rem] leading-snug">{labels.recentsEmpty}</li>
         )}
         {recents.map((r) => {
           const href = `/chat/${r.id}`;
@@ -64,10 +72,7 @@ function Recents({ recents, labels, activeHref }: Pick<Props, "recents" | "label
                 href={href}
                 match="exact"
                 serverPath={activeHref}
-                className={cn(
-                  rowLink,
-                  "text-sidebar-foreground/85 grid grid-cols-[1fr_auto] items-center gap-2 px-2.5 py-1.5 text-[13.5px] max-md:min-h-11",
-                )}
+                className={cn(rowLink, "grid grid-cols-[1fr_auto] gap-2 px-3")}
               >
                 <span className="truncate" title={r.title}>
                   {r.title}
@@ -82,40 +87,28 @@ function Recents({ recents, labels, activeHref }: Pick<Props, "recents" | "label
   );
 }
 
-/** Folded to the icon rail (desktop only): text stays for screen readers, decoration goes. */
-const RAIL_TEXT = "md:group-data-[collapsed=true]/shell:sr-only";
-const RAIL_GONE = "md:group-data-[collapsed=true]/shell:hidden";
-const RAIL_CENTER =
-  "md:group-data-[collapsed=true]/shell:justify-center md:group-data-[collapsed=true]/shell:px-0";
-
 function PrimaryActions({ labels }: Pick<Props, "labels">) {
   return (
-    <>
-      <Link
-        href={NEW_CHAT_HREF}
-        title={labels.newChat}
-        className={cn(
-          "bg-sidebar-foreground text-sidebar flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-semibold transition-[opacity,transform] hover:opacity-90 active:scale-[0.97] max-md:min-h-11",
-          RAIL_CENTER,
-        )}
-      >
-        <SquarePen aria-hidden className="size-4 shrink-0" />
-        <span className={RAIL_TEXT}>{labels.newChat}</span>
-      </Link>
-      <button
-        type="button"
-        disabled
-        title={labels.searchSoon}
-        className={cn(
-          "border-sidebar-border text-muted-foreground mt-2 flex cursor-not-allowed items-center gap-2.5 rounded-lg border px-3 py-2 text-sm max-md:min-h-11",
-          RAIL_CENTER,
-        )}
-      >
-        <Search aria-hidden className="size-4 shrink-0" />
-        <span className={RAIL_TEXT}>{labels.search}</span>
-        <kbd className={cn("ml-auto font-mono text-[11px]", RAIL_GONE)}>⌘K</kbd>
-      </button>
-    </>
+    <div className="flex flex-col gap-2">
+      <Button asChild className={cn("w-full", "md:group-data-[collapsed=true]/shell:px-0")}>
+        <Link href={NEW_CHAT_HREF} title={labels.newChat}>
+          <SquarePen aria-hidden />
+          <span className={RAIL_TEXT}>{labels.newChat}</span>
+        </Link>
+      </Button>
+      {/* A disabled button swallows pointer events, so the tooltip hangs on its wrapper. */}
+      <span title={labels.searchSoon} className="block">
+        <Button
+          variant="ghost"
+          disabled
+          className={cn("text-muted-foreground w-full justify-start px-3", RAIL_CENTER)}
+        >
+          <Search aria-hidden />
+          <span className={RAIL_TEXT}>{labels.search}</span>
+          <kbd className={cn("ml-auto font-sans text-xs", RAIL_GONE)}>⌘K</kbd>
+        </Button>
+      </span>
+    </div>
   );
 }
 
@@ -124,19 +117,19 @@ function OwnerPlate({ user, labels, footer }: Pick<Props, "user" | "labels" | "f
   return (
     <div
       className={cn(
-        "border-sidebar-border mt-auto flex items-center gap-2.5 border-t px-2 pt-2.5",
-        "md:group-data-[collapsed=true]/shell:flex-col md:group-data-[collapsed=true]/shell:px-0",
+        "border-sidebar-border mt-auto flex items-center gap-3 border-t pt-3",
+        "md:group-data-[collapsed=true]/shell:flex-col md:group-data-[collapsed=true]/shell:gap-2",
       )}
     >
       <span
         title={name}
-        className="bg-sidebar-accent grid size-7.5 shrink-0 place-items-center rounded-full text-[13px] font-bold"
+        className="bg-sidebar-accent grid size-8 shrink-0 place-items-center rounded-full text-sm font-semibold"
         aria-hidden
       >
         {name.slice(0, 1).toUpperCase()}
       </span>
-      <span className={cn("min-w-0 text-sm leading-tight", RAIL_TEXT)}>
-        <span className="block truncate">{name}</span>
+      <span className={cn("min-w-0 flex-1 text-sm leading-tight", RAIL_TEXT)}>
+        <span className="block truncate font-medium">{name}</span>
         <small className="text-muted-foreground block truncate text-xs">{labels.tenant}</small>
       </span>
       {footer}
@@ -144,20 +137,20 @@ function OwnerPlate({ user, labels, footer }: Pick<Props, "user" | "labels" | "f
   );
 }
 
-/** The enamel-black station sign: brand, primary actions, lines, recents and the owner plate. */
+/** Brand, org switcher, new chat, navigation, recents and the owner plate on the sidebar surface. */
 export function Sidebar({ items, recents, user, labels, activeHref, footer, org, toggle, className }: Props) {
   return (
     <aside
       className={cn(
-        "bg-sidebar text-sidebar-foreground ease-out-expo flex h-dvh w-62 shrink-0 flex-col px-3.5 pt-4.5 pb-3.5 transition-[width,padding] duration-300",
-        "md:group-data-[collapsed=true]/shell:w-16 md:group-data-[collapsed=true]/shell:px-2.5",
+        "bg-sidebar text-sidebar-foreground border-sidebar-border ease-out-expo flex h-full w-64 shrink-0 flex-col border-r px-3 pb-3 transition-[width] duration-300",
+        "md:group-data-[collapsed=true]/shell:w-16",
         className,
       )}
     >
       <div
         className={cn(
-          "flex items-center justify-between gap-2 px-1.5 pb-4.5",
-          "md:group-data-[collapsed=true]/shell:flex-col md:group-data-[collapsed=true]/shell:px-0",
+          "flex h-14 shrink-0 items-center justify-between gap-2 px-3 max-md:pr-14",
+          "md:group-data-[collapsed=true]/shell:h-auto md:group-data-[collapsed=true]/shell:flex-col md:group-data-[collapsed=true]/shell:px-0 md:group-data-[collapsed=true]/shell:py-3",
         )}
       >
         <BrandMark label="ThomasAgent" labelClassName={RAIL_TEXT} />
@@ -165,7 +158,7 @@ export function Sidebar({ items, recents, user, labels, activeHref, footer, org,
       </div>
       {org}
       <PrimaryActions labels={labels} />
-      <nav aria-label={labels.nav} className="mt-4.5 flex flex-col gap-0.5">
+      <nav aria-label={labels.nav} className="mt-6 flex flex-col gap-1">
         {items.map(({ href, label, icon: Icon, lines, orgScope }) => (
           <NavLink
             key={href}
@@ -174,9 +167,12 @@ export function Sidebar({ items, recents, user, labels, activeHref, footer, org,
             match="section"
             serverPath={activeHref}
             title={label}
-            className={cn(rowLink, "gap-2.5 px-2.5 py-2 text-sm max-md:min-h-11", RAIL_CENTER)}
+            className={cn(rowLink, "gap-3 px-3 font-medium", RAIL_CENTER)}
           >
-            <Icon aria-hidden className="size-4 shrink-0" />
+            <Icon
+              aria-hidden
+              className="group-aria-[current=page]/row:text-primary size-4 shrink-0 transition-colors"
+            />
             <span className={RAIL_TEXT}>{label}</span>
             {lines && (
               <span className={cn("ml-auto", RAIL_GONE)}>

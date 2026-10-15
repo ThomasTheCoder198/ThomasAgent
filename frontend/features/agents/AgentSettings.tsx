@@ -84,7 +84,7 @@ export function AgentSettings({ agent: initial, knowledgeBases, models, roles, i
     <Tabs value={tab} onValueChange={selectTab} className="min-h-full gap-0">
       <AgentHeader {...headerFacts({ agent, draft, knowledgeBases, models, roles })} />
       <div className="bg-background sticky top-0 z-10">
-        <div className="mx-auto w-full max-w-272 px-4 md:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-5xl px-4 md:px-6 lg:px-8">
           <TabsList aria-label={t("tabsLabel")}>
             {agentTabs.map((id) => (
               <TabsTrigger key={id} value={id}>
@@ -97,7 +97,7 @@ export function AgentSettings({ agent: initial, knowledgeBases, models, roles, i
       <TabsContent
         key={tab}
         value={tab}
-        className="animate-rise mx-auto w-full max-w-272 flex-1 px-4 pt-6 pb-28 outline-none md:px-6 lg:px-8"
+        className="animate-rise mx-auto w-full max-w-5xl flex-1 px-4 pt-6 pb-28 outline-none md:px-6 lg:px-8"
       >
         {/* Disabling the whole fieldset while saving keeps the draft identical to what was sent. */}
         <fieldset disabled={editor.saving} className="contents">

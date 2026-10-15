@@ -115,7 +115,7 @@ export function ChatSurface({
           )}
         >
           {empty ? (
-            <HeroIntro className="order-1 pt-8 pb-6 max-md:flex-1 md:pb-8" />
+            <HeroIntro className="order-1 pt-8 pb-6 md:pb-8" />
           ) : (
             <div ref={threadRef} className="min-h-0 flex-1 overflow-y-auto">
               <Thread session={session} evidence={evidence} />
@@ -139,7 +139,7 @@ export function ChatSurface({
               contextRatio={contextRatio(lastView, modelChoice, session.modelId)}
             />
           </div>
-          {empty && <HeroSources className="order-2 pb-4 md:order-3 md:pb-0" />}
+          {empty && <HeroSources className="order-2 pb-4 max-md:mb-auto md:order-3 md:pb-0" />}
         </div>
       </div>
       <EvidenceDock evidence={evidence} view={panelView} />

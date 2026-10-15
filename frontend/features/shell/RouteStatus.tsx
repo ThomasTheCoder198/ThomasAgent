@@ -85,7 +85,15 @@ export function RouteStatus({ kind, workspace = false, requestId, retry }: Props
   const pathname = usePathname();
   const showMenu = workspace && pageOwnsHeader(pathname);
   return (
-    <div className={workspace ? "h-full overflow-y-auto" : "min-h-dvh"}>
+    <div
+      className={
+        workspace
+          ? "h-full overflow-y-auto"
+          : kind === "loading"
+            ? "min-h-dvh"
+            : "grid min-h-dvh place-items-center"
+      }
+    >
       {showMenu && (
         <div className="px-4 pt-4 md:hidden">
           <MenuButton />

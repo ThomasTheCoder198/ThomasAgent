@@ -35,13 +35,13 @@ test("opens an Agent from its row in the list", async ({ page }, testInfo) => {
 
 test("edits a tool policy, saves it, and the change survives a reload", async ({ page }, testInfo) => {
   await openAgent(page, agentFor(testInfo), "tools");
-  const policy = page.getByRole("group", { name: /Gửi email/ });
+  const policy = page.getByRole("radiogroup", { name: /Gửi email/ });
   await policy.getByRole("radio", { name: "Tự động" }).click();
   await saveButton(page).click();
   await expect(page.getByText("Đã lưu")).toBeVisible();
   await page.reload();
   await expect(
-    page.getByRole("group", { name: /Gửi email/ }).getByRole("radio", { name: "Tự động" }),
+    page.getByRole("radiogroup", { name: /Gửi email/ }).getByRole("radio", { name: "Tự động" }),
   ).toBeChecked();
 });
 

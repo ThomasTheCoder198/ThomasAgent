@@ -21,7 +21,7 @@ type Props = {
 export function AgentHeader({ name, description, ...meta }: Props) {
   const t = useTranslations("agents");
   return (
-    <header className="mx-auto w-full max-w-272 px-4 pt-4 pb-6 md:px-6 md:pt-6 lg:px-8">
+    <header className="mx-auto w-full max-w-5xl px-4 pt-4 pb-6 md:px-6 md:pt-6 lg:px-8">
       <div className="flex items-center gap-2">
         <MenuButton />
         <Button asChild variant="ghost" size="sm" className="text-muted-foreground -ml-3">

@@ -166,7 +166,7 @@ export function FileRow(props: Props) {
   /** The menu closes with its item, so the dialog must hand focus back to the menu's button; inline it finds its opener. */
   const returnFocus = useRef<HTMLElement | null>(null);
   return (
-    <li className="border-border grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 border-b px-3 py-3 md:grid-cols-[minmax(0,1fr)_minmax(0,14rem)_5rem_9rem_auto] md:gap-x-6">
+    <li className="border-border grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 border-b px-3 py-3 md:grid-cols-[minmax(0,1fr)_14rem_5rem_11rem_7.5rem] md:gap-x-6">
       <span className="flex min-w-0 items-baseline gap-2">
         <span className="truncate text-[0.9375rem] font-semibold" title={file.name}>
           {file.name}
@@ -181,7 +181,7 @@ export function FileRow(props: Props) {
       <FileStatusBadge status={file.status} errorCode={file.errorCode} />
       <span className="text-muted-foreground tabular col-start-1 flex min-w-0 flex-wrap gap-x-3 text-xs md:contents">
         <span>{formatBytes(file.sizeBytes, locale)}</span>
-        <span>{formatDateTime(file.updatedAt, locale)}</span>
+        <span className="whitespace-nowrap">{formatDateTime(file.updatedAt, locale)}</span>
       </span>
       <span className="col-start-2 row-span-3 row-start-1 md:col-start-auto md:row-span-1 md:row-start-auto">
         <RowActions

@@ -9,7 +9,7 @@ export default async function AgentsPage() {
   return (
     <div className="h-full overflow-y-auto">
       <PageHeader title={t("title")} body={t("subtitle")} />
-      <div className="mx-auto w-full max-w-272 px-4 pb-16 md:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-5xl px-4 pb-16 md:px-6 lg:px-8">
         <AgentList agents={agents} />
       </div>
     </div>

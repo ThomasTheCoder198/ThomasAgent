@@ -60,7 +60,7 @@ export function ApprovalSign({ station, onDecide, disabled }: Props) {
           variant="ghost"
           disabled={disabled}
           onClick={() => decide(true, true)}
-          className="font-medium sm:ml-auto"
+          className="font-medium"
         >
           {t("alwaysAllow")}
         </Button>

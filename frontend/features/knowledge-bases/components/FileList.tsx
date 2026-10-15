@@ -5,15 +5,18 @@ import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/Button";
 import { InlineAlert } from "@/components/ui/InlineAlert";
+import { useToast } from "@/components/ui/Toast";
 import { EmptyState } from "@/features/shell/EmptyState";
 import { describeApiError } from "@/lib/api/client";
 import type { KbFile } from "@/lib/ragx/types";
 
+import { StorageUploadError } from "../upload";
 import { useFiles } from "../useFiles";
 import { useUploadQueue } from "../useUploadQueue";
 import { FileRow } from "./FileRow";
 import { UploadDropZone } from "./UploadDropZone";
 import { UploadRow } from "./UploadRow";
+import { useStorageFailureText } from "./useStorageFailureText";
 
 type Props = { orgId: string; kbId: string; initialFiles: KbFile[]; initialCursor: string | null };
 
@@ -22,12 +25,23 @@ export function FileList({ orgId, kbId, initialFiles, initialCursor }: Props) {
   const t = useTranslations("kb");
   const tErr = useTranslations("errors");
   const router = useRouter();
+  const toast = useToast();
+  const storageText = useStorageFailureText();
   const list = useFiles(orgId, kbId, initialFiles, initialCursor);
-  const queue = useUploadQueue(orgId, kbId, (file) => {
-    list.upsert(file);
-    // The sign's file count comes from the server.
-    router.refresh();
-  });
+  const queue = useUploadQueue(
+    orgId,
+    kbId,
+    (file) => {
+      list.upsert(file);
+      // The sign's file count comes from the server.
+      router.refresh();
+    },
+    (file, error) => {
+      // The storage leg has no core response to show, so its failure is announced here (P-F17).
+      if (error instanceof StorageUploadError)
+        toast.show({ tone: "error", title: file.name, detail: storageText(error) });
+    },
+  );
   const requestId = (id: string) => tErr("requestId", { id });
   const empty = list.files.length === 0 && queue.items.length === 0;
   return (

@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { StorageUploadError, confirmUpload, fetchDownloadUrl, postToStorage, presignUpload } from "./upload";
+import {
+  INTERRUPTED_CODE,
+  StorageUploadError,
+  confirmUpload,
+  fetchDownloadUrl,
+  postToStorage,
+  presignUpload,
+} from "./upload";
 import type { UploadTicket } from "@/lib/ragx/types";
 
 class FakeXhr {
@@ -16,6 +23,7 @@ class FakeXhr {
     { onprogress: null };
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;
+  onabort: (() => void) | null = null;
   aborted = false;
   constructor() {
     FakeXhr.last = this;
@@ -32,6 +40,7 @@ class FakeXhr {
   }
   abort() {
     this.aborted = true;
+    this.onabort?.();
   }
   respond(status: number, text = "") {
     this.status = status;
@@ -84,6 +93,18 @@ describe("postToStorage", () => {
     controller.abort();
     expect(FakeXhr.last.aborted).toBe(true);
     await expect(cancelled).rejects.toMatchObject({ name: "AbortError" });
+  });
+});
+
+describe("postToStorage interruptions", () => {
+  it("reports an abort the user did not ask for as an interrupted upload", async () => {
+    const done = postToStorage(ticket, new File(["x"], "a.md"), vi.fn(), new AbortController().signal);
+    FakeXhr.last.onabort?.();
+    await expect(done).rejects.toMatchObject({
+      name: "StorageUploadError",
+      status: 0,
+      code: INTERRUPTED_CODE,
+    });
   });
 });
 

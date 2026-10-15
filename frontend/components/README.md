@@ -17,6 +17,7 @@ controls.
 - `ui/Tabs.tsx` — WAI-ARIA tabs: roving tabindex, ←/→ (wrapping), Home/End; pair with `tabPanelId()` and give the panel `tabIndex={0}`.
 - `ui/SettingsSection.tsx` — one ruled settings row (title + hint left, control right).
 - `ui/InlineAlert.tsx` — in-place error with the server's message.
+- `ui/Toast.tsx` — `ToastProvider` (mounted once in `app/layout.tsx`) and `useToast().show({ tone, title, detail })`: lifted sign notices, bottom right (bottom, full width on phones). Errors go into an always-present `role=alert` region and stay until dismissed; info goes into `role=status` and leaves after `INFO_TOAST_MS`; at most `MAX_TOASTS`. Both regions set `aria-live` (so a modal's aria-hidden spares them) and `aria-atomic=false` (a new toast is read alone). The title is plain text and names the dismiss button; dismissing the focused toast moves focus to the next one or the region; info timers are cleared on dismiss and unmount. `isInToastRegion` lets `DialogContent` ignore clicks on a toast instead of closing. Custom rather than Radix Toast, whose announcements are always `role=status`.
 - `ui/Dialog.tsx`, `ui/DropdownMenu.tsx`, `ui/Switch.tsx` — wrappers over `radix-ui` 1.6.7 restyled to Metro (lifted paper dialog on the scrim; menus that open from the sign wear the sign). Never build these controls by hand: Radix owns focus trapping, roving focus, Escape and the switch semantics.
 - `ui/useDismiss.ts` — Escape / outside-press closing.
 

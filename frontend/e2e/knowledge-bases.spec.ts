@@ -138,7 +138,9 @@ test("downloads a file with its own name", async ({ page }, testInfo) => {
   expect((await download).suggestedFilename()).toBe(name);
 });
 
-test("a file storage refuses shows the S3 code and no request id", async ({ page }, testInfo) => {
+test("a file storage refuses shows a toast with the mapped message, the S3 code and no request id", async ({
+  page,
+}, testInfo) => {
   const name = `${unique(testInfo, "toolarge")}.md`;
   // The presign asks for 1 byte, so the policy's exact size range refuses the real file at storage.
   await page.route(/\/uploads$/, (route) =>
@@ -148,9 +150,12 @@ test("a file storage refuses shows the S3 code and no request id", async ({ page
   await page
     .locator('input[type="file"]')
     .setInputFiles({ name, mimeType: "text/markdown", buffer: Buffer.from("more than one byte") });
-  const alert = page.getByRole("alert").filter({ hasText: "EntityTooLarge" });
-  await expect(alert).toContainText("Kho lưu trữ từ chối tệp (EntityTooLarge)");
-  await expect(alert).not.toContainText("Mã yêu cầu");
+  const toast = page.getByRole("alert").filter({ hasText: "EntityTooLarge" });
+  await expect(toast).toContainText(name);
+  await expect(toast).toContainText("Tệp đã thay đổi sau khi được chọn. Hãy chọn lại (EntityTooLarge)");
+  await expect(toast).not.toContainText("Mã yêu cầu");
+  await toast.getByRole("button", { name: "Đóng thông báo" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "EntityTooLarge" })).toHaveCount(0);
   await page.screenshot({ path: "../docs/superpowers/reports/m1-2-ui-kb-storage-refused-vi.png" });
 });
 

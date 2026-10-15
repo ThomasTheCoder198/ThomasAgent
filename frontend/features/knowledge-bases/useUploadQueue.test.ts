@@ -162,4 +162,27 @@ describe("useUploadQueue", () => {
     expect(confirmUpload).not.toHaveBeenCalled();
     expect(onUploaded).not.toHaveBeenCalled();
   });
+
+  it("reports each failure once, with its file, and never a cancel", async () => {
+    const error = new StorageUploadError(400, "EntityTooLarge");
+    postToStorage.mockRejectedValueOnce(error);
+    const onFailed = vi.fn();
+    const { result } = renderHook(() => useUploadQueue("o", "k", vi.fn(), onFailed));
+    act(() => result.current.add([file("a.md")]));
+    await waitFor(() => expect(result.current.items[0]?.state).toBe("failed"));
+    expect(onFailed).toHaveBeenCalledTimes(1);
+    expect(onFailed).toHaveBeenCalledWith(result.current.items[0]!.file, error);
+
+    const gate = deferred<void>();
+    postToStorage.mockImplementationOnce((_t, _f, _p, signal: AbortSignal) => {
+      signal.addEventListener("abort", () => gate.reject(new DOMException("cancelled", "AbortError")));
+      return gate.promise;
+    });
+    act(() => result.current.dismiss(result.current.items[0]!.id));
+    act(() => result.current.add([file("b.md")]));
+    await waitFor(() => expect(result.current.items[0]?.state).toBe("uploading"));
+    act(() => result.current.cancel(result.current.items[0]!.id));
+    await waitFor(() => expect(result.current.items).toEqual([]));
+    expect(onFailed).toHaveBeenCalledTimes(1);
+  });
 });

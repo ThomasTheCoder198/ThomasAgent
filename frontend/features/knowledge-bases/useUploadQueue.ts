@@ -88,11 +88,12 @@ type Controls = {
   patch: (id: string, change: Partial<QueueItem>) => void;
   remove: (id: string) => void;
   uploaded: (file: KbFile) => void;
+  failed: (file: File, error: unknown) => void;
 };
 
 /** Starts one queued item. The controller doubles as the started-ids guard: a strict-mode rerun finds the id taken. */
 function startItem(next: QueueItem, base: Omit<RunContext, "signal" | "patch">, controls: Controls) {
-  const { controllers, patch, remove, uploaded } = controls;
+  const { controllers, patch, remove, uploaded, failed } = controls;
   const controller = new AbortController();
   controllers.set(next.id, controller);
   patch(next.id, { state: "preparing", loaded: 0, error: undefined });
@@ -103,8 +104,10 @@ function startItem(next: QueueItem, base: Omit<RunContext, "signal" | "patch">, 
   };
   runItem(next, ctx)
     .then((outcome) => {
-      if (!outcome.ok)
-        return patch(next.id, { state: "failed", failedStep: outcome.step, error: outcome.error });
+      if (!outcome.ok) {
+        patch(next.id, { state: "failed", failedStep: outcome.step, error: outcome.error });
+        return failed(next.file, outcome.error);
+      }
       remove(next.id);
       uploaded(outcome.file);
     })
@@ -117,14 +120,24 @@ function toQueueItem(file: File): QueueItem {
   return { id: crypto.randomUUID(), file, state: problem ? "failed" : "queued", loaded: 0, problem };
 }
 
-/** Uploads one file at a time: 50 MB files in parallel would starve each other and the rest of the app. */
-export function useUploadQueue(orgId: string, kbId: string, onUploaded: (file: KbFile) => void) {
+/**
+ * Uploads one file at a time: 50 MB files in parallel would starve each other and the rest of the app.
+ * `onFailed` hears each failed run once (never a cancel or a local type/size rejection).
+ */
+export function useUploadQueue(
+  orgId: string,
+  kbId: string,
+  onUploaded: (file: KbFile) => void,
+  onFailed?: (file: File, error: unknown) => void,
+) {
   const locale = useLocale() as Locale;
   const [items, setItems] = useState<QueueItem[]>([]);
   const controllers = useRef(new Map<string, AbortController>());
   const onUploadedRef = useRef(onUploaded);
+  const onFailedRef = useRef(onFailed);
   useEffect(() => {
     onUploadedRef.current = onUploaded;
+    onFailedRef.current = onFailed;
   });
 
   // Leaving the page (or switching KB, which remounts this) must stop the bytes: nothing would show the outcome.
@@ -149,7 +162,9 @@ export function useUploadQueue(orgId: string, kbId: string, onUploaded: (file: K
     const next = items.find((item) => item.state === "queued");
     if (!next || controllers.current.has(next.id)) return;
     const uploaded = (file: KbFile) => onUploadedRef.current(file);
-    startItem(next, { orgId, kbId, locale }, { controllers: controllers.current, patch, remove, uploaded });
+    const failed = (file: File, error: unknown) => onFailedRef.current?.(file, error);
+    const controls = { controllers: controllers.current, patch, remove, uploaded, failed };
+    startItem(next, { orgId, kbId, locale }, controls);
   }, [items, kbId, locale, orgId, patch, remove]);
 
   const cancel = useCallback(

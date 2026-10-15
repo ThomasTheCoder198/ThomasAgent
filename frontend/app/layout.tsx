@@ -5,6 +5,8 @@ import { getLocale } from "next-intl/server";
 import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
 
+import { ToastProvider } from "@/components/ui/Toast";
+
 import "./globals.css";
 
 const lexend = Lexend({
@@ -33,7 +35,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html lang={locale} suppressHydrationWarning className={`${lexend.variable} ${geistMono.variable}`}>
       <body className="bg-ground text-ink min-h-dvh">
         <ThemeProvider attribute="data-theme" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <NextIntlClientProvider>{children}</NextIntlClientProvider>
+          <NextIntlClientProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </NextIntlClientProvider>
         </ThemeProvider>
       </body>
     </html>

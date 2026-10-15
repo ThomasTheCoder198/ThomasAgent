@@ -31,20 +31,27 @@ function renderRow(item: QueueItem) {
 beforeEach(() => vi.clearAllMocks());
 
 describe("UploadRow failures", () => {
-  it("shows a storage failure with the S3 code in mono and no request id", () => {
+  // P-F17: the toast announces a storage failure (role=alert); the row keeps it in place, quietly, beside Retry.
+  it("keeps a storage failure in the row with the S3 code in mono, no request id and no second alert", () => {
     renderRow(failed({ failedStep: "storage", error: new StorageUploadError(400, "EntityTooLarge") }));
     const code = screen.getByText("EntityTooLarge");
     expect(code.className).toMatch(/tabular/);
-    expect(screen.getByRole("alert")).toHaveTextContent("Storage refused the upload (EntityTooLarge).");
+    expect(screen.getByText(/The file changed after it was picked/)).toHaveTextContent(
+      "The file changed after it was picked. Pick it again (EntityTooLarge).",
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByText(/Request ID/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: messages.kb.retry })).toBeInTheDocument();
   });
 
   it("says storage could not be reached, not refused, for a network failure", () => {
     renderRow(failed({ failedStep: "storage", error: new StorageUploadError(0, "NETWORK") }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Could not reach file storage (NETWORK).");
+    const line = screen.getByText(/Could not reach file storage/);
+    expect(line).toHaveTextContent(
+      "Could not reach file storage. Check the connection, then retry (NETWORK).",
+    );
     expect(screen.getByText("NETWORK").className).toMatch(/tabular/);
-    expect(screen.getByRole("alert")).not.toHaveTextContent(/refused/);
+    expect(line).not.toHaveTextContent(/refused/);
   });
 
   it("hides Cancel while the upload is finishing, because aborting after ragx committed hides the file", () => {

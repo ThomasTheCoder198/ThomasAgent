@@ -1,6 +1,6 @@
 "use client";
 
-import { RotateCw, X } from "lucide-react";
+import { RotateCw, TriangleAlert, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 
@@ -9,8 +9,9 @@ import { InlineAlert } from "@/components/ui/InlineAlert";
 import { describeApiError } from "@/lib/api/client";
 import { PERCENT, formatBytes, formatPercent } from "@/lib/format";
 
-import { NETWORK_CODE, StorageUploadError } from "../upload";
+import { StorageUploadError } from "../upload";
 import type { QueueItem } from "../useUploadQueue";
+import { useStorageFailureText } from "./useStorageFailureText";
 
 const ACTION = "size-touch md:size-8.5";
 
@@ -39,22 +40,29 @@ function Progress({ item }: { item: QueueItem }) {
   );
 }
 
-/** What went wrong, in the failing step's own terms: the file itself, storage (an S3 code, no request id), or core. */
+/** What went wrong, in the failing step's own terms: the file itself or core (with its request id). */
 function useFailureText(item: QueueItem): ReactNode {
   const t = useTranslations("kb");
   const tErr = useTranslations("errors");
   if (item.problem) return t(`problem.${item.problem}`);
-  if (item.error instanceof StorageUploadError) {
-    return t.rich(item.error.code === NETWORK_CODE ? "problem.storageUnreachable" : "problem.storage", {
-      code: item.error.code,
-      mono: (chunks) => <span className="tabular">{chunks}</span>,
-    });
-  }
   return describeApiError(item.error, tErr("generic"), (id) => tErr("requestId", { id }));
 }
 
+/**
+ * A storage failure was already announced by its toast (role=alert), so the row states it quietly: a second
+ * alert would make screen readers say it twice. Other failures have no toast and keep the inline alert.
+ */
 function Failure({ item }: { item: QueueItem }) {
   const text = useFailureText(item);
+  const storageText = useStorageFailureText();
+  if (item.error instanceof StorageUploadError) {
+    return (
+      <p className="flex gap-2 text-[13px]">
+        <TriangleAlert aria-hidden className="text-app mt-0.5 size-4 shrink-0" />
+        <span className="min-w-0">{storageText(item.error)}</span>
+      </p>
+    );
+  }
   return <InlineAlert title={text} />;
 }
 

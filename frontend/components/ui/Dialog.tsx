@@ -5,6 +5,8 @@ import { useRef, type ReactNode, type RefObject } from "react";
 
 import { cn } from "@/lib/cn";
 
+import { isInToastRegion } from "./Toast";
+
 export const Dialog = DialogPrimitive.Root;
 export const DialogTrigger = DialogPrimitive.Trigger;
 export const DialogClose = DialogPrimitive.Close;
@@ -49,6 +51,10 @@ export function DialogContent({
         onOpenAutoFocus={() => {
           const active = document.activeElement;
           opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
+        }}
+        // A toast floats above the scrim; dismissing it is not a click outside the dialog.
+        onInteractOutside={(event) => {
+          if (isInToastRegion(event.target)) event.preventDefault();
         }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();

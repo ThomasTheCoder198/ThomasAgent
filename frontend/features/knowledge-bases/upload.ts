@@ -7,6 +7,8 @@ import { RAGX_PATHS } from "./contract";
 const FILE_FIELD = "file";
 const S3_CODE = /<Code>([^<]+)<\/Code>/;
 export const NETWORK_CODE = "NETWORK";
+/** The browser dropped the transfer (an abort nobody asked for); never the user's Cancel. */
+export const INTERRUPTED_CODE = "INTERRUPTED";
 const SUCCESS_MIN = 200;
 const SUCCESS_MAX = 299;
 
@@ -49,6 +51,10 @@ export function postToStorage(
             new StorageUploadError(xhr.status, S3_CODE.exec(xhr.responseText)?.[1] ?? String(xhr.status)),
           );
     xhr.onerror = () => reject(new StorageUploadError(0, NETWORK_CODE));
+    // xhr.abort() fires this synchronously too; the user's Cancel has already aborted the signal and rejects below.
+    xhr.onabort = () => {
+      if (!signal.aborted) reject(new StorageUploadError(0, INTERRUPTED_CODE));
+    };
     signal.addEventListener(
       "abort",
       () => {

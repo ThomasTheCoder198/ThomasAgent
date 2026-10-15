@@ -34,7 +34,11 @@ Retry resumes where it failed: it presigns again only when there is no ticket or
 when the storage step failed or confirm answered `VALIDATION_FAILED` on `file` (`MISSING`, `SIZE_MISMATCH`), and otherwise
 confirms again (a confirm retry always confirms its own ticket's file, even if the ticket has expired). A row shows
 Preparing, then byte progress, then Finishing. Failures: presign and confirm are `ApiError`s with a request id; the
-storage step is a `StorageUploadError` with the S3 code and **no request id** (MinIO has none). Files that fail the
+storage step is a `StorageUploadError` with the S3 code and **no request id** (MinIO has none). `storage-errors.ts`
+maps it (S3 code, else HTTP status) to one of `kb.storage.*` (size mismatch for `EntityTooLarge` or `EntityTooSmall`, link denied or expired, timeout,
+busy, storage fault, unreachable, interrupted, otherwise refused); `FileList` announces it in an error toast titled
+with the file name, and the row repeats it quietly (no second `role=alert`) beside Retry (P-F17, owner 2026-10-14).
+An abort the user did not cause is `INTERRUPTED`; the user's Cancel is never a failure. Files that fail the
 client check (type, size, empty) offer Dismiss only.
 
 ## Download

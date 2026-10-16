@@ -300,3 +300,42 @@
     --tw-exit-translate-y: 0;
   }
 }
+
+/*
+ * A scroller whose bar stays out of sight until the pointer is over it (or focus is inside), then shows as a
+ * slim rounded thumb. Chromium and Safari draw ::-webkit-scrollbar only while the standard properties are auto,
+ * so those are reset there; Firefox uses the standard thin bar.
+ */
+@utility scroll-quiet {
+  scrollbar-gutter: stable;
+  @supports selector(::-webkit-scrollbar) {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+    &::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    &::-webkit-scrollbar-thumb {
+      background: transparent;
+      border-radius: 9999px;
+    }
+    &:hover::-webkit-scrollbar-thumb,
+    &:focus-within::-webkit-scrollbar-thumb {
+      background: color-mix(in srgb, var(--foreground) 22%, transparent);
+    }
+    &::-webkit-scrollbar-thumb:hover {
+      background: color-mix(in srgb, var(--foreground) 38%, transparent);
+    }
+  }
+  @supports not selector(::-webkit-scrollbar) {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    &:hover,
+    &:focus-within {
+      scrollbar-color: color-mix(in srgb, var(--foreground) 22%, transparent) transparent;
+    }
+  }
+}

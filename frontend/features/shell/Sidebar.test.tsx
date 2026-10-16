@@ -7,7 +7,7 @@ import { Sidebar } from "./Sidebar";
 const labels = {
   newChat: "Hội thoại mới",
   search: "Tìm kiếm",
-  searchSoon: "Bảng lệnh ⌘K có ở M2",
+  searchSoon: "Tìm kiếm có ở M2",
   recents: "Gần đây",
   recentsEmpty: "Hội thoại gần đây sẽ hiện ở đây.",
   tenant: "Self-hosted · 1 tenant",

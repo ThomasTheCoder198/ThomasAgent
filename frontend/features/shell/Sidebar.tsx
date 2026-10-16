@@ -61,7 +61,7 @@ function Recents({ recents, labels, activeHref }: Pick<Props, "recents" | "label
   return (
     <>
       <h2 className="text-muted-foreground px-3 pt-6 pb-2 text-[0.8125rem] font-medium">{labels.recents}</h2>
-      <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+      <ul className="scroll-quiet flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
         {recents.length === 0 && (
           <li className="text-muted-foreground px-3 text-[0.8125rem] leading-snug">{labels.recentsEmpty}</li>
         )}
@@ -106,7 +106,6 @@ function PrimaryActions({ labels }: Pick<Props, "labels">) {
         >
           <Search aria-hidden />
           <span className={RAIL_TEXT}>{labels.search}</span>
-          <kbd className={cn("ml-auto font-sans text-xs", RAIL_GONE)}>⌘K</kbd>
         </Button>
       </span>
     </div>

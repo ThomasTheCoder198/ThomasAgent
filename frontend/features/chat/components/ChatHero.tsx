@@ -7,6 +7,7 @@ import { lineIcons } from "@/components/lineIcons";
 import { lineText, toolLines, type Line } from "@/components/lines";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/cn";
+import { staggerStyle } from "@/lib/stagger";
 
 import { AgentOrb } from "./AgentOrb";
 
@@ -15,16 +16,32 @@ const SOURCE_NAMES = { kb: "KB", mcp: "MCP", cmp: "Composio", app: "Apps" } as c
 
 const HERO_ORB_SIZE = 64;
 
-/** The empty thread's opening: a breathing orb, the question, and one muted line about how answers are made. */
+/** Hero pieces arrive one after another: orb, title, body, composer, chips. */
+export const HERO_STAGGER_MS = 60;
+export const heroStep = { orb: 0, title: 1, body: 2, composer: 3, chips: 4 } as const;
+export const heroStyle = (step: number) => staggerStyle(step, HERO_STAGGER_MS);
+
+/** The empty thread's opening: a living orb, the question, and one muted line about how answers are made. */
 export function HeroIntro({ className }: { className?: string }) {
   const t = useTranslations("chat");
   return (
     <section className={cn("flex flex-col items-center gap-4 px-4 text-center md:px-6", className)}>
-      <AgentOrb state="breathing" size={HERO_ORB_SIZE} />
-      <h2 className="max-w-[24ch] font-serif text-[clamp(2rem,4vw,2.75rem)] leading-[1.15] font-medium tracking-[-0.01em] text-balance">
+      {/* `breathing` is a slow face-on ring that reads as still at 64px; the orbiting particles of `working` read as alive. */}
+      <div className="animate-rise" style={heroStyle(heroStep.orb)}>
+        <AgentOrb state="working" size={HERO_ORB_SIZE} />
+      </div>
+      <h2
+        style={heroStyle(heroStep.title)}
+        className="animate-rise max-w-[24ch] font-serif text-[clamp(2rem,4vw,2.75rem)] leading-[1.15] font-medium tracking-[-0.01em] text-balance"
+      >
         {t("newTitle")}
       </h2>
-      <p className="text-muted-foreground max-w-[56ch] text-[0.9375rem] text-pretty">{t("newBody")}</p>
+      <p
+        style={heroStyle(heroStep.body)}
+        className="text-muted-foreground animate-rise max-w-[56ch] text-[0.9375rem] text-pretty"
+      >
+        {t("newBody")}
+      </p>
     </section>
   );
 }
@@ -47,7 +64,8 @@ export function HeroSources({ className }: { className?: string }) {
   return (
     <ul
       aria-label={t("sourcesLabel")}
-      className={cn("flex flex-wrap justify-center gap-2 px-4 md:px-6", className)}
+      style={heroStyle(heroStep.chips)}
+      className={cn("animate-rise flex flex-wrap justify-center gap-2 px-4 md:px-6", className)}
     >
       <SourceChip line="model" name={t("model")} />
       {toolLines.map((line) => (

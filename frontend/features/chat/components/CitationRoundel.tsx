@@ -34,7 +34,7 @@ export function CitationRoundel({ n, label, line = "kb", selected = false, onSel
       className={cn(
         look,
         // The glyph stays 20px; below md an invisible halo brings the hit area to the 44px touch floor.
-        "ease-out-expo ring-offset-background aria-pressed:ring-ring relative mx-0.5 -translate-y-px align-middle transition-transform duration-200 hover:scale-110 focus-visible:scale-110 aria-pressed:ring-2 aria-pressed:ring-offset-2 max-md:after:absolute max-md:after:-inset-3 max-md:after:content-['']",
+        "ease-out-expo aria-pressed:ring-primary/35 focus-visible:ring-ring/40 relative mx-0.5 -translate-y-px align-middle transition-transform duration-200 hover:scale-110 focus-visible:scale-110 focus-visible:ring-[3px] focus-visible:outline-none aria-pressed:ring-[3px] max-md:after:absolute max-md:after:-inset-3 max-md:after:content-['']",
       )}
     >
       {n}

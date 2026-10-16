@@ -20,6 +20,7 @@
   },
   "auth": {
     "title": "Sign in",
+    "windowTitle": "Sign in",
     "subtitle": "Your own AI workspace.",
     "email": "Email",
     "password": "Password",

@@ -70,7 +70,7 @@ export function AssistantMessage({
   if (segments.length === 0 && streaming) return <PendingReply />;
 
   return (
-    <article className="mb-8" aria-busy={streaming}>
+    <article className="animate-rise mb-8" aria-busy={streaming}>
       {segments.map((segment, index) => {
         if (segment.kind === "text") {
           return (

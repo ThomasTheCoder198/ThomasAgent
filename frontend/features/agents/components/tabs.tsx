@@ -24,7 +24,7 @@ export function OverviewTab({ agent, draft, update, errors }: TabProps) {
   const locale = useLocale();
   return (
     <>
-      <SettingsSection title={t("name")}>
+      <SettingsSection index={0} title={t("name")}>
         <Field label={t("name")} error={errors.name ? t("nameRequired") : undefined}>
           {(control) => (
             <Input
@@ -36,7 +36,7 @@ export function OverviewTab({ agent, draft, update, errors }: TabProps) {
           )}
         </Field>
       </SettingsSection>
-      <SettingsSection title={t("description")}>
+      <SettingsSection index={1} title={t("description")}>
         <Field label={t("description")} hideLabel>
           {(control) => (
             <Textarea
@@ -48,12 +48,12 @@ export function OverviewTab({ agent, draft, update, errors }: TabProps) {
           )}
         </Field>
       </SettingsSection>
-      <SettingsSection title={t("agentId")}>
+      <SettingsSection index={2} title={t("agentId")}>
         <code className="tabular text-muted-foreground bg-card border-border rounded-md border px-2.5 py-1.5 text-[13px]">
           {agent.id}
         </code>
       </SettingsSection>
-      <SettingsSection title={t("contextFiles")} hint={t("contextFilesHint")}>
+      <SettingsSection index={3} title={t("contextFiles")} hint={t("contextFilesHint")}>
         {agent.contextFiles.length === 0 ? (
           <p className="text-muted-foreground text-sm">{t("noContextFiles")}</p>
         ) : (

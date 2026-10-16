@@ -112,7 +112,7 @@ function ContextMeter({ ratio }: { ratio: number }) {
   );
 }
 
-/** The one surface with a sticker: a card with an ink outline, whatever the thread above it holds. */
+/** The one surface with a sticker: a card with an ink outline that blooms a soft halo (no ring offset) on focus. */
 export function Composer({
   busy,
   onSend,
@@ -144,7 +144,7 @@ export function Composer({
   return (
     <form
       onSubmit={submit}
-      className="border-outline bg-card shadow-sticker-lg focus-within:ring-ring ring-offset-background rounded-lg border-[1.5px] focus-within:ring-2 focus-within:ring-offset-2"
+      className="border-outline bg-card shadow-sticker-lg focus-within:ring-halo rounded-lg border-[1.5px] transition-shadow duration-150 focus-within:ring-[3px]"
     >
       <Textarea
         value={text}
@@ -153,7 +153,7 @@ export function Composer({
         rows={1}
         aria-label={t("inputLabel")}
         placeholder={t(compact ? "placeholderShort" : "placeholder")}
-        className="max-h-48 min-h-12 resize-none rounded-none border-0 bg-transparent px-4 pt-4 pb-2 outline-none focus-visible:outline-none"
+        className="max-h-48 min-h-12 resize-none rounded-none border-0 bg-transparent px-4 pt-4 pb-2 focus-visible:ring-0"
       />
       <div className="flex items-center gap-2 px-3 pb-3">
         <Button variant="ghost" size="icon" aria-label={t("attachSoon")} title={t("attachSoon")} disabled>

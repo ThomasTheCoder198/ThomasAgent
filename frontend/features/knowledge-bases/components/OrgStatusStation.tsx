@@ -4,8 +4,8 @@ import { CircleAlert, Clock } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ThinkingOrb } from "thinking-orbs";
 
+import { Orb } from "@/components/Orb";
 import { Button } from "@/components/ui/Button";
 import { retryOrganization } from "@/features/orgs/api";
 import type { Organization } from "@/features/orgs/contract";
@@ -63,7 +63,7 @@ function useRetry(org: Organization) {
 function StatusMark({ failed, live }: { failed: boolean; live: boolean }) {
   return (
     <span aria-hidden className="bg-secondary grid size-12 place-items-center rounded-full">
-      {live && <ThinkingOrb state="connecting" size={STATUS_ORB_SIZE} aria-hidden />}
+      {live && <Orb state="connecting" size={STATUS_ORB_SIZE} />}
       {failed && <CircleAlert className="text-destructive size-8" />}
       {!failed && !live && <Clock className="text-muted-foreground size-8" />}
     </span>

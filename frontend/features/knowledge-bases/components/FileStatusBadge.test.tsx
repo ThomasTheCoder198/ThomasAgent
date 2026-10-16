@@ -8,7 +8,7 @@ import { fileStatuses } from "../contract";
 import { FileStatusBadge } from "./FileStatusBadge";
 
 // jsdom has no canvas.
-vi.mock("thinking-orbs", () => ({ ThinkingOrb: () => <span data-testid="orb" /> }));
+vi.mock("@/components/Orb", () => ({ Orb: () => <span data-testid="orb" /> }));
 
 function renderBadge(status: (typeof fileStatuses)[number], errorCode = "") {
   return render(

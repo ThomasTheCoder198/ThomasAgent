@@ -1,9 +1,9 @@
 "use client";
 
-import { ThinkingOrb, type OrbSize, type OrbState } from "thinking-orbs";
+import type { OrbSize, OrbState } from "thinking-orbs";
 
 import type { Line } from "@/components/lines";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { Orb } from "@/components/Orb";
 
 import { useCssColor } from "../useCssColor";
 
@@ -30,24 +30,12 @@ const TINT_FALLBACK: Record<OrbTint, string> = {
   app: "#c5352b",
 };
 
-const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
-
 type Props = { state: OrbState; size: OrbSize; tint?: OrbTint; className?: string };
 
 /** A Thinking Orb tinted from the theme tokens. It is decorative: the text beside it carries the meaning. */
 export function AgentOrb({ state, size, tint = "primary", className }: Props) {
   const color = useCssColor(TINT_VARIABLE[tint], TINT_FALLBACK[tint]);
-  const reducedMotion = useMediaQuery(REDUCED_MOTION);
-  return (
-    <ThinkingOrb
-      state={state}
-      size={size}
-      color={color}
-      paused={reducedMotion}
-      aria-hidden
-      className={className ?? "block"}
-    />
-  );
+  return <Orb state={state} size={size} color={color} className={className} />;
 }
 
 /** Spec §10.1: searching for KB, connecting for MCP/Composio/Apps, solving while the model thinks. */

@@ -10,7 +10,7 @@ import type { ModelChoice } from "@/features/registry/types";
 
 import { AssistantMessage, PendingReply, UserMessage } from "./components/AssistantMessage";
 import { ChatHeader } from "./components/ChatHeader";
-import { HeroIntro, HeroSources } from "./components/ChatHero";
+import { HeroIntro, heroStep, heroStyle, HeroSources } from "./components/ChatHero";
 import { Composer } from "./components/Composer";
 import type { ChatMessage, ChatScope } from "./contract";
 import { EvidencePanel } from "./evidence/EvidencePanel";
@@ -122,10 +122,12 @@ export function ChatSurface({
             </div>
           )}
           <div
+            // The composer keeps its place in the tree, so only the hero's entrance fades it in (3rd step).
+            style={empty ? heroStyle(heroStep.composer) : undefined}
             className={cn(
               CHAT_COLUMN,
               "shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]",
-              empty && "order-3 md:order-2",
+              empty && "animate-rise order-3 md:order-2",
             )}
           >
             <Composer

@@ -6,6 +6,7 @@ import type { ComponentProps, RefObject } from "react";
 import { cn } from "@/lib/cn";
 
 import { buttonVariants, type ButtonProps } from "./Button";
+import { OsTitlebar, OsWindow, OsWindowBody } from "./OsWindow";
 import { useModalLayer } from "./useModalLayer";
 
 export function AlertDialog(props: ComponentProps<typeof AlertDialogPrimitive.Root>) {
@@ -24,7 +25,7 @@ export function AlertDialogOverlay({
     <AlertDialogPrimitive.Overlay
       data-slot="alert-dialog-overlay"
       className={cn(
-        "bg-scrim data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 fixed inset-0 z-40 duration-200",
+        "os-backdrop data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 fixed inset-0 z-40 duration-200",
         className,
       )}
       {...props}
@@ -36,6 +37,7 @@ export function AlertDialogOverlay({
 export function AlertDialogContent({
   className,
   returnFocusRef,
+  children,
   ...props
 }: ComponentProps<typeof AlertDialogPrimitive.Content> & {
   returnFocusRef?: RefObject<HTMLElement | null>;
@@ -49,10 +51,15 @@ export function AlertDialogContent({
         {...props}
         {...layer}
         className={cn(
-          "bg-card text-card-foreground border-border shadow-lift data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg border p-5 duration-200 sm:p-6",
+          "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 fixed top-1/2 left-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 duration-200",
           className,
         )}
-      />
+      >
+        <OsWindow>
+          <OsTitlebar />
+          <OsWindowBody className="flex flex-col gap-4">{children}</OsWindowBody>
+        </OsWindow>
+      </AlertDialogPrimitive.Content>
     </AlertDialogPrimitive.Portal>
   );
 }

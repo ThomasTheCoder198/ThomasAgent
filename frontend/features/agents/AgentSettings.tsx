@@ -97,7 +97,7 @@ export function AgentSettings({ agent: initial, knowledgeBases, models, roles, i
       <TabsContent
         key={tab}
         value={tab}
-        className="animate-rise mx-auto w-full max-w-5xl flex-1 px-4 pt-6 pb-28 outline-none md:px-6 lg:px-8"
+        className="mx-auto w-full max-w-5xl flex-1 px-4 pt-6 pb-28 outline-none md:px-6 lg:px-8"
       >
         {/* Disabling the whole fieldset while saving keeps the draft identical to what was sent. */}
         <fieldset disabled={editor.saving} className="contents">

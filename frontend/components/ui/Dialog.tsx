@@ -1,12 +1,12 @@
 "use client";
 
-import { XIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import type { ComponentProps, RefObject } from "react";
 
 import { cn } from "@/lib/cn";
 
+import { OsTitlebar, OsWindow, OsWindowBody, OsWindowClose } from "./OsWindow";
 import { useModalLayer } from "./useModalLayer";
 
 export function Dialog(props: ComponentProps<typeof DialogPrimitive.Root>) {
@@ -26,7 +26,7 @@ export function DialogOverlay({ className, ...props }: ComponentProps<typeof Dia
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "bg-scrim data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 fixed inset-0 z-40 duration-200",
+        "os-backdrop data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 fixed inset-0 z-40 duration-200",
         className,
       )}
       {...props}
@@ -40,7 +40,7 @@ type ContentProps = ComponentProps<typeof DialogPrimitive.Content> & {
   returnFocusRef?: RefObject<HTMLElement | null>;
 };
 
-/** A lifted notice on a scrim: card fill, lift shadow, 14px radius; focus is trapped and returned. */
+/** Radix owns the modal semantics; the inner frame supplies the window chrome. */
 export function DialogContent({
   className,
   children,
@@ -58,20 +58,22 @@ export function DialogContent({
         {...props}
         {...layer}
         className={cn(
-          "bg-card text-card-foreground border-border shadow-lift data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg border p-5 duration-200 sm:p-6",
+          "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 fixed top-1/2 left-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 duration-200",
           className,
         )}
       >
-        {children}
-        {showCloseButton && (
-          <DialogPrimitive.Close
-            data-slot="dialog-close"
-            className="text-muted-foreground hover:bg-accent hover:text-foreground absolute top-3 right-3 grid size-8 place-items-center rounded-md transition-colors max-md:size-11 [&_svg]:size-4"
-          >
-            <XIcon aria-hidden />
-            <span className="sr-only">{t("close")}</span>
-          </DialogPrimitive.Close>
-        )}
+        <OsWindow>
+          <OsTitlebar
+            closeControl={
+              showCloseButton ? (
+                <DialogPrimitive.Close asChild>
+                  <OsWindowClose aria-label={t("close")} />
+                </DialogPrimitive.Close>
+              ) : undefined
+            }
+          />
+          <OsWindowBody className="flex flex-col gap-4">{children}</OsWindowBody>
+        </OsWindow>
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
   );

@@ -5,9 +5,11 @@ import { getLocale } from "next-intl/server";
 import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
 
+import { MotionProvider } from "@/components/MotionProvider";
 import { Toaster } from "@/components/ui/Sonner";
 
 import "./globals.css";
+import "./os-window.css";
 
 // Vietnamese is the default language, so every face loads its vietnamese subset. next/font needs the options
 // as literals, so the subset list is repeated rather than shared.
@@ -48,7 +50,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       <body className="bg-background text-foreground min-h-dvh">
         <ThemeProvider attribute="data-theme" defaultTheme="system" enableSystem disableTransitionOnChange>
           <NextIntlClientProvider>
-            {children}
+            <MotionProvider>{children}</MotionProvider>
             <Toaster />
           </NextIntlClientProvider>
         </ThemeProvider>

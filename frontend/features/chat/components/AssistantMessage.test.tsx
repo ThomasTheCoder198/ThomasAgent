@@ -9,8 +9,8 @@ import { AssistantMessage } from "./AssistantMessage";
 import { HeroSources } from "./ChatHero";
 
 const orbs = vi.hoisted(() => vi.fn());
-vi.mock("thinking-orbs", () => ({
-  ThinkingOrb: (props: Record<string, unknown>) => {
+vi.mock("@/components/Orb", () => ({
+  Orb: (props: Record<string, unknown>) => {
     orbs(props);
     return null;
   },

@@ -51,6 +51,14 @@ function renderWithIntl(ui: React.ReactNode) {
 }
 
 describe("DialogContent focus return", () => {
+  it("keeps the title as the accessible name and closes from the titlebar", async () => {
+    renderWithIntl(<Harness />);
+    await userEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(screen.getByRole("dialog", { name: "Title" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: messages.common.close }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
   it("returns focus to the element that opened it, not to <body>", async () => {
     renderWithIntl(<Harness />);
     await userEvent.click(screen.getByRole("button", { name: "Open" }));

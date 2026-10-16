@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import type { SessionUser } from "@/features/auth/types";
 import { cn } from "@/lib/cn";
 
+import { NavGroup } from "./NavGroup";
 import { NavLink, type OrgScope } from "./NavLink";
 
 export type NavItem = {
@@ -46,9 +47,9 @@ type Props = {
 };
 
 const NEW_CHAT_HREF = "/chat";
-/** 40px rows (44px below md); the current page is a card with a 1px outline and a violet icon. */
+/** 40px rows (44px below md); the current page is a card with a 1px outline, a violet icon and a sliding violet bar. */
 const rowLink =
-  "group/row hover:bg-sidebar-accent aria-[current=page]:bg-card aria-[current=page]:border-outline flex min-h-10 items-center rounded-md border border-transparent text-sm transition-colors duration-150 max-md:min-h-11";
+  "group/row hover:bg-sidebar-accent aria-[current=page]:bg-card aria-[current=page]:border-outline relative flex min-h-10 items-center rounded-md border border-transparent text-sm transition-colors duration-150 max-md:min-h-11";
 
 /** Folded to the icon rail (desktop only): text stays for screen readers, decoration goes. */
 const RAIL_TEXT = "md:group-data-[collapsed=true]/shell:sr-only";
@@ -159,28 +160,31 @@ export function Sidebar({ items, recents, user, labels, activeHref, footer, org,
       {org}
       <PrimaryActions labels={labels} />
       <nav aria-label={labels.nav} className="mt-6 flex flex-col gap-1">
-        {items.map(({ href, label, icon: Icon, lines, orgScope }) => (
-          <NavLink
-            key={href}
-            href={href}
-            orgScope={orgScope}
-            match="section"
-            serverPath={activeHref}
-            title={label}
-            className={cn(rowLink, "gap-3 px-3 font-medium", RAIL_CENTER)}
-          >
-            <Icon
-              aria-hidden
-              className="group-aria-[current=page]/row:text-primary size-4 shrink-0 transition-colors"
-            />
-            <span className={RAIL_TEXT}>{label}</span>
-            {lines && (
-              <span className={cn("ml-auto", RAIL_GONE)}>
-                <LineDots lines={lines} size="md" />
-              </span>
-            )}
-          </NavLink>
-        ))}
+        <NavGroup>
+          {items.map(({ href, label, icon: Icon, lines, orgScope }) => (
+            <NavLink
+              key={href}
+              href={href}
+              orgScope={orgScope}
+              match="section"
+              serverPath={activeHref}
+              title={label}
+              indicator
+              className={cn(rowLink, "gap-3 px-3 font-medium", RAIL_CENTER)}
+            >
+              <Icon
+                aria-hidden
+                className="group-aria-[current=page]/row:text-primary size-4 shrink-0 transition-colors"
+              />
+              <span className={RAIL_TEXT}>{label}</span>
+              {lines && (
+                <span className={cn("ml-auto", RAIL_GONE)}>
+                  <LineDots lines={lines} size="md" />
+                </span>
+              )}
+            </NavLink>
+          ))}
+        </NavGroup>
       </nav>
       <div className={cn("flex min-h-0 flex-1 flex-col", RAIL_GONE)}>
         <Recents recents={recents} labels={labels} activeHref={activeHref} />

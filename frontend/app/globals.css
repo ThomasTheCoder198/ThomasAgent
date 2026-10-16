@@ -60,9 +60,11 @@
      override of --shadow-lift itself would never reach it. */
   --lift-ink: rgb(29 26 21 / 0.35);
   --lift-ink-sm: rgb(29 26 21 / 0.08);
+  /* The soft halo around a focused field or the composer: the border turns violet and this ring blooms outside it. */
+  --halo: color-mix(in srgb, var(--primary) 15%, transparent);
+  /* Vertical travel of an entrance (`rise`); reduced motion keeps the fade and drops the travel. */
+  --rise-y: 8px;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  /* Delay step between items that enter together (list rows, stations). */
-  --stagger: 45ms;
   color-scheme: light;
 }
 
@@ -106,6 +108,7 @@
   --scrim: rgb(0 0 0 / 0.6);
   --lift-ink: rgb(0 0 0 / 0.7);
   --lift-ink-sm: rgb(0 0 0 / 0.4);
+  --halo: color-mix(in srgb, var(--primary) 25%, transparent);
   color-scheme: dark;
 }
 
@@ -146,6 +149,7 @@
   --color-input: var(--input);
   --color-outline: var(--outline);
   --color-ring: var(--ring);
+  --color-halo: var(--halo);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
@@ -186,11 +190,10 @@
       opacity: 0;
     }
   }
-  /* Starts already readable: content is never hidden waiting for its entrance. */
   @keyframes rise {
     from {
-      opacity: 0.6;
-      transform: translateY(6px);
+      opacity: 0;
+      transform: translateY(var(--rise-y));
     }
   }
   @keyframes fade {
@@ -238,8 +241,9 @@
     color: var(--foreground);
   }
 
+  /* Fallback for anything that does not draw its own focus style (links, plain tabindex targets); keyboard only. */
   :focus-visible {
-    outline: 2px solid var(--ring);
+    outline: 2px solid color-mix(in srgb, var(--ring) 55%, transparent);
     outline-offset: 2px;
   }
 
@@ -274,14 +278,25 @@
   }
 }
 
+/*
+ * Reduced motion is gentle, not off: transitions, hover/press feedback, fades and the orbs keep running. Only
+ * travel shrinks (entrances stop sliding) and decorative keyframes that scale or sweep run shorter.
+ */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-delay: 0s !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    transition-delay: 0s !important;
+  :root {
+    --rise-y: 0px;
+  }
+
+  .animate-pop,
+  .animate-stem {
+    animation-duration: 0.2s;
+  }
+
+  /* A drawer crossing the whole screen is large travel: it fades in place instead. */
+  [data-slot="sheet-content"][data-state] {
+    --tw-enter-translate-x: 0;
+    --tw-enter-translate-y: 0;
+    --tw-exit-translate-x: 0;
+    --tw-exit-translate-y: 0;
   }
 }

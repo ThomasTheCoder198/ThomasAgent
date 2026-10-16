@@ -20,8 +20,8 @@ anything; core owns history.
 ## Layout
 
 - One centred `max-w-3xl` column (16px gutters, 24px from md) holds hero, thread and composer.
-- Empty thread: from md the hero (64px `breathing` orb, Newsreader title, one muted line), the composer and the tool-source chips sit in the vertical middle; below md the hero takes the top third and the composer stays docked at the bottom. The composer keeps one place in the tree, so its focus survives the first send.
-- Before the first part of a reply: a 32px `solving` orb with "Thinking…" (`role="status"`). Live station: a 20px orb tinted with its line colour (KB searching, other tools connecting, model solving); while the answer text streams a 20px `composing` orb sits under it. Orbs are `paused` under `prefers-reduced-motion`.
+- Empty thread: from md the hero (64px `working` orb — `breathing` reads as still at that size — Newsreader title, one muted line), the composer and the tool-source chips sit in the vertical middle; below md the hero takes the top third and the composer stays docked at the bottom. The composer keeps one place in the tree, so its focus survives the first send.
+- Before the first part of a reply: a 32px `solving` orb with "Thinking…" (`role="status"`). Live station: a 20px orb tinted with its line colour (KB searching, other tools connecting, model solving); while the answer text streams a 20px `composing` orb sits under it. Under `prefers-reduced-motion` orbs keep running at 0.6x speed (owner decision 2026-10-16).
 - Evidence: Escape/overlay close apply to the Sheets (modal Radix); the docked column closes with its button.
 
 ## Dependencies
@@ -43,7 +43,7 @@ npm run e2e -- e2e/chat.spec.ts
 - `[n]` markers become roundels only when a source numbered `n` exists in the same message.
 - Tool colours come only from `components/lines.ts`; an approval card uses its own station's line colour and icon.
 - `ChatHeader` renders the shell's menu button only when `pageOwnsHeader(pathname)` says chat owns the mobile bar, so phones never get two bars.
-- Orbs are mounted only through `AgentOrb`/`OrbNote` (tint from a CSS token, paused under reduced motion); tests mock `thinking-orbs` because jsdom has no canvas.
+- Orbs are mounted only through `AgentOrb`/`OrbNote` (tint from a CSS token) over `components/Orb.tsx`, which is never paused for reduced motion; tests mock `@/components/Orb` because jsdom has no canvas.
 - `/chat` creates a fresh draft conversation; `/chat/[id]` renders the workspace 404 state when that conversation is missing.
 
 ## Common failures

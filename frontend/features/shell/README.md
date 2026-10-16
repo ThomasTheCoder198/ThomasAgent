@@ -8,7 +8,7 @@ rail, the mobile drawer, page headers, empty states and the route status pages.
 
 ## Entry points
 
-- `Sidebar.tsx` — presentational; a 256px (`w-64`) surface with a right border, folding to a 64px icon rail through the `group/shell` `data-collapsed` variant. Rows are 40px (44px below md); the current page is a card fill with a 1px outline and a violet icon. New chat is the primary `Button` (a link). The `org` slot renders the org switcher (`features/orgs`) under the brand.
+- `Sidebar.tsx` — presentational; a 256px (`w-64`) surface with a right border, folding to a 64px icon rail through the `group/shell` `data-collapsed` variant. Rows are 40px (44px below md); the current page is a card fill with a 1px outline, a violet icon and a 3px violet bar that slides between rows (`NavGroup` scopes it per sidebar). New chat is the primary `Button` (a link). The `org` slot renders the org switcher (`features/orgs`) under the brand.
 - `ShellFrame.tsx` + `useSidebarRail.ts` — below `md` the same sidebar opens in a left shadcn `Sheet` (named by `shell.nav`, closes on navigation and on any link inside it); pages without their own header get a 56px top bar with the menu button and the brand. On desktop the rail toggle (button or Cmd/Ctrl+B) is persisted in the `thomas_sidebar` cookie (`sidebar-state.ts`) so the server renders the right width.
 - `shell-menu.ts` — context for `MenuButton` / `CollapseButton`; `pageOwnsHeader()` lists routes whose header carries the mobile menu button (chat, agents, orgs).
 - `MenuButton.tsx` — opens the drawer; renders nothing outside the shell.

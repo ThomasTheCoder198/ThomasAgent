@@ -20,6 +20,7 @@
   },
   "auth": {
     "title": "Đăng nhập",
+    "windowTitle": "Đăng nhập",
     "subtitle": "Workspace AI của riêng bạn.",
     "email": "Email",
     "password": "Mật khẩu",

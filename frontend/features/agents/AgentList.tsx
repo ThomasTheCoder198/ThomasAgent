@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
 import { EmptyState } from "@/features/shell/EmptyState";
+import { staggerStyle } from "@/lib/stagger";
 
 import { AgentMeta } from "./components/AgentMeta";
 import type { AgentSummary } from "./contract";
@@ -18,11 +19,7 @@ export async function AgentList({ agents }: { agents: AgentSummary[] }) {
   return (
     <ul aria-label={t("title")} className="-mx-3">
       {agents.map((agent, index) => (
-        <li
-          key={agent.id}
-          style={{ animationDelay: `calc(${index} * var(--stagger))` }}
-          className="animate-rise"
-        >
+        <li key={agent.id} style={staggerStyle(index)} className="animate-rise">
           <Link
             href={`/agents/${encodeURIComponent(agent.id)}`}
             className="group border-border hover:bg-accent/50 flex min-h-11 items-center gap-4 border-b px-3 py-3 transition-colors md:py-4"

@@ -9,7 +9,7 @@ Sign-in follows the form rules of `frontend/AGENTS.md`: missing or malformed fie
 
 ## Entry points
 
-- `LoginForm.tsx` — validates, posts to `POST /api/v1/auth/login` and follows `next`; failures go through `useNotify().error`. `app/login/page.tsx` is the second hero: a centred, card-less column with the Newsreader title and a `PreferencesMenu` for theme and language.
+- `LoginForm.tsx` — validates, posts to `POST /api/v1/auth/login` and follows `next`; failures go through `useNotify().error`. `app/login/page.tsx` keeps the Newsreader hero and theme/language menu above a centred OS window sign-in form.
 - `credentials.ts` — `validateCredentials` (email required and shaped like an address, password required).
 - `session.ts` — `requireUser(nextPath)` for server layouts; redirects to `/login?next=…` on `UNAUTHENTICATED` / `AUTH_SESSION_EXPIRED`.
 - `paths.ts` — auth endpoints, routes, `safeNext` (same-origin only), cookie name used by `proxy.ts`.

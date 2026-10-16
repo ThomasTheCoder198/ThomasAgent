@@ -1,16 +1,17 @@
 import { getTranslations } from "next-intl/server";
 
 import { BrandMark } from "@/components/BrandMark";
+import { OsTitlebar, OsWindow, OsWindowBody } from "@/components/ui/OsWindow";
 import { LoginForm } from "@/features/auth/LoginForm";
 import { safeNext } from "@/features/auth/paths";
 import { PreferencesMenu } from "@/features/preferences/PreferencesMenu";
 
-/** The product's second hero: a centred column on the page background, no card, no side panel. */
+/** The login hero introduces the product above its focused sign-in window. */
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const t = await getTranslations("auth");
   const { next } = await searchParams;
   return (
-    <main className="flex min-h-dvh flex-col">
+    <main className="os-login-page flex min-h-dvh flex-col">
       <header className="flex h-14 shrink-0 items-center justify-between px-4 md:px-6 lg:px-8">
         <BrandMark label="ThomasAgent" />
         <PreferencesMenu />
@@ -21,7 +22,12 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           {t("title")}
         </h1>
         <p className="text-muted-foreground mt-3 mb-8">{t("subtitle")}</p>
-        <LoginForm next={safeNext(next)} />
+        <OsWindow>
+          <OsTitlebar title={t("windowTitle")} />
+          <OsWindowBody>
+            <LoginForm next={safeNext(next)} />
+          </OsWindowBody>
+        </OsWindow>
       </section>
     </main>
   );

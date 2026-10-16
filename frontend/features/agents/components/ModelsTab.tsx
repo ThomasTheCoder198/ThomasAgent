@@ -40,12 +40,12 @@ export function ModelsTab({ draft, update, models: loadedModels, roles: loadedRo
   return (
     <>
       <p className="text-muted-foreground max-w-[70ch] text-sm">{t("modelsHint")}</p>
-      {agentRoles.map((role) => {
+      {agentRoles.map((role, index) => {
         const keys = roleKeys[role];
         const platformModel = models.find((m) => m.id === roles.find((r) => r.role === role)?.modelId);
         const choices = models.filter((m) => m.capabilities.includes(roleCapability[role]));
         return (
-          <SettingsSection key={role} title={t(keys.label)} hint={t(keys.hint)}>
+          <SettingsSection key={role} index={index + 1} title={t(keys.label)} hint={t(keys.hint)}>
             <Field label={t(keys.label)} hideLabel>
               {(control) => (
                 <Select

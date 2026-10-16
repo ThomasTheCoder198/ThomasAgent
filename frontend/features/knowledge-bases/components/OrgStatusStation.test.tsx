@@ -10,7 +10,7 @@ import { OrgStatusStation } from "./OrgStatusStation";
 
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
-vi.mock("thinking-orbs", () => ({ ThinkingOrb: () => <span data-testid="orb" /> }));
+vi.mock("@/components/Orb", () => ({ Orb: () => <span data-testid="orb" /> }));
 const notify = { success: vi.fn(), error: vi.fn(), info: vi.fn(), problem: vi.fn() };
 vi.mock("@/lib/useNotify", () => ({ useNotify: () => notify }));
 const retryOrganization = vi.fn();

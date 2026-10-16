@@ -14,21 +14,21 @@ export const MAX_VISIBLE_TOASTS = 3;
 /**
  * Sonner ships an unlayered stylesheet, which beats Tailwind's layered utilities whatever the specificity,
  * so every override of one of its own declarations carries `!`. The toast is a floating layer: card fill,
- * hairline border, lift shadow, 14px radius. Its stack takes pointer events back because a modal layer sets
+ * OS border and offset shadow. Its stack takes pointer events back because a modal layer sets
  * `pointer-events: none` on <body>.
  */
 const TOAST_VARS = {
-  "--normal-bg": "var(--card)",
+  "--normal-bg": "var(--os-surface)",
   "--normal-text": "var(--card-foreground)",
-  "--normal-border": "var(--border)",
-  "--border-radius": "var(--radius-lg)",
+  "--normal-border": "var(--os-ink)",
+  "--border-radius": "4px",
   "--gray2": "var(--accent)",
   "--gray5": "var(--border)",
 } as CSSProperties;
 
 const CLASS_NAMES = {
-  toast: "shadow-lift! font-sans! text-sm! gap-3!",
-  title: "text-sm! leading-snug! font-semibold!",
+  toast: "os-toast font-sans! text-sm! gap-3!",
+  title: "os-toast-title text-sm! leading-snug!",
   description: "text-muted-foreground! text-[0.8125rem]!",
   closeButton: "text-muted-foreground! hover:text-foreground!",
   success: "[&_[data-icon]]:text-success",

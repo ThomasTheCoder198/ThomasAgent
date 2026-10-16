@@ -1,8 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { ThinkingOrb } from "thinking-orbs";
 
+import { Orb } from "@/components/Orb";
 import { Badge } from "@/components/ui/Badge";
 import type { FileStatus } from "@/lib/ragx/types";
 
@@ -41,7 +41,7 @@ export function FileStatusBadge({ status, errorCode }: { status: FileStatus; err
   }
   return (
     <Badge className={WORKING.has(status) ? "pl-1" : undefined}>
-      {WORKING.has(status) && <ThinkingOrb state="working" size={INLINE_ORB_SIZE} aria-hidden />}
+      {WORKING.has(status) && <Orb state="working" size={INLINE_ORB_SIZE} />}
       {t(`status.${status}`)}
     </Badge>
   );

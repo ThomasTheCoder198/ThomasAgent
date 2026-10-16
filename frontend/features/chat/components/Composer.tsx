@@ -8,6 +8,7 @@ import { lineBg } from "@/components/lines";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { useIsBelowMd } from "@/hooks/useMediaQuery";
 import { Textarea } from "@/components/ui/Textarea";
 import type { Model } from "@/features/registry/types";
 import { cn } from "@/lib/cn";
@@ -123,6 +124,8 @@ export function Composer({
   contextRatio,
 }: Props) {
   const t = useTranslations("chat");
+  // The tool hint does not fit a phone's line, and a wrapped placeholder leaves one word stranded.
+  const compact = useIsBelowMd();
   const [text, setText] = useState("");
   const canSend = text.trim().length > 0 && !busy;
 
@@ -149,7 +152,7 @@ export function Composer({
         onKeyDown={onKeyDown}
         rows={1}
         aria-label={t("inputLabel")}
-        placeholder={t("placeholder")}
+        placeholder={t(compact ? "placeholderShort" : "placeholder")}
         className="max-h-48 min-h-12 resize-none rounded-none border-0 bg-transparent px-4 pt-4 pb-2 outline-none focus-visible:outline-none"
       />
       <div className="flex items-center gap-2 px-3 pb-3">

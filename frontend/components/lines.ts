@@ -11,10 +11,6 @@ export function isToolLine(value: unknown): value is ToolLine {
   return toolLines.includes(value as ToolLine);
 }
 
-export function isLine(value: unknown): value is Line {
-  return value === "model" || isToolLine(value);
-}
-
 export const lineBg: Record<Line, string> = {
   kb: "bg-kb",
   mcp: "bg-mcp",

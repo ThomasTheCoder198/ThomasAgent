@@ -59,6 +59,7 @@
     "newBody": "Câu trả lời có trích dẫn từ Knowledge Base. Công cụ rủi ro chỉ chạy khi bạn cho phép.",
     "sourcesLabel": "Nguồn công cụ",
     "placeholder": "Hỏi ThomasAgent… gõ / để chọn công cụ",
+    "placeholderShort": "Hỏi ThomasAgent…",
     "inputLabel": "Tin nhắn",
     "send": "Gửi",
     "stop": "Dừng",
@@ -218,6 +219,7 @@
       "renamed": "Đã đổi tên thành “{name}”.",
       "deleted": "Đã xoá “{name}”.",
       "uploaded": "Đã tải lên “{name}”.",
+      "uploadedMany": "Đã tải lên {count} tệp.",
       "retried": "Đang thử lại “{name}”.",
       "orgReady": "“{name}” đã sẵn sàng."
     },

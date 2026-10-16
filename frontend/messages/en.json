@@ -59,6 +59,7 @@
     "newBody": "Answers cite your Knowledge Base. Risky tools only run when you allow them.",
     "sourcesLabel": "Tool sources",
     "placeholder": "Ask ThomasAgent… type / to pick a tool",
+    "placeholderShort": "Ask ThomasAgent…",
     "inputLabel": "Message",
     "send": "Send",
     "stop": "Stop",
@@ -218,6 +219,7 @@
       "renamed": "Renamed to “{name}”.",
       "deleted": "Deleted “{name}”.",
       "uploaded": "Uploaded “{name}”.",
+      "uploadedMany": "Uploaded {count} files.",
       "retried": "Retrying “{name}”.",
       "orgReady": "“{name}” is ready."
     },

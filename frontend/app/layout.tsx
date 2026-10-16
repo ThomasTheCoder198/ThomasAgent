@@ -6,7 +6,6 @@ import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
 
 import { Toaster } from "@/components/ui/Sonner";
-import { TooltipProvider } from "@/components/ui/Tooltip";
 
 import "./globals.css";
 
@@ -49,7 +48,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       <body className="bg-background text-foreground min-h-dvh">
         <ThemeProvider attribute="data-theme" defaultTheme="system" enableSystem disableTransitionOnChange>
           <NextIntlClientProvider>
-            <TooltipProvider>{children}</TooltipProvider>
+            {children}
             <Toaster />
           </NextIntlClientProvider>
         </ThemeProvider>

@@ -117,7 +117,7 @@ export function ChatSurface({
           {empty ? (
             <HeroIntro className="order-1 pt-8 pb-6 md:pb-8" />
           ) : (
-            <div ref={threadRef} className="min-h-0 flex-1 overflow-y-auto">
+            <div ref={threadRef} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]">
               <Thread session={session} evidence={evidence} />
             </div>
           )}

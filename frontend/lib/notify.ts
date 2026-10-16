@@ -28,8 +28,9 @@ export function describeError(error: unknown, locale: Locale): ErrorNotice {
   return { title, requestId: isServerError ? failure.requestId : undefined };
 }
 
-export function notifySuccess(title: string, description?: ReactNode): string | number {
-  return toast.success(title, { description, duration: AUTO_DISMISS_MS });
+/** Passing the same `id` again updates that toast in place instead of stacking a new one (a batch of uploads). */
+export function notifySuccess(title: string, description?: ReactNode, id?: string): string | number {
+  return toast.success(title, { description, duration: AUTO_DISMISS_MS, id });
 }
 
 export function notifyInfo(title: string, description?: ReactNode): string | number {

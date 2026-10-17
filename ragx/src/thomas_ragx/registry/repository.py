@@ -96,6 +96,10 @@ async def get_provider_row(conn: Connection, provider_id: UUID) -> DictRow | Non
     return await _one(conn, b"SELECT * FROM providers WHERE id = %s", (provider_id,))
 
 
+async def get_provider_row_for_update(conn: Connection, provider_id: UUID) -> DictRow | None:
+    return await _one(conn, b"SELECT * FROM providers WHERE id = %s FOR UPDATE", (provider_id,))
+
+
 async def get_provider_by_name(conn: Connection, name: str) -> Provider | None:
     row = await _one(conn, b"SELECT * FROM providers WHERE name = %s", (name,))
     return to_provider(row) if row else None
@@ -115,7 +119,8 @@ async def delete_provider(conn: Connection, provider_id: UUID) -> bool:
 async def upsert_synced_model(
     conn: Connection, model_id: UUID, provider_id: UUID, name: str, facts: ModelFacts
 ) -> None:
-    # Manual rows and operator-edited capabilities are never overwritten by a sync.
+    # Manual rows and operator-edited capabilities are never overwritten by a sync. Dims only fill a gap:
+    # most lists carry none, and a measured value (or a KB's collection size) must survive a re-sync.
     await conn.execute(
         b"INSERT INTO models (id, provider_id, name, capabilities, embedding_dims, context_window, "
         b"input_cost_per_token, output_cost_per_token, source) "
@@ -123,8 +128,9 @@ async def upsert_synced_model(
         b"ON CONFLICT (provider_id, name) DO UPDATE SET "
         b"capabilities = CASE WHEN models.capabilities_edited THEN models.capabilities "
         b"ELSE EXCLUDED.capabilities END, "
-        b"embedding_dims = CASE WHEN models.capabilities_edited THEN models.embedding_dims "
-        b"ELSE EXCLUDED.embedding_dims END, "
+        b"embedding_dims = CASE WHEN models.capabilities_edited OR EXISTS ("
+        b"SELECT 1 FROM knowledge_bases kb WHERE kb.embedding_model_id = models.id) "
+        b"THEN models.embedding_dims ELSE COALESCE(models.embedding_dims, EXCLUDED.embedding_dims) END, "
         b"context_window = EXCLUDED.context_window, input_cost_per_token = EXCLUDED.input_cost_per_token, "
         b"output_cost_per_token = EXCLUDED.output_cost_per_token, updated_at = now() "
         b"WHERE models.source = 'sync'",
@@ -161,20 +167,38 @@ async def insert_manual_model(
 
 
 async def update_model(
-    conn: Connection, model_id: UUID, capabilities: frozenset[Capability], embedding_dims: int | None
+    conn: Connection, model_id: UUID, capabilities: frozenset[Capability]
 ) -> ModelRecord | None:
+    # Dims are not editable here: only the measured path, a manual add and an empty-column sync write them.
     row = await _one(
         conn,
-        b"UPDATE models SET capabilities = %s, embedding_dims = %s, "
-        b"capabilities_edited = true, updated_at = now() "
+        b"UPDATE models SET capabilities = %s, capabilities_edited = true, updated_at = now() "
         b"WHERE id = %s RETURNING " + MODEL_COLUMNS,
-        (_capability_values(capabilities), embedding_dims, model_id),
+        (_capability_values(capabilities), model_id),
     )
     return to_model(row) if row else None
 
 
+async def set_measured_dims(conn: Connection, model_id: UUID, dims: int) -> bool:
+    """Fills missing dims only: a KB copies them into its collection, so a used model's size never moves.
+
+    Measuring is not an operator edit, so `capabilities_edited` stays as it was.
+    """
+    result = await conn.execute(
+        b"UPDATE models SET embedding_dims = %s, updated_at = now() WHERE id = %s AND embedding_dims IS NULL "
+        b"AND NOT EXISTS (SELECT 1 FROM knowledge_bases kb WHERE kb.embedding_model_id = models.id)",
+        (dims, model_id),
+    )
+    return result.rowcount > 0
+
+
 async def get_model(conn: Connection, model_id: UUID) -> ModelRecord | None:
     row = await _one(conn, b"SELECT " + MODEL_COLUMNS + b" FROM models WHERE id = %s", (model_id,))
+    return to_model(row) if row else None
+
+
+async def lock_model(conn: Connection, model_id: UUID) -> ModelRecord | None:
+    row = await _one(conn, b"SELECT " + MODEL_COLUMNS + b" FROM models WHERE id = %s FOR UPDATE", (model_id,))
     return to_model(row) if row else None
 
 

@@ -13,6 +13,7 @@
       <h2>{{ provider.name }}</h2>
       <p class="meta"><span class="tabular">{{ provider.kind.value }}</span>{% if provider.base_url %} · <span class="tabular truncate">{{ provider.base_url }}</span>{% endif %}</p>
       <p class="meta">{{ t('providers.key_set') if provider.has_api_key else t('providers.key_missing') }} · <span class="tabular">{{ count }}</span> {{ t('providers.model_count') }}</p>
+      {% if kind_rules[provider.kind].api_key_required and not provider.has_api_key %}<p class="meta">{{ t('providers.key_needed') }}</p>{% endif %}
     </div>
     <div class="row-actions">
       {% if provider.kind in listable %}
@@ -29,10 +30,23 @@
             <label for="name-{{ provider.id }}">{{ t('providers.name') }}</label>
             <input id="name-{{ provider.id }}" name="name" required maxlength="200" value="{{ provider.name }}">
           </div>
+          {% set url_rule = kind_rules[provider.kind].base_url.value %}
+          {% if url_rule == 'hidden' %}
+          <details class="advanced"{% if provider.base_url %} open{% endif %}>
+            <summary>{{ t('providers.advanced') }}</summary>
+            <div class="field">
+              <label for="base-{{ provider.id }}">{{ t('providers.base_url_override') }}</label>
+              <input id="base-{{ provider.id }}" name="base_url" type="url" class="tabular" value="{{ provider.base_url }}" placeholder="https://">
+              <p class="hint">{{ t('providers.base_url_override_hint') }} {{ t('providers.base_url_changes_key') }}</p>
+            </div>
+          </details>
+          {% else %}
           <div class="field">
             <label for="base-{{ provider.id }}">{{ t('providers.base_url') }}</label>
-            <input id="base-{{ provider.id }}" name="base_url" type="url" class="tabular" value="{{ provider.base_url }}" placeholder="https://">
+            <input id="base-{{ provider.id }}" name="base_url" type="url" class="tabular" value="{{ provider.base_url }}" placeholder="https://"{% if url_rule == 'required' %} required{% endif %}>
+            <p class="hint">{{ t('providers.base_url_hint') }} {{ t('providers.base_url_changes_key') }}</p>
           </div>
+          {% endif %}
           <div class="field">
             <label for="key-{{ provider.id }}">{{ t('providers.api_key') }}</label>
             <input id="key-{{ provider.id }}" name="api_key" type="password" autocomplete="off" placeholder="{{ t('providers.api_key_keep') }}">
@@ -59,27 +73,28 @@
 </ul>
 <section class="add" aria-labelledby="add-provider">
   <h2 id="add-provider">{{ t('providers.add') }}</h2>
+  <p class="lead">{{ t('providers.add_lead') }}</p>
   <form method="post" action="/ui/providers" class="form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="field">
       <label for="kind">{{ t('providers.kind') }}</label>
-      <select id="kind" name="kind" required class="tabular">
-        {% for kind in kinds %}<option value="{{ kind.value }}">{{ kind.value }}</option>{% endfor %}
+      <select id="kind" name="kind" required class="tabular" data-kind-select>
+        {% for kind in kinds %}{% set rules = kind_rules[kind] %}<option value="{{ kind.value }}" data-base-url="{{ rules.base_url.value }}" data-key-required="{{ 'true' if rules.api_key_required else 'false' }}"{% if form.get('kind') == kind.value %} selected{% endif %}>{{ kind.value }}</option>{% endfor %}
       </select>
       <p class="hint">{{ t('providers.kind_hint') }}</p>
     </div>
     <div class="field">
       <label for="name">{{ t('providers.name') }}</label>
-      <input id="name" name="name" required maxlength="200">
+      <input id="name" name="name" required maxlength="200" value="{{ form.get('name', '') }}">
     </div>
-    <div class="field">
+    <div class="field" data-base-url-field>
       <label for="base_url">{{ t('providers.base_url') }}</label>
-      <input id="base_url" name="base_url" type="url" class="tabular" placeholder="https://">
+      <input id="base_url" name="base_url" type="url" class="tabular" placeholder="https://" value="{{ form.get('base_url', '') }}" data-base-url-input>
       <p class="hint">{{ t('providers.base_url_hint') }}</p>
     </div>
     <div class="field">
       <label for="api_key">{{ t('providers.api_key') }}</label>
-      <input id="api_key" name="api_key" type="password" autocomplete="off">
+      <input id="api_key" name="api_key" type="password" autocomplete="off" data-key-input>
       <p class="hint">{{ t('providers.api_key_hint') }}</p>
     </div>
     <button class="button primary" type="submit">{{ t('providers.add') }}</button>

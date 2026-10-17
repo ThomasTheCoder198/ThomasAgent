@@ -64,6 +64,29 @@
       });
     });
 
+    // The kind decides which fields mean something: a built-in provider needs only its key. A hidden
+    // field is also disabled so a value typed before switching kinds is never posted. Without JS all stay.
+    document.querySelectorAll("[data-kind-select]").forEach(function (select) {
+      var form = select.form;
+      if (!form) { return; }
+      var field = form.querySelector("[data-base-url-field]");
+      var url = form.querySelector("[data-base-url-input]");
+      var key = form.querySelector("[data-key-input]");
+      function applyKind() {
+        var option = select.options[select.selectedIndex];
+        if (!option) { return; }
+        var mode = option.getAttribute("data-base-url");
+        if (field && url) {
+          field.hidden = mode === "hidden";
+          url.disabled = mode === "hidden";
+          url.required = mode === "required";
+        }
+        if (key) { key.required = option.getAttribute("data-key-required") === "true"; }
+      }
+      select.addEventListener("change", applyKind);
+      applyKind();
+    });
+
     // Full-page form posts show the departing-train bar on the pressed button until the next page arrives.
     document.addEventListener("submit", function (event) {
       var form = event.target;

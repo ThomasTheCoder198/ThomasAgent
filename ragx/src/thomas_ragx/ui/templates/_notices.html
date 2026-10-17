@@ -1,7 +1,7 @@
 {% if notice %}
 <p class="notice" role="status">
   <svg class="icon icon-ok" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
-  {{ t('notice.' ~ notice) }}
+  {{ t('notice.' ~ notice) }}{% if notice == 'synced' and notice_count %} · <span class="tabular">{{ notice_count }}</span> {{ t('notice.synced_unit') }}{% endif %}
 </p>
 {% endif %}
 {% if error %}

@@ -15,7 +15,7 @@ Server-rendered model-config UI at `/ui`: Login, Providers, Models, Roles. Templ
 ## Run & test
 ```bash
 cd ragx
-uv run pytest -q tests/unit/test_ui_messages.py tests/integration/test_admin_ui.py
+uv run pytest -q tests/unit/test_ui_messages.py tests/integration/test_admin_ui.py tests/integration/test_admin_ui_registry.py
 ```
 Then rebuild with `task up:ragx` and check `/ui` in a browser at 390 px and 1280 px, light and dark, VI and EN.
 
@@ -24,6 +24,11 @@ Then rebuild with `task up:ragx` and check `/ui` in a browser at 390 px and 1280
 - CSP allows only `'self'`: no inline script or style; `<meta name="htmx-config">` turns off htmx's injected indicator style.
 - Every unsafe request carries the CSRF token (hidden field, or `X-CSRF-Token` from `hx-headers`).
 - Post/redirect/get with `?notice=` or `?error=<catalog code>&rid=<failing request id>`, so the page shows the id that is in the logs. 5xx codes are logged once and shown as `INTERNAL_ERROR`.
+- Errors stay on the page where the action happened. A validation failure also carries its first field as `&field=apiKey&reason=REQUIRED`, shown as the localized `field_error.<field>.<reason>` message when `(field, reason)` is in `i18n.FIELD_ERRORS` (anything else falls back to the catalog message, so a crafted query cannot print a raw key). Sync redirects back to `/ui/providers` on failure and to `/ui/models?provider=<id>&notice=synced&count=<n>` on success.
+- A failed add-provider or add-model does not redirect: it re-renders the form with status 400, the typed values and the failing request id. The API key is the one value never sent back.
+- Providers form: the kind `<select>` carries `data-base-url` (`hidden`, `optional`, `required`) and `data-key-required` on each option, and `app.js` shows, disables and requires the base URL and key fields from them (no inline script; with JS off every field stays). Built-in kinds keep a base URL override in an Advanced disclosure on the Edit form.
+- Models page: filters are GET params read as plain strings (`provider`, `capability` in embedding/rerank/chat, `q` name search, `page`), so the empty All value means no filter; `ui_models_page_size` rows per page (OpenRouter alone syncs about 500). The model forms have no dimensions or context fields: the embedding size is measured when the Embedding role is saved (or on Test) and shown read-only.
+- The page head links `rel="icon" href="data:,"` so the browser `/favicon.ico` request does not 404 on every load.
 - Native controls only. Delete confirms in a native `<dialog>`; edit opens a `<details>` disclosure; Test swaps an inline result under its row; pending is the departing-train bar.
 - A message key used in a template must exist in both catalogs (`test_ui_messages.py`).
 - Vendored file SHA-256:
@@ -40,4 +45,4 @@ Then rebuild with `task up:ragx` and check `/ui` in a browser at 390 px and 1280
 ## Common failures
 - 403 `AUTH_CSRF_INVALID` → stale page after a new login → reload.
 - Unstyled page → static files missing from the wheel → check the image contains `thomas_ragx/ui/static`.
-- A failed add clears the form → post/redirect/get does not carry field values back → re-enter them (known limitation).
+- Saving the Embedding role fails with the provider-rejected message → the one-text probe call failed (no key, wrong key, model unavailable); fix the provider on the Providers page and save again.

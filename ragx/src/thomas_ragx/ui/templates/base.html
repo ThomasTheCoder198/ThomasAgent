@@ -6,6 +6,8 @@
   {# htmx would inject an inline <style>; the CSP allows only 'self', and ragx.css styles the request classes. #}
   <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
   <title>{{ t('title.' ~ page) }} · ragx</title>
+  {# No favicon asset: an empty data URL stops the browser's /favicon.ico request, which would 404 on every page. #}
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/ui/static/ragx.css">
   <script src="/ui/static/app.js"></script>
   <script src="/ui/static/vendor/htmx.min.js" defer></script>

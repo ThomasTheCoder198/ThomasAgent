@@ -112,7 +112,6 @@ async def test_provider_key_is_never_rendered_and_roles_offer_only_capable_model
                 "provider_id": str(provider_id),
                 "name": "embed-a",
                 "capabilities": "embedding",
-                "embedding_dims": "768",
             },
         )
         await client.post(

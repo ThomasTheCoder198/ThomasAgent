@@ -47,6 +47,8 @@ RAG pipeline settings (M1.3, defaults in `config.yaml`):
 
 `RAG_REDIS_SOCKET_TIMEOUT_SECONDS` (`redis_socket_timeout_seconds`, default 15.0, must be positive) is the read timeout of every ragx Redis client (`resources.create_redis`). redis-py applies it to blocking reads, so `Config` rejects a value at or below `RAG_STREAM_BLOCK_MILLISECONDS` / 1000 (default 5): otherwise each idle `XREADGROUP BLOCK` raises `TimeoutError` (redis-py defaults to 5 s) and the worker logs `stream poll failed` every cycle. Keep it well above the block (the default is 3x): `Config` only checks `>`, so 5.01 s passes yet times out under any network delay. It still bounds a dead connection.
 
+Model registry and admin UI settings (defaults in `config.yaml`): `RAG_MODEL_LISTING_TIMEOUT_SECONDS` (30.0) bounds OpenRouter's two list calls during Sync; `RAG_MODEL_PROBE_TIMEOUT_SECONDS` (30.0) bounds each Test call and the embedding-size probe; `RAG_UI_MODELS_PAGE_SIZE` (50) is the number of rows on one page of the Models list. All must be positive.
+
 `HTTP_STATUS_CLIENT_ERROR`, `HTTP_STATUS_RATE_LIMITED` and `HTTP_STATUS_SERVER_ERROR` in `constants.py` provide the shared logging, retry and HTTP response thresholds.
 
 Logging recursively copies and redacts dictionaries, lists, and tuples, including secret ancestor keys and bearer/sk values. Usage fields such as input_tokens remain visible, and input containers are not mutated.

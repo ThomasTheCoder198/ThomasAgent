@@ -129,8 +129,10 @@ async def _seed_dev(config: Config) -> None:
     resources = Resources.from_config(config)
     await resources.open()
     try:
-        model = await seed_dev_registry(create_registry_service(config, resources.pool))
-        log.info("dev registry seeded", model=model.name, dims=model.embedding_dims)
+        # No inbound request here, so the work gets its own id like the other CLI commands.
+        with structlog.contextvars.bound_contextvars(request_id=new_job_id()):
+            model = await seed_dev_registry(create_registry_service(config, resources.pool))
+            log.info("dev registry seeded", model=model.name, dims=model.embedding_dims)
     finally:
         await resources.close()
 

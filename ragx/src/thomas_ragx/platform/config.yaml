@@ -46,6 +46,11 @@ ui_session_ttl_seconds: 43200
 ui_cookie_secure: false
 ui_login_max_attempts: 5
 ui_login_window_seconds: 900
+# One page of the Models list; OpenRouter alone syncs about 500 rows.
+ui_models_page_size: 50
+# Operator-triggered provider calls (Sync, Test, the embedding-size probe): fail fast rather than hang a page.
+model_listing_timeout_seconds: 30.0
+model_probe_timeout_seconds: 30.0
 ingest_concurrency: 2
 ingest_visibility_timeout_milliseconds: 1800000
 worker_heartbeat_interval_seconds: 10.0

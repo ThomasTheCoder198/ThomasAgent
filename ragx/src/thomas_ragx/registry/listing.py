@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from time import perf_counter
 from typing import Final, Protocol
 
 import structlog
@@ -9,17 +10,32 @@ from openai import AsyncOpenAI
 
 from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
-from thomas_ragx.registry.model import ProviderAccess, ProviderKind
+from thomas_ragx.platform.timing import elapsed_ms
+from thomas_ragx.registry.model import ModelFacts, ProviderAccess, ProviderKind
 
 # openai's SDK refuses an empty key; keyless local servers (Ollama, vLLM) ignore this value.
 KEYLESS_PLACEHOLDER: Final = "keyless"
+OUTCOME_SUCCESS: Final = "success"
+OUTCOME_ERROR: Final = "error"
 log = structlog.get_logger(__name__)
 
 
 class ListingMethod(StrEnum):
     LITELLM = "litellm"
     OPENAI_SDK = "openai_sdk"
+    # The public OpenRouter lists carry capabilities and context size, so they need their own client.
+    OPENROUTER = "openrouter"
+    # Providers with no list endpoint worth calling: LiteLLM's bundled map is the catalog, with no network.
+    CATALOG = "catalog"
     MANUAL = "manual"
+
+
+@dataclass(frozen=True)
+class ListedModel:
+    """One row of a provider's list; `facts` is None when the list says nothing beyond the name."""
+
+    name: str
+    facts: ModelFacts | None = None
 
 
 @dataclass(frozen=True)
@@ -39,19 +55,26 @@ LISTING_ROUTES: Final[Mapping[ProviderKind, ListingRoute]] = {
     ProviderKind.OLLAMA: ListingRoute(
         ListingMethod.LITELLM, litellm_provider="ollama", requires_api_key=False
     ),
+    # OpenRouter's lists are public: Sync works before the operator has a key.
     ProviderKind.OPENROUTER: ListingRoute(
-        ListingMethod.OPENAI_SDK, default_base_url="https://openrouter.ai/api/v1"
+        ListingMethod.OPENROUTER, default_base_url="https://openrouter.ai/api/v1", requires_api_key=False
     ),
     ProviderKind.OPENAI_COMPATIBLE: ListingRoute(ListingMethod.OPENAI_SDK, requires_api_key=False),
     ProviderKind.AZURE: ListingRoute(ListingMethod.MANUAL),
-    ProviderKind.COHERE: ListingRoute(ListingMethod.MANUAL),
-    ProviderKind.VOYAGE: ListingRoute(ListingMethod.MANUAL),
-    ProviderKind.JINA: ListingRoute(ListingMethod.MANUAL),
+    ProviderKind.COHERE: ListingRoute(
+        ListingMethod.CATALOG, litellm_provider="cohere", requires_api_key=False
+    ),
+    ProviderKind.VOYAGE: ListingRoute(
+        ListingMethod.CATALOG, litellm_provider="voyage", requires_api_key=False
+    ),
+    ProviderKind.JINA: ListingRoute(
+        ListingMethod.CATALOG, litellm_provider="jina_ai", requires_api_key=False
+    ),
 }
 
 
 class ModelLister(Protocol):
-    async def list_models(self, access: ProviderAccess) -> list[str]: ...
+    async def list_models(self, access: ProviderAccess) -> list[ListedModel]: ...
 
 
 def _key(access: ProviderAccess) -> str | None:
@@ -75,37 +98,61 @@ def _litellm_models(provider: str, access: ProviderAccess) -> list[str]:
 
 
 class LiteLLMLister:
-    async def list_models(self, access: ProviderAccess) -> list[str]:
+    async def list_models(self, access: ProviderAccess) -> list[ListedModel]:
         provider = LISTING_ROUTES[access.kind].litellm_provider
-        return await asyncio.to_thread(_litellm_models, provider, access)
+        return [ListedModel(name) for name in await asyncio.to_thread(_litellm_models, provider, access)]
 
 
 class OpenAICompatibleLister:
-    async def list_models(self, access: ProviderAccess) -> list[str]:
+    async def list_models(self, access: ProviderAccess) -> list[ListedModel]:
         base_url = access.base_url or LISTING_ROUTES[access.kind].default_base_url
         if not base_url:
             raise _required_field("baseUrl")
         client = AsyncOpenAI(base_url=base_url, api_key=_key(access) or KEYLESS_PLACEHOLDER)
         try:
-            return [model.id async for model in client.models.list()]
+            return [ListedModel(model.id) async for model in client.models.list()]
         finally:
             await client.close()
 
 
 class ModelListing:
-    def __init__(self, litellm: ModelLister, openai_sdk: ModelLister) -> None:
-        self._listers = {ListingMethod.LITELLM: litellm, ListingMethod.OPENAI_SDK: openai_sdk}
+    def __init__(
+        self, litellm: ModelLister, openai_sdk: ModelLister, openrouter: ModelLister, catalog: ModelLister
+    ) -> None:
+        self._listers = {
+            ListingMethod.LITELLM: litellm,
+            ListingMethod.OPENAI_SDK: openai_sdk,
+            ListingMethod.OPENROUTER: openrouter,
+            ListingMethod.CATALOG: catalog,
+        }
 
-    async def list_models(self, access: ProviderAccess) -> list[str]:
+    async def list_models(self, access: ProviderAccess) -> list[ListedModel]:
         route = LISTING_ROUTES[access.kind]
         if route.method is ListingMethod.MANUAL:
             raise AppError(ErrorCode.LLM_PROVIDER_SYNC_UNSUPPORTED)
         if route.requires_api_key and access.api_key is None:
             raise _required_field("apiKey")
+        started = perf_counter()
+        outcome = OUTCOME_ERROR
+        error_type = ""
         try:
-            return await self._listers[route.method].list_models(access)
-        except AppError:
+            listed = await self._listers[route.method].list_models(access)
+        except AppError as exc:
+            error_type = type(exc).__name__
             raise
         except Exception as exc:
-            log.warning("model listing failed", kind=access.kind.value, error_type=type(exc).__name__)
+            error_type = type(exc).__name__
             raise AppError(ErrorCode.LLM_PROVIDER_REJECTED) from None
+        else:
+            outcome = OUTCOME_SUCCESS
+            return listed
+        finally:
+            # One event per attempt: the per-call HTTP lines of a lister are measurements, not failures.
+            emit = log.info if outcome == OUTCOME_SUCCESS else log.warning
+            emit(
+                "model listing completed",
+                kind=access.kind.value,
+                outcome=outcome,
+                error_type=error_type,
+                duration_ms=elapsed_ms(started),
+            )

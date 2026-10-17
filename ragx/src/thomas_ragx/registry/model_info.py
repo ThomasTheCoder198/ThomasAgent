@@ -41,16 +41,8 @@ def _integer(value: Any) -> int | None:
     return value if isinstance(value, int) else None
 
 
-def describe_model(kind: ProviderKind, name: str) -> ModelFacts:
-    """Read bundled facts; leave unknown models for the operator to describe."""
-    from litellm import get_model_info
-
-    try:
-        info: Mapping[str, Any] = dict(
-            get_model_info(model=name, custom_llm_provider=LITELLM_PROVIDER_NAMES[kind])
-        )
-    except Exception:
-        return EMPTY_FACTS
+def facts_from_info(info: Mapping[str, Any]) -> ModelFacts:
+    """Turn one entry of LiteLLM's bundled model map into registry facts."""
     capabilities = {capability for flag, capability in FLAG_CAPABILITIES.items() if info.get(flag)}
     mode_capability = MODE_CAPABILITIES.get(str(info.get("mode")))
     if mode_capability is not None:
@@ -63,3 +55,16 @@ def describe_model(kind: ProviderKind, name: str) -> ModelFacts:
         input_cost_per_token=_decimal(info.get("input_cost_per_token")),
         output_cost_per_token=_decimal(info.get("output_cost_per_token")),
     )
+
+
+def describe_model(kind: ProviderKind, name: str) -> ModelFacts:
+    """Read bundled facts; leave unknown models for the operator to describe."""
+    from litellm import get_model_info
+
+    try:
+        info: Mapping[str, Any] = dict(
+            get_model_info(model=name, custom_llm_provider=LITELLM_PROVIDER_NAMES[kind])
+        )
+    except Exception:
+        return EMPTY_FACTS
+    return facts_from_info(info)

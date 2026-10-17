@@ -9,11 +9,20 @@
     <option value="">{{ t('models.all_providers') }}</option>
     {% for provider in providers %}<option value="{{ provider.id }}"{% if selected_provider == provider.id %} selected{% endif %}>{{ provider.name }}</option>{% endfor %}
   </select>
+  <label for="capability">{{ t('models.filter_capability') }}</label>
+  <select id="capability" name="capability">
+    <option value="">{{ t('models.all_capabilities') }}</option>
+    {% for capability in filter_capabilities %}<option value="{{ capability.value }}"{% if selected_capability == capability.value %} selected{% endif %}>{{ t('capability.' ~ capability.value) }}</option>{% endfor %}
+  </select>
+  <label for="search">{{ t('models.search') }}</label>
+  <input id="search" name="q" type="search" class="tabular" maxlength="200" autocomplete="off" spellcheck="false" value="{{ search }}">
   <button class="button outline" type="submit">{{ t('models.filter') }}</button>
 </form>
 {% endif %}
 {% if not models %}
-{% if providers %}
+{% if providers and registered_count %}
+{% with title=t('models.no_match'), body=t('models.no_match_body') %}{% include "_empty.html" %}{% endwith %}
+{% elif providers %}
 {% with title=t('models.empty'), body=t('models.empty_body') %}{% include "_empty.html" %}{% endwith %}
 {% else %}
 {% with title=t('models.empty'), body=t('models.no_providers') %}{% include "_empty.html" %}{% endwith %}
@@ -25,7 +34,7 @@
   <li class="row">
     <div class="row-main">
       <h2 class="tabular model-name">{{ model.name }}</h2>
-      <p class="meta">{{ provider_names.get(model.provider_id, '') }} · {{ t('models.source_' ~ model.source.value) }}{% if model.embedding_dims %} · <span class="tabular">{{ model.embedding_dims }}</span> {{ t('models.dims') }}{% endif %}{% if model.context_window %} · <span class="tabular">{{ model.context_window }}</span> {{ t('models.context_tokens') }}{% endif %}</p>
+      <p class="meta">{{ provider_names.get(model.provider_id, '') }} · {{ t('models.source_' ~ model.source.value) }}{% if model.embedding_dims %} · <span class="tabular">{{ model.embedding_dims }}</span> {{ t('models.dims') }}{% elif 'embedding' in model.capabilities|map(attribute='value') %} · {{ t('models.dims_pending') }}{% endif %}{% if model.context_window %} · <span class="tabular">{{ model.context_window }}</span> {{ t('models.context_tokens') }}{% endif %}</p>
       {% if model.capabilities %}
       <ul class="chips" aria-label="{{ t('models.capabilities') }}">{% for capability in model.capabilities|sort %}<li class="chip">{{ t('capability.' ~ capability.value) }}</li>{% endfor %}</ul>
       {% else %}
@@ -42,11 +51,6 @@
           <fieldset><legend>{{ t('models.capabilities') }}</legend>
             {% for capability in capabilities %}<label class="check"><input type="checkbox" name="capabilities" value="{{ capability.value }}"{% if capability in model.capabilities %} checked{% endif %}> {{ t('capability.' ~ capability.value) }}</label>{% endfor %}
           </fieldset>
-          <div class="field">
-            <label for="dims-{{ model.id }}">{{ t('models.dims_label') }}</label>
-            <input id="dims-{{ model.id }}" name="embedding_dims" type="number" min="1" step="1" inputmode="numeric" class="tabular" value="{{ model.embedding_dims or '' }}">
-            <p class="hint">{{ t('models.dims_hint') }}</p>
-          </div>
           <button class="button primary" type="submit">{{ t('models.save') }}</button>
         </form>
       </details>
@@ -66,33 +70,34 @@
   </li>
   {% endfor %}
 </ul>
+{% if total %}
+<nav class="pager" aria-label="{{ t('models.pager') }}">
+  <p class="meta"><span class="tabular">{{ first }}–{{ last }}</span> {{ t('models.of') }} <span class="tabular">{{ total }}</span></p>
+  {% if prev_url %}<a class="button outline" href="{{ prev_url }}">{{ t('models.prev') }}</a>{% endif %}
+  {% if next_url %}<a class="button outline" href="{{ next_url }}">{{ t('models.next') }}</a>{% endif %}
+</nav>
+{% endif %}
 {% if providers %}
 <section class="add" aria-labelledby="add-model">
   <h2 id="add-model">{{ t('models.add') }}</h2>
+  <p class="lead">{{ t('models.add_lead') }}</p>
   <form method="post" action="/ui/models" class="form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% set chosen_provider = form.get('provider_id') or (selected_provider|string if selected_provider else '') %}
     <div class="field">
       <label for="new-provider">{{ t('models.provider') }}</label>
       <select id="new-provider" name="provider_id" required>
-        {% for provider in providers %}<option value="{{ provider.id }}"{% if selected_provider == provider.id %} selected{% endif %}>{{ provider.name }}</option>{% endfor %}
+        {% for provider in providers %}<option value="{{ provider.id }}"{% if chosen_provider == provider.id|string %} selected{% endif %}>{{ provider.name }}</option>{% endfor %}
       </select>
     </div>
     <div class="field">
       <label for="new-name">{{ t('models.name') }}</label>
-      <input id="new-name" name="name" required maxlength="200" class="tabular" autocomplete="off" spellcheck="false">
+      <input id="new-name" name="name" required maxlength="200" class="tabular" autocomplete="off" spellcheck="false" value="{{ form.get('name', '') }}">
     </div>
     <fieldset><legend>{{ t('models.capabilities') }}</legend>
-      {% for capability in capabilities %}<label class="check"><input type="checkbox" name="capabilities" value="{{ capability.value }}"> {{ t('capability.' ~ capability.value) }}</label>{% endfor %}
+      {% for capability in capabilities %}<label class="check"><input type="checkbox" name="capabilities" value="{{ capability.value }}"{% if capability.value in form.get('capabilities', []) %} checked{% endif %}> {{ t('capability.' ~ capability.value) }}</label>{% endfor %}
     </fieldset>
-    <div class="field">
-      <label for="new-dims">{{ t('models.dims_label') }}</label>
-      <input id="new-dims" name="embedding_dims" type="number" min="1" step="1" inputmode="numeric" class="tabular">
-      <p class="hint">{{ t('models.dims_hint') }}</p>
-    </div>
-    <div class="field">
-      <label for="new-context">{{ t('models.context') }}</label>
-      <input id="new-context" name="context_window" type="number" min="1" step="1" inputmode="numeric" class="tabular">
-    </div>
+    <p class="hint">{{ t('models.add_hint') }}</p>
     <button class="button primary" type="submit">{{ t('models.add') }}</button>
   </form>
 </section>

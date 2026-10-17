@@ -5,6 +5,8 @@ from psycopg import AsyncConnection
 from psycopg.rows import DictRow
 
 from thomas_ragx.kb.model import KnowledgeBase, Org, collection_name_for
+from thomas_ragx.platform.error_codes_gen import ErrorCode
+from thomas_ragx.platform.errors import AppError
 from thomas_ragx.registry.model import ModelRecord
 
 type Connection = AsyncConnection[DictRow]
@@ -67,8 +69,8 @@ async def insert_kb(
     conn: Connection, kb_id: UUID, org_id: str, name: str, is_default: bool, model: ModelRecord
 ) -> None:
     if model.embedding_dims is None:
-        # The registry refuses an embedding role without dims, so this guards a broken caller.
-        raise ValueError("an embedding model without dims cannot back a KB")
+        # The registry measures dims before assigning the role, so this is a legacy or corrupt row.
+        raise AppError(ErrorCode.LLM_MODEL_CAPABILITY_MISMATCH)
     collection = collection_name_for(model.id, model.embedding_dims)
     await conn.execute(
         b"INSERT INTO knowledge_bases "

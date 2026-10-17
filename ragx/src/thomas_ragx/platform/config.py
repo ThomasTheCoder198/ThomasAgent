@@ -120,6 +120,9 @@ class Config(BaseSettings):
     ui_cookie_secure: bool
     ui_login_max_attempts: int
     ui_login_window_seconds: int
+    ui_models_page_size: int = Field(gt=0)
+    model_listing_timeout_seconds: float = Field(gt=0)
+    model_probe_timeout_seconds: float = Field(gt=0)
     retry_base_delay_seconds: float = Field(validation_alias="RAG_RETRY_BASE_DELAY_S")
     retry_max_delay_seconds: float = Field(validation_alias="RAG_RETRY_MAX_DELAY_S")
 

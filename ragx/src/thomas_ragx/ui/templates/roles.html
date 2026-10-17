@@ -14,11 +14,12 @@
         <p class="meta">{{ t('roles.needs') }}</p>
         <ul class="chips">{% for capability in role_capabilities[role]|sort %}<li class="chip">{{ t('capability.' ~ capability.value) }}</li>{% endfor %}</ul>
         {% if not options[role] %}<p class="hint">{{ t('roles.no_capable') }}</p>{% endif %}
+        {% if role.value == 'embedding' %}<p class="hint">{{ t('roles.embedding_hint') }}</p>{% endif %}
       </div>
       <div class="row-actions">
         <select id="role-{{ loop.index }}" name="model_id" {% if not current %}class="unassigned" {% endif %}>
           <option value="">{{ t('roles.unassigned') }}</option>
-          {% for model in options[role] %}<option value="{{ model.id }}"{% if current and current.id == model.id %} selected{% endif %}>{{ model.name }}</option>{% endfor %}
+          {% for model in options[role] %}<option value="{{ model.id }}"{% if current and current.id == model.id %} selected{% endif %}>{{ model.name }}{% if role.value == 'embedding' and model.embedding_dims %} · {{ model.embedding_dims }} {{ t('models.dims') }}{% endif %}</option>{% endfor %}
         </select>
         <button class="button outline" type="submit">{{ t('roles.save') }}</button>
       </div>

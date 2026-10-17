@@ -565,6 +565,7 @@ input[type="email"],
 input[type="password"],
 input[type="url"],
 input[type="number"],
+input[type="search"],
 input:not([type]),
 select {
   box-sizing: border-box;
@@ -618,6 +619,9 @@ input[type="checkbox"] {
   margin: 0;
   accent-color: var(--ink);
 }
+.field[hidden] {
+  display: none;
+}
 .filter {
   display: flex;
   flex-wrap: wrap;
@@ -627,7 +631,36 @@ input[type="checkbox"] {
 }
 .filter select {
   width: auto;
-  min-width: 14rem;
+  min-width: 10rem;
+}
+.filter input[type="search"] {
+  width: auto;
+  min-width: 12rem;
+}
+.add > .lead {
+  margin-bottom: 1.25rem;
+}
+.advanced > summary {
+  min-height: var(--target-size);
+  display: flex;
+  align-items: center;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.advanced[open] > summary {
+  margin-bottom: 0.5rem;
+}
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  margin: -1.5rem 0 2.5rem;
+}
+.pager .meta {
+  margin: 0 auto 0 0;
 }
 .add {
   margin-top: 1rem;
@@ -1010,7 +1043,8 @@ dialog p {
     max-width: none;
   }
   .row-actions select,
-  .filter select {
+  .filter select,
+  .filter input[type="search"] {
     flex: 1;
     min-width: 0;
   }

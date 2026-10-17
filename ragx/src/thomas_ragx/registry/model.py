@@ -54,6 +54,39 @@ ROLE_CAPABILITIES: Final[Mapping[Role, frozenset[Capability]]] = {
 }
 
 
+class BaseUrlRule(StrEnum):
+    # Built-in providers have one public address, so the operator never types it.
+    HIDDEN = "hidden"
+    OPTIONAL = "optional"
+    REQUIRED = "required"
+
+
+@dataclass(frozen=True)
+class KindRules:
+    api_key_required: bool
+    base_url: BaseUrlRule
+    # A built-in provider has a public https address; only a self-hosted server is trusted with plain http.
+    https_only: bool
+
+
+_BUILT_IN: Final = KindRules(api_key_required=True, base_url=BaseUrlRule.HIDDEN, https_only=True)
+# Ollama needs its address in practice: localhost inside the ragx container is not the host.
+KIND_RULES: Final[Mapping[ProviderKind, KindRules]] = {
+    ProviderKind.OPENROUTER: _BUILT_IN,
+    ProviderKind.OPENAI: _BUILT_IN,
+    ProviderKind.ANTHROPIC: _BUILT_IN,
+    ProviderKind.GOOGLE: _BUILT_IN,
+    ProviderKind.COHERE: _BUILT_IN,
+    ProviderKind.VOYAGE: _BUILT_IN,
+    ProviderKind.JINA: _BUILT_IN,
+    ProviderKind.AZURE: KindRules(api_key_required=True, base_url=BaseUrlRule.REQUIRED, https_only=True),
+    ProviderKind.OLLAMA: KindRules(api_key_required=False, base_url=BaseUrlRule.OPTIONAL, https_only=False),
+    ProviderKind.OPENAI_COMPATIBLE: KindRules(
+        api_key_required=False, base_url=BaseUrlRule.REQUIRED, https_only=False
+    ),
+}
+
+
 @dataclass(frozen=True)
 class Provider:
     id: UUID

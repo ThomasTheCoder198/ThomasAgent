@@ -38,11 +38,14 @@ Spans `rag.retrieval.search` and `rag.retrieval.rerank` use OpenInference `RETRI
 Candidate/result counts are safe attributes; `input.value` contains the query only with
 `RAG_TRACE_CONTENT=true`. Document content is never attached by these spans (C12).
 
-`LiteLLMReranker(retrying_factory, metrics=recorder)` passes credentials per call, maps provider errors,
+`LiteLLMReranker(retrying_factory, metrics=recorder, timeout_seconds=...)` passes credentials per call, maps provider errors,
 and uses platform retries including `Retry-After`. The required recorder implements
 `observe_rerank_call(kind, outcome, duration_seconds)`; `WorkerMetrics` provides it through an injected
 meter. Completion logs include request ID, duration and bounded outcome without query, documents,
 credentials or provider exception text. API tool assembly must pass its configured exported recorder.
+OpenRouter rerank calls its fixed `/api/v1/rerank` endpoint directly because LiteLLM's rerank dispatcher
+does not route OpenRouter. The adapter sends the stored provider key only to OpenRouter and validates
+the same index and score contract as other providers. Other rerank providers still use LiteLLM.
 
 `create_search_service(config, resources, registry, tracer, metrics)` in `factory.py` is the single production construction of `SearchService`, used by the API and `ragx eval run`. It passes the configured `WorkerMetrics` recorder to the embedder and the reranker, so each entry point exports provider RED metrics. `BM25_DIR_NAME` lives there and ingest imports it, so queries and ingest share one BM25 directory.
 

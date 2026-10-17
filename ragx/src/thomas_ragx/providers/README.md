@@ -7,6 +7,7 @@ Provider adapters resolve per-call access and return catalog errors for the inge
 - `embedding.Embedder` defines the async embedding boundary.
 - `embedding.LiteLLMEmbedder` calls `litellm.aembedding` through its module attribute so OpenInference observes requests, and sorts vectors by response index.
 - `litellm_errors.to_app_error` maps authentication, invalid requests, missing models and permission refusals to non-retryable `LLM_PROVIDER_REJECTED`; rate limits, timeouts, outages and other failures become retryable `PROVIDER_UNAVAILABLE` (B19).
+- `openrouter_rerank.rerank` calls OpenRouter's fixed rerank endpoint with the stored provider key. LiteLLM does not dispatch its rerank API to OpenRouter; this adapter is shared by retrieval and the UI model probe.
 
 ## Dependencies
 Uses registry model handles, LiteLLM and the injected platform retry factory. Used by the ingest embedding cache.
@@ -17,7 +18,7 @@ uv run pytest -q tests/unit/test_embedder.py tests/unit/test_litellm_errors.py
 ```
 
 ## Conventions
-Keys and base URLs are passed on each call; never assign LiteLLM global credentials. Logs contain provider kind, outcome and duration only; request context supplies `request_id`. Outbound RED metrics use only bounded provider kind and outcome labels. Call through the LiteLLM module attribute after process startup installs its instrumentor and content policy.
+Keys and base URLs are passed on each LiteLLM call; never assign LiteLLM global credentials. OpenRouter rerank sends its key only to the fixed OpenRouter endpoint and never sends `request_id`. Logs contain provider kind, outcome and duration only; request context supplies `request_id`. Outbound RED metrics use only bounded provider kind and outcome labels. Call through the LiteLLM module attribute after process startup installs its instrumentor and content policy.
 
 ## Common failures
 - Provider rejects access: correct the registry credential or model configuration; rejected calls are not retried.

@@ -1,8 +1,11 @@
+import json
+from dataclasses import replace
 from typing import Any
 
 import httpx
 import litellm
 import pytest
+from opentelemetry.metrics import NoOpMeterProvider
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from structlog.contextvars import bound_contextvars
@@ -13,8 +16,95 @@ from thomas_ragx.platform.config import Config
 from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
 from thomas_ragx.platform.retry import retrying
+from thomas_ragx.providers import openrouter_rerank
+from thomas_ragx.registry.model import Capability, ProviderKind
 from thomas_ragx.retrieval.rerank import LiteLLMReranker, RerankScore
 from thomas_ragx.worker.metrics import WorkerMetrics
+
+
+def _openrouter_handle() -> Any:
+    original = _handle()
+    return replace(
+        original,
+        record=replace(
+            original.record, name="voyageai/rerank-3-lite", capabilities=frozenset({Capability.RERANK})
+        ),
+        access=replace(original.access, kind=ProviderKind.OPENROUTER),
+    )
+
+
+async def test_openrouter_rerank_uses_its_endpoint_and_existing_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"results": [{"index": 1, "relevance_score": 0.8}]})
+
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(
+        openrouter_rerank.httpx,
+        "AsyncClient",
+        lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    config = Config(minio_access_key="a", minio_secret_key="s")
+    reranker = LiteLLMReranker(
+        lambda: retrying(config),
+        metrics=WorkerMetrics(NoOpMeterProvider().get_meter(__name__)),
+        timeout_seconds=5,
+    )
+    with capture_logs() as logs:
+        scores = await reranker.rerank(_openrouter_handle(), "private query", ["first", "second"], 1)
+    assert scores == [RerankScore(1, 0.8)]
+    assert len(seen) == 1
+    assert str(seen[0].url) == "https://openrouter.ai/api/v1/rerank"
+    assert seen[0].headers["Authorization"] == "Bearer sk-test"
+    assert "X-Request-Id" not in seen[0].headers
+    assert json.loads(seen[0].content) == {
+        "model": "voyageai/rerank-3-lite",
+        "query": "private query",
+        "documents": ["first", "second"],
+        "top_n": 1,
+    }
+    assert "private" not in str(logs) and "sk-test" not in str(logs)
+
+
+@pytest.mark.parametrize(
+    ("status", "expected", "calls"),
+    [(401, ErrorCode.LLM_PROVIDER_REJECTED, 1), (429, ErrorCode.PROVIDER_UNAVAILABLE, 2)],
+)
+async def test_openrouter_rerank_maps_provider_errors_and_retries(
+    monkeypatch: pytest.MonkeyPatch, status: int, expected: ErrorCode, calls: int
+) -> None:
+    seen = 0
+
+    def respond(_: httpx.Request) -> httpx.Response:
+        nonlocal seen
+        seen += 1
+        return httpx.Response(status, headers={"Retry-After": "0"}, text="private provider error")
+
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(
+        openrouter_rerank.httpx,
+        "AsyncClient",
+        lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    config = Config(
+        minio_access_key="a",
+        minio_secret_key="s",
+        retry_max_attempts=2,
+        retry_base_delay_seconds=0,
+        retry_max_delay_seconds=0,
+    )
+    reranker = LiteLLMReranker(
+        lambda: retrying(config),
+        metrics=WorkerMetrics(NoOpMeterProvider().get_meter(__name__)),
+        timeout_seconds=5,
+    )
+    with capture_logs() as logs, pytest.raises(AppError) as caught:
+        await reranker.rerank(_openrouter_handle(), "private query", ["private document"], 1)
+    assert caught.value.code is expected
+    assert seen == calls
+    assert "private" not in str(logs) + str(caught.value)
 
 
 async def test_reranker_passes_per_call_credentials_and_maps_scores(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -32,7 +122,7 @@ async def test_reranker_passes_per_call_credentials_and_maps_scores(monkeypatch:
     provider = MeterProvider(metric_readers=[reader])
     try:
         reranker = LiteLLMReranker(
-            lambda: retrying(config), metrics=WorkerMetrics(provider.get_meter(__name__))
+            lambda: retrying(config), metrics=WorkerMetrics(provider.get_meter(__name__)), timeout_seconds=20
         )
         with bound_contextvars(request_id="req_rerank"), capture_logs() as logs:
             scores = await reranker.rerank(_handle(), "private query", ["private first", "private second"], 2)
@@ -100,7 +190,9 @@ async def test_reranker_errors_metrics_safe_logs_and_retry_after(
     reader = InMemoryMetricReader()
     provider = MeterProvider(metric_readers=[reader])
     try:
-        reranker = LiteLLMReranker(factory, metrics=WorkerMetrics(provider.get_meter(__name__)))
+        reranker = LiteLLMReranker(
+            factory, metrics=WorkerMetrics(provider.get_meter(__name__)), timeout_seconds=20
+        )
         with (
             bound_contextvars(request_id="req_rerank"),
             capture_logs() as logs,
@@ -167,7 +259,7 @@ async def test_reranker_rejects_malformed_results_without_retry_or_content(
     provider = MeterProvider(metric_readers=[reader])
     try:
         reranker = LiteLLMReranker(
-            lambda: retrying(config), metrics=WorkerMetrics(provider.get_meter(__name__))
+            lambda: retrying(config), metrics=WorkerMetrics(provider.get_meter(__name__)), timeout_seconds=20
         )
         with capture_logs() as logs, pytest.raises(AppError) as caught:
             await reranker.rerank(_handle(), "private query", ["private first", "private second"], 2)

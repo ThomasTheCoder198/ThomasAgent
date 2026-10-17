@@ -13,7 +13,8 @@ from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
 from thomas_ragx.platform.timing import MILLISECONDS_PER_SECOND
 from thomas_ragx.providers.litellm_errors import to_app_error
-from thomas_ragx.registry.model import ModelHandle
+from thomas_ragx.providers.openrouter_rerank import rerank as openrouter_rerank
+from thomas_ragx.registry.model import ModelHandle, ProviderKind
 
 OUTCOME_SUCCESS: Final = "success"
 OUTCOME_ERROR: Final = "error"
@@ -75,9 +76,16 @@ def _validated_scores(results: Any, document_count: int) -> list[RerankScore]:
 
 
 class LiteLLMReranker:
-    def __init__(self, retrying_factory: Callable[[], AsyncRetrying], *, metrics: RerankRecorder) -> None:
+    def __init__(
+        self,
+        retrying_factory: Callable[[], AsyncRetrying],
+        *,
+        metrics: RerankRecorder,
+        timeout_seconds: float,
+    ) -> None:
         self._retrying = retrying_factory
         self._metrics = metrics
+        self._timeout_seconds = timeout_seconds
 
     async def _call(
         self, model: ModelHandle, query: str, documents: Sequence[str], top_n: int
@@ -85,15 +93,26 @@ class LiteLLMReranker:
         started = perf_counter()
         outcome = OUTCOME_ERROR
         try:
-            response = await litellm.arerank(
-                model=model.litellm_model,
-                query=query,
-                documents=list(documents),
-                top_n=top_n,
-                api_key=model.access.api_key.get_secret_value() if model.access.api_key else None,
-                api_base=model.access.base_url or None,
-            )
-            scores = _validated_scores(response.results, len(documents))
+            if model.access.kind is ProviderKind.OPENROUTER:
+                results = await openrouter_rerank(
+                    model.access,
+                    model.record.name,
+                    query,
+                    documents,
+                    top_n,
+                    timeout_seconds=self._timeout_seconds,
+                )
+            else:
+                response = await litellm.arerank(
+                    model=model.litellm_model,
+                    query=query,
+                    documents=list(documents),
+                    top_n=top_n,
+                    api_key=model.access.api_key.get_secret_value() if model.access.api_key else None,
+                    api_base=model.access.base_url or None,
+                )
+                results = response.results
+            scores = _validated_scores(results, len(documents))
         except Exception as exc:
             raise to_app_error(exc) from None
         else:

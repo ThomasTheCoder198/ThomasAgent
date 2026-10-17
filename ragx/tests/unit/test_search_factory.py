@@ -17,8 +17,9 @@ def test_create_search_service_passes_the_metrics_recorder_to_embedder_and_reran
             seen["embedder"] = metrics
 
     class FakeReranker:
-        def __init__(self, _retrying: object, *, metrics: object) -> None:
+        def __init__(self, _retrying: object, *, metrics: object, timeout_seconds: float) -> None:
             seen["reranker"] = metrics
+            seen["timeout_seconds"] = timeout_seconds
 
     monkeypatch.setattr(factory, "LiteLLMEmbedder", FakeEmbedder)
     monkeypatch.setattr(factory, "LiteLLMReranker", FakeReranker)
@@ -27,3 +28,4 @@ def test_create_search_service_passes_the_metrics_recorder_to_embedder_and_reran
     config = Config(minio_access_key="a", minio_secret_key="s")
     factory.create_search_service(config, resources, object(), object(), recorder)  # type: ignore[arg-type]
     assert seen["embedder"] is recorder and seen["reranker"] is recorder
+    assert seen["timeout_seconds"] == config.tool_timeout_ms / 1000

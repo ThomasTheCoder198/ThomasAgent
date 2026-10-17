@@ -7,7 +7,8 @@ import structlog
 from thomas_ragx.platform.error_codes_gen import ErrorCode
 from thomas_ragx.platform.errors import AppError
 from thomas_ragx.platform.timing import elapsed_ms
-from thomas_ragx.registry.model import Capability, ModelRecord, ProviderAccess
+from thomas_ragx.providers.openrouter_rerank import rerank as openrouter_rerank
+from thomas_ragx.registry.model import Capability, ModelRecord, ProviderAccess, ProviderKind
 from thomas_ragx.registry.model_info import litellm_model_name
 
 PROBE_TEXT: Final = "ping"
@@ -61,9 +62,19 @@ class LiteLLMModelChecker:
         if Capability.EMBEDDING in model.capabilities:
             return await self._embed_once(access, model)
         if Capability.RERANK in model.capabilities:
-            await litellm.arerank(
-                model=target, query=PROBE_TEXT, documents=[PROBE_TEXT], **self._options(access)
-            )
+            if access.kind is ProviderKind.OPENROUTER:
+                await openrouter_rerank(
+                    access,
+                    model.name,
+                    PROBE_TEXT,
+                    [PROBE_TEXT],
+                    1,
+                    timeout_seconds=self._timeout_seconds,
+                )
+            else:
+                await litellm.arerank(
+                    model=target, query=PROBE_TEXT, documents=[PROBE_TEXT], **self._options(access)
+                )
         elif Capability.CHAT in model.capabilities:
             messages = [{"role": "user", "content": PROBE_TEXT}]
             await litellm.acompletion(

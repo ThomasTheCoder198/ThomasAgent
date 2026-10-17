@@ -5,6 +5,7 @@ from opentelemetry.trace import Tracer
 
 from thomas_ragx.platform.config import Config
 from thomas_ragx.platform.retry import retrying
+from thomas_ragx.platform.timing import MILLISECONDS_PER_SECOND
 from thomas_ragx.providers.embedding import LiteLLMEmbedder
 from thomas_ragx.registry.service import LLMProviderService
 from thomas_ragx.resources import Resources
@@ -39,7 +40,11 @@ def create_search_service(
             avg_len=config.bm25_avg_len,
         ),
         QdrantStore(resources.qdrant, upsert_batch_size=config.qdrant_upsert_batch_size),
-        LiteLLMReranker(lambda: retrying(config), metrics=metrics),
+        LiteLLMReranker(
+            lambda: retrying(config),
+            metrics=metrics,
+            timeout_seconds=config.tool_timeout_ms / MILLISECONDS_PER_SECOND,
+        ),
         tracer,
         dense_limit=config.search_dense_limit,
         sparse_limit=config.search_sparse_limit,

@@ -5,12 +5,15 @@ package errors
 type Code string
 
 const (
+	CodeAgentKbInvalid             Code = "AGENT_KB_INVALID"
+	CodeAgentNotFound              Code = "AGENT_NOT_FOUND"
 	CodeAppTokenInvalid            Code = "APP_TOKEN_INVALID"
 	CodeAuthCsrfInvalid            Code = "AUTH_CSRF_INVALID"
 	CodeAuthInvalidCredentials     Code = "AUTH_INVALID_CREDENTIALS"
 	CodeAuthSessionExpired         Code = "AUTH_SESSION_EXPIRED"
 	CodeClientNetworkError         Code = "CLIENT_NETWORK_ERROR"
 	CodeConflict                   Code = "CONFLICT"
+	CodeConversationNotFound       Code = "CONVERSATION_NOT_FOUND"
 	CodeDependencyTimeout          Code = "DEPENDENCY_TIMEOUT"
 	CodeForbidden                  Code = "FORBIDDEN"
 	CodeIngestContentChanged       Code = "INGEST_CONTENT_CHANGED"
@@ -37,18 +40,24 @@ const (
 	CodeProviderUnavailable        Code = "PROVIDER_UNAVAILABLE"
 	CodeRagxUnavailable            Code = "RAGX_UNAVAILABLE"
 	CodeRateLimited                Code = "RATE_LIMITED"
+	CodeRunAlreadyActive           Code = "RUN_ALREADY_ACTIVE"
+	CodeRunDeadlineExceeded        Code = "RUN_DEADLINE_EXCEEDED"
+	CodeRunNotActive               Code = "RUN_NOT_ACTIVE"
 	CodeUnauthenticated            Code = "UNAUTHENTICATED"
 	CodeUnsupportedMediaType       Code = "UNSUPPORTED_MEDIA_TYPE"
 	CodeValidationFailed           Code = "VALIDATION_FAILED"
 )
 
 const (
+	ErrAgentKbInvalid             NamedError = NamedError(CodeAgentKbInvalid)
+	ErrAgentNotFound              NamedError = NamedError(CodeAgentNotFound)
 	ErrAppTokenInvalid            NamedError = NamedError(CodeAppTokenInvalid)
 	ErrAuthCsrfInvalid            NamedError = NamedError(CodeAuthCsrfInvalid)
 	ErrAuthInvalidCredentials     NamedError = NamedError(CodeAuthInvalidCredentials)
 	ErrAuthSessionExpired         NamedError = NamedError(CodeAuthSessionExpired)
 	ErrClientNetworkError         NamedError = NamedError(CodeClientNetworkError)
 	ErrConflict                   NamedError = NamedError(CodeConflict)
+	ErrConversationNotFound       NamedError = NamedError(CodeConversationNotFound)
 	ErrDependencyTimeout          NamedError = NamedError(CodeDependencyTimeout)
 	ErrForbidden                  NamedError = NamedError(CodeForbidden)
 	ErrIngestContentChanged       NamedError = NamedError(CodeIngestContentChanged)
@@ -75,6 +84,9 @@ const (
 	ErrProviderUnavailable        NamedError = NamedError(CodeProviderUnavailable)
 	ErrRagxUnavailable            NamedError = NamedError(CodeRagxUnavailable)
 	ErrRateLimited                NamedError = NamedError(CodeRateLimited)
+	ErrRunAlreadyActive           NamedError = NamedError(CodeRunAlreadyActive)
+	ErrRunDeadlineExceeded        NamedError = NamedError(CodeRunDeadlineExceeded)
+	ErrRunNotActive               NamedError = NamedError(CodeRunNotActive)
 	ErrUnauthenticated            NamedError = NamedError(CodeUnauthenticated)
 	ErrUnsupportedMediaType       NamedError = NamedError(CodeUnsupportedMediaType)
 	ErrValidationFailed           NamedError = NamedError(CodeValidationFailed)
@@ -82,6 +94,10 @@ const (
 
 func LookupDefinition(code Code) ErrorDefinition {
 	switch code {
+	case CodeAgentKbInvalid:
+		return ErrorDefinition{HTTPStatus: 422, Retryable: false, MessageVI: "Knowledge Base không tồn tại trong tổ chức này.", MessageEN: "The Knowledge Base does not exist in this organization."}
+	case CodeAgentNotFound:
+		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Không tìm thấy agent.", MessageEN: "Agent not found."}
 	case CodeAppTokenInvalid:
 		return ErrorDefinition{HTTPStatus: 401, Retryable: false, MessageVI: "Token gọi app không hợp lệ.", MessageEN: "The app token is invalid."}
 	case CodeAuthCsrfInvalid:
@@ -94,6 +110,8 @@ func LookupDefinition(code Code) ErrorDefinition {
 		return ErrorDefinition{HTTPStatus: 503, Retryable: true, MessageVI: "Không kết nối được tới máy chủ.", MessageEN: "Could not reach the server."}
 	case CodeConflict:
 		return ErrorDefinition{HTTPStatus: 409, Retryable: false, MessageVI: "Dữ liệu bị xung đột với trạng thái hiện tại.", MessageEN: "The request conflicts with the current state."}
+	case CodeConversationNotFound:
+		return ErrorDefinition{HTTPStatus: 404, Retryable: false, MessageVI: "Không tìm thấy hội thoại.", MessageEN: "Conversation not found."}
 	case CodeDependencyTimeout:
 		return ErrorDefinition{HTTPStatus: 504, Retryable: true, MessageVI: "Dịch vụ phụ thuộc phản hồi quá chậm.", MessageEN: "A dependency timed out."}
 	case CodeForbidden:
@@ -146,6 +164,12 @@ func LookupDefinition(code Code) ErrorDefinition {
 		return ErrorDefinition{HTTPStatus: 503, Retryable: true, MessageVI: "Dịch vụ tài liệu đang không khả dụng. Vui lòng thử lại.", MessageEN: "The document service is unavailable. Please try again."}
 	case CodeRateLimited:
 		return ErrorDefinition{HTTPStatus: 429, Retryable: true, MessageVI: "Quá nhiều yêu cầu, vui lòng thử lại sau.", MessageEN: "Too many requests, please retry later."}
+	case CodeRunAlreadyActive:
+		return ErrorDefinition{HTTPStatus: 409, Retryable: true, MessageVI: "Hội thoại đang có lượt trả lời chạy.", MessageEN: "A run is already in progress in this conversation."}
+	case CodeRunDeadlineExceeded:
+		return ErrorDefinition{HTTPStatus: 504, Retryable: true, MessageVI: "Lượt trả lời quá thời gian cho phép.", MessageEN: "The run took too long."}
+	case CodeRunNotActive:
+		return ErrorDefinition{HTTPStatus: 409, Retryable: false, MessageVI: "Lượt trả lời đã kết thúc.", MessageEN: "The run has already finished."}
 	case CodeUnauthenticated:
 		return ErrorDefinition{HTTPStatus: 401, Retryable: false, MessageVI: "Bạn cần đăng nhập.", MessageEN: "You need to sign in."}
 	case CodeUnsupportedMediaType:

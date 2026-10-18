@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apptoken"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/calllog"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/ragx"
@@ -123,8 +124,8 @@ func (f *fakeRagx) caller(t *testing.T, logs io.Writer) *ragx.Caller {
 	}, time.Now, uuid.NewString)
 	caller, err := ragx.NewRagxCaller(config.RagxConfig{
 		URL: f.server.URL, ConnectTimeout: time.Second, RequestTimeout: 5 * time.Second, ResponseHeaderTimeout: 5 * time.Second,
-		MaxErrorBodyBytes: 1 << 16, MaxResponseBytes: 1 << 16, ProvisionAttempts: 1,
-	}, signer, nil, logger(t, logs))
+		MaxErrorBodyBytes: 1 << 16, MaxResponseBytes: 1 << 16, ProvisionAttempts: 1, ToolTimeout: 5 * time.Second,
+	}, signer, nil, logger(t, logs), calllog.New(logger(t, logs), nil, config.LLMLogConfig{ContentMaxBytes: 1}))
 	require.NoError(t, err)
 	return caller
 }

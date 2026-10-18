@@ -19,6 +19,7 @@ import (
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apptoken"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/calllog"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
@@ -53,11 +54,19 @@ func (f *fakeRecorder) ObserveOutbound(target, outcome string, _ time.Duration) 
 func testConfig(url string) config.RagxConfig {
 	return config.RagxConfig{
 		URL: url, ConnectTimeout: time.Second, RequestTimeout: 200 * time.Millisecond, ResponseHeaderTimeout: time.Second,
-		IdleConnTimeout: time.Minute, MaxErrorBodyBytes: 1 << 10, MaxResponseBytes: 1 << 10, ProvisionAttempts: 1,
+		IdleConnTimeout: time.Minute, MaxErrorBodyBytes: 1 << 10, MaxResponseBytes: 1 << 10, ProvisionAttempts: 1, ToolTimeout: time.Second,
 	}
 }
 
 func newCaller(t *testing.T, handler http.HandlerFunc) (*Caller, *[]seen, *fakeRecorder, *bytes.Buffer) {
+	return newCallerWithToolLog(t, discardToolLog{}, handler)
+}
+
+type discardToolLog struct{}
+
+func (discardToolLog) Tool(context.Context, calllog.ToolCall) {}
+
+func newCallerWithToolLog(t *testing.T, toolLog ToolLogger, handler http.HandlerFunc) (*Caller, *[]seen, *fakeRecorder, *bytes.Buffer) {
 	t.Helper()
 	var requests []seen
 	_, key, err := ed25519.GenerateKey(nil)
@@ -75,16 +84,16 @@ func newCaller(t *testing.T, handler http.HandlerFunc) (*Caller, *[]seen, *fakeR
 		handler(w, r)
 	}))
 	t.Cleanup(server.Close)
-	caller, recorder, logs := callerAt(t, server.URL, key)
+	caller, recorder, logs := callerWith(t, testConfig(server.URL), key, toolLog)
 	return caller, &requests, recorder, logs
 }
 
 func callerAt(t *testing.T, url string, key ed25519.PrivateKey) (*Caller, *fakeRecorder, *bytes.Buffer) {
 	t.Helper()
-	return callerWith(t, testConfig(url), key)
+	return callerWith(t, testConfig(url), key, discardToolLog{})
 }
 
-func callerWith(t *testing.T, cfg config.RagxConfig, key ed25519.PrivateKey) (*Caller, *fakeRecorder, *bytes.Buffer) {
+func callerWith(t *testing.T, cfg config.RagxConfig, key ed25519.PrivateKey, toolLog ToolLogger) (*Caller, *fakeRecorder, *bytes.Buffer) {
 	t.Helper()
 	signer := apptoken.NewAppTokenSigner(key, config.AppConfig{SigningKeyID: "dev-1", TokenIssuer: "thomas-core", TokenAudience: "ragx", TokenTTL: time.Minute},
 		time.Now, func() string { return "jti-test" })
@@ -92,9 +101,26 @@ func callerWith(t *testing.T, cfg config.RagxConfig, key ed25519.PrivateKey) (*C
 	var logs bytes.Buffer
 	log, err := logging.NewLogger(&logs, "debug", "test", "test", nil)
 	require.NoError(t, err)
-	caller, err := NewRagxCaller(cfg, signer, recorder, log)
+	caller, err := NewRagxCaller(cfg, signer, recorder, log, toolLog)
 	require.NoError(t, err)
 	return caller, recorder, &logs
+}
+
+func slowCaller(t *testing.T, cfg config.RagxConfig, delay time.Duration) (*Caller, *fakeRecorder) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(delay):
+			w.WriteHeader(http.StatusOK)
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(server.Close)
+	cfg.URL = server.URL
+	_, key, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+	caller, recorder, _ := callerWith(t, cfg, key, discardToolLog{})
+	return caller, recorder
 }
 
 func orgContext() context.Context {
@@ -195,7 +221,7 @@ func TestCaller_MapsFailuresAndCredentialRejectionsToRagxUnavailable(t *testing.
 func TestCaller_UnreachableRagxIsUnavailable(t *testing.T) {
 	_, key, _ := ed25519.GenerateKey(nil)
 	signer := apptoken.NewAppTokenSigner(key, config.AppConfig{SigningKeyID: "k", TokenIssuer: "i", TokenAudience: "a", TokenTTL: time.Minute}, time.Now, uuid.NewString)
-	caller, err := NewRagxCaller(testConfig("http://127.0.0.1:1"), signer, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	caller, err := NewRagxCaller(testConfig("http://127.0.0.1:1"), signer, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), discardToolLog{})
 	require.NoError(t, err)
 	_, err = caller.ProvisionOrg(orgContext(), "Acme", true, 1)
 	require.ErrorIs(t, err, errors.ErrRagxUnavailable)

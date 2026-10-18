@@ -7,6 +7,7 @@ Signs the per-call App token core sends to ragx (spec §3): EdDSA, `typ thomas-a
 - `NewAppTokenSigner`, `Signer.Issue` and `Signer.Sign`: build one token per call. `Issue` also returns the `jti` (`Issued{Token, ID}`) so callers can log the call without the token.
 - `LoadSigningKey`: reads the PKCS#8 PEM key from `CORE_APP_SIGNING_KEY` or `CORE_APP_SIGNING_KEY_FILE`.
 - `ScopeOrgProvision`, `ScopeKBRead`, `ScopeKBWrite`: one scope per call.
+- `ToolScope(name)` produces the `tool:<name>` scope for signed ragx tool calls.
 
 ## Dependencies
 - Uses: `golang-jwt/jwt/v5`, `config.AppConfig`, `requestid`, `tenant`.

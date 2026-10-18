@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	mediaTypeJSON   = "application/json"
+	mediaTypeJSON   = MediaTypeJSON
 	contentTypeJSON = mediaTypeJSON + "; charset=utf-8"
 )
 

@@ -75,7 +75,7 @@ func newLLMFixture(t *testing.T) *llmFixture {
 	return &llmFixture{
 		llmServices: llmServices{
 			providers: providerService,
-			models:    llmservice.NewLLMModelService(pool, llmModelRepo),
+			models:    llmservice.NewLLMModelService(pool, llmModelRepo, roleRepo),
 			modelSync: llmservice.NewModelSyncService(pool, providerService, llmModelRepo, catalog, config.DefaultProviderMaxRemoteModels),
 			roles:     llmservice.NewRoleService(pool, llmModelRepo, roleRepo),
 		},
@@ -97,9 +97,11 @@ func mountProvidersForTest(routes gin.IRoutes, services llmServices, maxBodyByte
 	routes.POST("/api/v1/providers/:providerId/sync", providers.HandleSyncProvider)
 	routes.GET("/api/v1/models", models.HandleListModels)
 	routes.POST("/api/v1/models", models.HandleCreateModel)
+	routes.PATCH("/api/v1/models/:modelId", models.HandleUpdateModel)
 	routes.DELETE("/api/v1/models/:modelId", models.HandleDeleteModel)
 	routes.GET("/api/v1/model-roles", roles.HandleListRoles)
 	routes.PUT("/api/v1/model-roles/:role", roles.HandleAssignRole)
+	routes.DELETE("/api/v1/model-roles/:role", roles.HandleClearRole)
 }
 
 // newProviderRouter serves the provider routes in the platform tenant without a session.

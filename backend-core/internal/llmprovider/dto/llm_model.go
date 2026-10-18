@@ -30,6 +30,12 @@ type LLMModelResponse struct {
 	InputPricePerMTok  *float64           `json:"inputPricePerMTok,omitempty"`
 	OutputPricePerMTok *float64           `json:"outputPricePerMTok,omitempty"`
 	Source             string             `json:"source"`
+	CapabilitiesEdited bool               `json:"capabilitiesEdited"`
+}
+
+// UpdateModelRequest replaces a model's capabilities.
+type UpdateModelRequest struct {
+	Capabilities []model.Capability `json:"capabilities"`
 }
 
 func NewLLMModelResponse(llmModel model.LLMModel) LLMModelResponse {

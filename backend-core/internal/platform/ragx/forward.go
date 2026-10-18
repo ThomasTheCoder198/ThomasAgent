@@ -39,7 +39,7 @@ type ForwardResponse struct {
 // Forward is the generic data plane behind core's app proxy (spec §14.2): it does not know ragx's routes. Its
 // deadline is the caller's (the HTTP route's), not RequestTimeout.
 func (c *Caller) Forward(ctx context.Context, in ForwardRequest) (ForwardResponse, error) {
-	cl, err := c.begin(ctx, opForward, in.Scope, false)
+	cl, err := c.begin(ctx, opForward, in.Scope, "", 0)
 	if err != nil {
 		return ForwardResponse{}, err
 	}

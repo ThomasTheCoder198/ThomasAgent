@@ -81,3 +81,10 @@ type StoredProvider struct {
 	Provider
 	SecretID *uuid.UUID
 }
+
+// ProviderAccess is a provider with its decrypted key and the key's version; it never leaves the service layer.
+type ProviderAccess struct {
+	StoredProvider
+	APIKey     string
+	KeyVersion string
+}

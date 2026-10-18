@@ -18,6 +18,40 @@ import (
 
 const postgresImage = "postgres:18.6-alpine"
 
+// Migrations the Down-step tests roll back through. Naming them (instead of counting Down calls) keeps the
+// tests valid when a newer migration is appended.
+const (
+	tenantContextMigration     = "20261004000002_tenant_context_required.sql"
+	identityHardeningMigration = "20261004000001_identity_hardening.sql"
+	vaultAADVersionMigration   = "20261005000001_vault_aad_version.sql"
+)
+
+// migrateDownThrough runs Down one step at a time until the named migration is rolled back too.
+func migrateDownThrough(t *testing.T, url, name string) {
+	t.Helper()
+	ctx := t.Context()
+	statuses, err := MigrationStatuses(ctx, url, migrations.FS)
+	require.NoError(t, err)
+	for range statuses {
+		require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
+		statuses, err = MigrationStatuses(ctx, url, migrations.FS)
+		require.NoError(t, err)
+		for _, status := range statuses {
+			if status.Source.Path == name && status.State == goose.StatePending {
+				return
+			}
+		}
+	}
+	require.FailNow(t, "migration was never rolled back", name)
+}
+
+func embeddedMigrationCount(t *testing.T) int {
+	t.Helper()
+	files, err := fs.Glob(migrations.FS, "*.sql")
+	require.NoError(t, err)
+	return len(files)
+}
+
 func TestMigrationUpgradesExistingIdentitySchema(t *testing.T) {
 	url := startPostgres(t)
 	legacy := fstest.MapFS{}
@@ -69,10 +103,15 @@ func TestMigrate_UpAndDown(t *testing.T) {
 		VALUES ('default','thomas.ingest.requested','{}','req_m052migration-0001')`)
 	require.NoError(t, err)
 
-	// Down removes the org version first, then organizations, trace columns, request IDs, AAD expansion,
-	// tenant defaults, hardening, identity/registry and platform.
+	// Down removes the agents/chat tables first, then the org version, organizations, trace columns, request IDs,
+	// AAD expansion, tenant defaults, hardening, identity/registry and platform.
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
+	var agentsExist bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT to_regclass('agents') IS NOT NULL`).Scan(&agentsExist))
+	require.False(t, agentsExist, "the first Down removes the agents/chat tables")
 	var versionColumns int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM organizations`).Scan(&n), "organizations survive the agents/chat Down")
+	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_name='organizations' AND column_name='settings_version'`).Scan(&versionColumns))
 	require.Zero(t, versionColumns)
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
@@ -109,9 +148,10 @@ func TestMigrate_UpFailsOnBrokenMigration(t *testing.T) {
 func TestMigrationStatuses_ReturnsMigrationStates(t *testing.T) {
 	url := startPostgres(t)
 	ctx := context.Background()
+	total := embeddedMigrationCount(t)
 	statuses, err := MigrationStatuses(ctx, url, migrations.FS)
 	require.NoError(t, err)
-	require.Len(t, statuses, 9)
+	require.Len(t, statuses, total)
 	require.EqualValues(t, 20261003000001, statuses[0].Source.Version)
 	require.Equal(t, "20261003000001_platform.sql", statuses[0].Source.Path)
 	require.EqualValues(t, 20261003000002, statuses[1].Source.Version)
@@ -128,6 +168,8 @@ func TestMigrationStatuses_ReturnsMigrationStates(t *testing.T) {
 	require.Equal(t, "20261010000001_organizations.sql", statuses[7].Source.Path)
 	require.EqualValues(t, 20261015000001, statuses[8].Source.Version)
 	require.Equal(t, "20261015000001_org_settings_version.sql", statuses[8].Source.Path)
+	require.EqualValues(t, 20261017000001, statuses[9].Source.Version)
+	require.Equal(t, "20261017000001_agents_chat.sql", statuses[9].Source.Path)
 
 	for _, status := range statuses {
 		require.Equal(t, goose.StatePending, status.State)
@@ -136,7 +178,7 @@ func TestMigrationStatuses_ReturnsMigrationStates(t *testing.T) {
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Up))
 	statuses, err = MigrationStatuses(ctx, url, migrations.FS)
 	require.NoError(t, err)
-	require.Len(t, statuses, 9)
+	require.Len(t, statuses, total)
 	for _, status := range statuses {
 		require.Equal(t, goose.StateApplied, status.State)
 	}
@@ -150,16 +192,11 @@ func TestMigrationStatuses_ReturnsMigrationStates(t *testing.T) {
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	statuses, err = MigrationStatuses(ctx, url, migrations.FS)
 	require.NoError(t, err)
-	require.Len(t, statuses, 9)
-	require.Equal(t, goose.StateApplied, statuses[0].State)
-	require.Equal(t, goose.StateApplied, statuses[1].State)
-	require.Equal(t, goose.StateApplied, statuses[2].State)
-	require.Equal(t, goose.StateApplied, statuses[3].State)
-	require.Equal(t, goose.StateApplied, statuses[4].State)
-	require.Equal(t, goose.StateApplied, statuses[5].State)
-	require.Equal(t, goose.StateApplied, statuses[6].State)
-	require.Equal(t, goose.StateApplied, statuses[7].State)
-	require.Equal(t, goose.StatePending, statuses[8].State)
+	require.Len(t, statuses, total)
+	for _, status := range statuses[:total-1] {
+		require.Equal(t, goose.StateApplied, status.State)
+	}
+	require.Equal(t, goose.StatePending, statuses[total-1].State)
 }
 
 func TestTenantMigrationRequiresExplicitTenantAndRestoresDefaultsOnDown(t *testing.T) {
@@ -176,12 +213,7 @@ func TestTenantMigrationRequiresExplicitTenantAndRestoresDefaultsOnDown(t *testi
 	}
 	_, err = pool.Exec(ctx, `INSERT INTO users (email,password_hash) VALUES ('missing@example.com','hash')`)
 	require.Error(t, err)
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
+	migrateDownThrough(t, url, tenantContextMigration)
 	_, err = pool.Exec(ctx, `INSERT INTO users (email,password_hash) VALUES ('legacy@example.com','hash')`)
 	require.NoError(t, err)
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Up))
@@ -206,13 +238,7 @@ func TestHardeningUpDownUpPreservesSeededBoundCiphertext(t *testing.T) {
 	sealed := gcm.Seal(nil, nonce, []byte("seeded-provider-secret"), aad)
 	_, err = pool.Exec(ctx, `INSERT INTO secrets (tenant_id,id,key_id,nonce,ciphertext,aad_version) VALUES ('other','11111111-1111-1111-1111-111111111111','v1',$1,$2,2)`, nonce, sealed)
 	require.NoError(t, err)
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
+	migrateDownThrough(t, url, identityHardeningMigration)
 	var version int
 	var storedNonce, storedCiphertext []byte
 	require.NoError(t, pool.QueryRow(ctx, `SELECT aad_version,nonce,ciphertext FROM secrets WHERE id='11111111-1111-1111-1111-111111111111'`).Scan(&version, &storedNonce, &storedCiphertext))
@@ -256,11 +282,7 @@ func TestStructuredAADMigrationUpDownUpPreservesVersionThree(t *testing.T) {
 	defer pool.Close()
 	_, err = pool.Exec(ctx, `INSERT INTO secrets (tenant_id,id,key_id,nonce,ciphertext,aad_version) VALUES ('default','11111111-1111-1111-1111-111111111111','v1',$1,$2,3)`, []byte("nonce"), []byte("ciphertext"))
 	require.NoError(t, err, "new envelopes require an expanded version constraint")
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
+	migrateDownThrough(t, url, vaultAADVersionMigration)
 	var version int
 	var nonce, ciphertext []byte
 	require.NoError(t, pool.QueryRow(ctx, `SELECT aad_version,nonce,ciphertext FROM secrets WHERE id='11111111-1111-1111-1111-111111111111'`).Scan(&version, &nonce, &ciphertext))

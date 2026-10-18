@@ -14,9 +14,11 @@ const FOLDER_ORDER = [
 // Requests are matched by method + path because the generator names them from summaries/operationIds inconsistently.
 const LOGIN_ROUTE = "POST /api/v1/auth/login";
 const LOGOUT_ROUTE = "POST /api/v1/auth/logout";
+// Clearing the platform role comes last: the two in-use guards need the role still assigned.
 const DELETE_ROUTES = [
   "DELETE /api/v1/models/{modelId}",
   "DELETE /api/v1/providers/{providerId}",
+  "DELETE /api/v1/model-roles/{role}",
 ];
 const SAVE_ID_BY_ROUTE = {
   "POST /api/v1/providers": "providerId",
@@ -40,6 +42,7 @@ const EXPECTED_STATUS_BY_ROUTE = {
   "DELETE /api/v1/models/{modelId}": 409,
   "GET /api/v1/model-roles": 200,
   "PUT /api/v1/model-roles/{role}": 200,
+  "DELETE /api/v1/model-roles/{role}": 204,
   "GET /api/v1/orgs": 200,
   "POST /api/v1/orgs": 201,
   "GET /api/v1/orgs/{orgId}": 200,
@@ -47,6 +50,8 @@ const EXPECTED_STATUS_BY_ROUTE = {
   "POST /api/v1/orgs/{orgId}/provision": 200,
 };
 const ORGANIZATIONS_FOLDER = "Organizations";
+// Org model-role requests read {{orgId}}, so they run in the Organizations folder after the create request.
+const ORG_MODEL_ROLES_PREFIX = "/api/v1/orgs/{orgId}/model-roles";
 const CREATE_ORGANIZATION_ROUTE = "POST /api/v1/orgs";
 const JSON_INDENT = 2;
 
@@ -60,6 +65,7 @@ const csrfPreRequest = [
 const responseFormatTests = [
   "pm.test('no 5xx', () => pm.expect(pm.response.code).to.be.below(500));",
   "pm.test('response format', () => {",
+  "  if (pm.response.code === 204) return;",
   "  const body = pm.response.json();",
   "  if (pm.response.code < 400) {",
   "    pm.expect(body).to.have.property('data');",
@@ -153,10 +159,24 @@ function orderFolderFirst(collection, folderName, route) {
   );
 }
 
+function moveOrgModelRolesToOrganizations(collection) {
+  const target = collection.item.find((item) => item.name === ORGANIZATIONS_FOLDER);
+  if (!target?.item) return;
+  for (const folder of collection.item) {
+    if (!folder.item || folder === target) continue;
+    folder.item = folder.item.filter((request) => {
+      if (request.item || !routeOf(request).split(" ")[1].startsWith(ORG_MODEL_ROLES_PREFIX)) return true;
+      target.item.push(request);
+      return false;
+    });
+  }
+}
+
 export function postprocess(collection) {
   stripIds(collection);
   // Auth must remain live until role assignment and the in-use deletion guards have run.
   orderLifecycle(collection);
+  moveOrgModelRolesToOrganizations(collection);
   orderFolderFirst(
     collection,
     ORGANIZATIONS_FOLDER,

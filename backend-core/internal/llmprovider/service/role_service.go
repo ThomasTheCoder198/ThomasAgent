@@ -12,12 +12,14 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/repository"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/audit"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
 // RoleService assigns one model per role after checking the model has the role's capabilities.
 type RoleService interface {
 	AssignRole(ctx context.Context, role model.Role, modelID uuid.UUID) error
 	ListRoles(ctx context.Context) ([]model.RoleAssignment, error)
+	ClearRole(ctx context.Context, role model.Role) error
 }
 
 type RoleServiceImpl struct {
@@ -53,6 +55,23 @@ func (s *RoleServiceImpl) AssignRole(ctx context.Context, role model.Role, model
 func (s *RoleServiceImpl) ListRoles(ctx context.Context) ([]model.RoleAssignment, error) {
 	assignments, err := s.roles.ListRoles(ctx, s.pool)
 	return assignments, errors.Normalize(err)
+}
+
+// ClearRole removes the role's model for the tenant in ctx (the platform on /api/v1/model-roles); idempotent.
+func (s *RoleServiceImpl) ClearRole(ctx context.Context, role model.Role) error {
+	if model.RequirementsForRole(role) == nil {
+		return errors.FieldError("role", errors.FieldCodeInvalid)
+	}
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return err
+	}
+	return postgres.WithTransaction(ctx, s.pool, func(tx pgx.Tx) error {
+		if err := s.roles.DeleteRoleIn(ctx, tx, tenantID, role); err != nil {
+			return err
+		}
+		return audit.Record(ctx, tx, audit.Event{Actor: auditActorOwner, Action: auditActionRoleClear, TargetType: auditTargetRole, TargetID: string(role)})
+	})
 }
 
 func capabilityMismatch(role model.Role) error {

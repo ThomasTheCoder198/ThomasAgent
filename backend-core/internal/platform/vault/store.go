@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	stderrors "errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -64,42 +65,52 @@ func (s *Store) Replace(ctx context.Context, db postgres.DBTX, id uuid.UUID, pla
 }
 
 func (s *Store) Get(ctx context.Context, db postgres.DBTX, id uuid.UUID) (string, error) {
+	plain, _, err := s.GetWithVersion(ctx, db, id)
+	return plain, err
+}
+
+// GetWithVersion is Get plus the row's updated_at, which changes whenever the key is replaced; callers that cache
+// clients per key (the Genkit registry) key the cache on it, never on the key itself. The envelope and updated_at
+// come from one query, so the version always belongs to the key returned with it.
+func (s *Store) GetWithVersion(ctx context.Context, db postgres.DBTX, id uuid.UUID) (string, time.Time, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	var sealed Sealed
 	var version int
-	err = db.QueryRow(ctx, `SELECT key_id, nonce, ciphertext, aad_version FROM secrets WHERE id = $1 AND tenant_id = $2`, id, tenantID).
-		Scan(&sealed.KeyID, &sealed.Nonce, &sealed.Ciphertext, &version)
+	var updatedAt time.Time
+	err = db.QueryRow(ctx, `SELECT key_id, nonce, ciphertext, aad_version, updated_at FROM secrets WHERE id = $1 AND tenant_id = $2`, id, tenantID).
+		Scan(&sealed.KeyID, &sealed.Nonce, &sealed.Ciphertext, &version, &updatedAt)
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return "", fmt.Errorf("load secret: %w", errors.ErrVaultSecretNotFound)
+		return "", time.Time{}, fmt.Errorf("load secret: %w", errors.ErrVaultSecretNotFound)
 	}
 	if err != nil {
-		return "", fmt.Errorf("load secret: %w", err)
+		return "", time.Time{}, fmt.Errorf("load secret: %w", err)
 	}
 	aad, err := aadForVersion(version, tenantID, id, sealed.KeyID)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	plain, err := s.cipher.Open(sealed, aad)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	if version != structuredAADVersion {
 		upgraded, err := s.cipher.Seal(plain, secretAAD(tenantID, id, sealed.KeyID))
 		if err != nil {
-			return "", err
+			return "", time.Time{}, err
 		}
-		// Compare the old envelope so a concurrent key replacement cannot be overwritten.
+		// Compare the old envelope so a concurrent key replacement cannot be overwritten. The key is unchanged, so the
+		// version read above still names it; the bump only costs the caller one extra cache miss.
 		_, err = db.Exec(ctx, `UPDATE secrets SET nonce=$3, ciphertext=$4, aad_version=$5, updated_at=now()
 			WHERE id=$1 AND tenant_id=$2 AND aad_version=$6 AND nonce=$7 AND ciphertext=$8`,
 			id, tenantID, upgraded.Nonce, upgraded.Ciphertext, structuredAADVersion, version, sealed.Nonce, sealed.Ciphertext)
 		if err != nil {
-			return "", fmt.Errorf("upgrade secret AAD: %w", err)
+			return "", time.Time{}, fmt.Errorf("upgrade secret AAD: %w", err)
 		}
 	}
-	return string(plain), nil
+	return string(plain), updatedAt, nil
 }
 
 func aadForVersion(version int, tenantID string, id uuid.UUID, keyID string) ([]byte, error) {

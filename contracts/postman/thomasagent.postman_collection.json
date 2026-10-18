@@ -632,6 +632,69 @@
           "protocolProfileBehavior": {
             "disableBodyPruning": true
           }
+        },
+        {
+          "name": "update LLM Model Capabilities",
+          "request": {
+            "name": "update LLM Model Capabilities",
+            "description": {
+              "content": "Replaces the model's capabilities (the operator's edit, O8). The edit survives later syncs, and one that would break a role still pinned to the model is refused with LLM_MODEL_CAPABILITY_MISMATCH.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "v1",
+                "models",
+                ":modelId"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "type": "any",
+                  "value": "{{modelId}}",
+                  "key": "modelId",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"capabilities\": [\n    \"chat\",\n    \"tools\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
         }
       ]
     },
@@ -1054,6 +1117,194 @@
               }
             }
           ],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
+        },
+        {
+          "name": "list Org Model Roles",
+          "request": {
+            "name": "list Org Model Roles",
+            "description": {
+              "content": "Core's chat roles for the org, in Settings order, with the org override and what a run would use.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                ":orgId",
+                "model-roles"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "type": "any",
+                  "value": "{{orgId}}",
+                  "key": "orgId",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {},
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
+        },
+        {
+          "name": "assign Org Model Role",
+          "request": {
+            "name": "assign Org Model Role",
+            "description": {
+              "content": "Overrides the role's model for this org. Only core's chat roles; embedding and rerank belong to ragx.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                ":orgId",
+                "model-roles",
+                ":role"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "type": "any",
+                  "value": "{{orgId}}",
+                  "key": "orgId",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                },
+                {
+                  "type": "any",
+                  "value": "chat.fast",
+                  "key": "role",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required)  (This can only be one of chat.default,chat.fast,vision,embedding,rerank,decision)",
+                    "type": "text/plain"
+                  }
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "PUT",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"modelId\": \"{{modelId}}\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
+        },
+        {
+          "name": "clear Org Model Role",
+          "request": {
+            "name": "clear Org Model Role",
+            "description": {
+              "content": "Clears the org's override; idempotent. The org then inherits the platform model.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                ":orgId",
+                "model-roles",
+                ":role"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "type": "any",
+                  "value": "{{orgId}}",
+                  "key": "orgId",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  }
+                },
+                {
+                  "type": "any",
+                  "value": "chat.fast",
+                  "key": "role",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required)  (This can only be one of chat.default,chat.fast,vision,embedding,rerank,decision)",
+                    "type": "text/plain"
+                  }
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "DELETE",
+            "body": {},
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [],
           "protocolProfileBehavior": {
             "disableBodyPruning": true
           }
@@ -1584,6 +1835,66 @@
           "protocolProfileBehavior": {
             "disableBodyPruning": true
           }
+        },
+        {
+          "name": "clear LLM Model Role",
+          "request": {
+            "name": "clear LLM Model Role",
+            "description": {
+              "content": "Clears the platform model of a role; idempotent. Orgs that inherit it then have no model for the role.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "v1",
+                "model-roles",
+                ":role"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "type": "any",
+                  "value": "chat.fast",
+                  "key": "role",
+                  "disabled": false,
+                  "description": {
+                    "content": "(Required)  (This can only be one of chat.default,chat.fast,vision,embedding,rerank,decision)",
+                    "type": "text/plain"
+                  }
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "DELETE",
+            "body": {},
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('expected status', () => pm.expect(pm.response.code).to.equal(204));"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          }
         }
       ]
     },
@@ -1662,6 +1973,7 @@
         "exec": [
           "pm.test('no 5xx', () => pm.expect(pm.response.code).to.be.below(500));",
           "pm.test('response format', () => {",
+          "  if (pm.response.code === 204) return;",
           "  const body = pm.response.json();",
           "  if (pm.response.code < 400) {",
           "    pm.expect(body).to.have.property('data');",

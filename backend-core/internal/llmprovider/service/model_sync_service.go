@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -15,7 +16,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
 )
 
-// ModelSyncService copies an OpenRouter provider's published catalog into its models.
+// ModelSyncService copies an OpenRouter or Google provider's published catalog into its models.
 type ModelSyncService interface {
 	SyncModels(ctx context.Context, providerID uuid.UUID) (model.SyncResult, error)
 }
@@ -38,20 +39,21 @@ func (s *ModelSyncServiceImpl) SyncModels(ctx context.Context, providerID uuid.U
 	if err != nil {
 		return model.SyncResult{}, err
 	}
-	if provider.Kind != model.KindOpenRouter {
+	if !syncSupported(provider.Kind) {
 		return model.SyncResult{}, errors.ErrLLMProviderSyncUnsupported
 	}
 	remote, err := s.catalog.ListModels(ctx, provider.ID, provider.Kind, provider.BaseURL, apiKey)
 	if err != nil {
 		return model.SyncResult{}, err
 	}
-	var result model.SyncResult
+	remote, dropped := forCore(provider.Kind, remote)
+	result := model.SyncResult{Skipped: dropped}
 	if s.maxRemoteModels <= 0 {
 		return model.SyncResult{}, errors.ErrInternalError
 	}
 	snapshotComplete := len(remote) > 0 && len(remote) <= s.maxRemoteModels
 	if len(remote) > s.maxRemoteModels {
-		result.Skipped = len(remote) - s.maxRemoteModels
+		result.Skipped += len(remote) - s.maxRemoteModels
 		remote = remote[:s.maxRemoteModels]
 	}
 	err = postgres.WithTransaction(ctx, s.pool, func(tx pgx.Tx) error {
@@ -69,6 +71,30 @@ func (s *ModelSyncServiceImpl) SyncModels(ctx context.Context, providerID uuid.U
 			TargetID: providerID.String(), Metadata: map[string]any{"added": result.Added, "updated": result.Updated, "skipped": result.Skipped}})
 	})
 	return result, err
+}
+
+func syncSupported(kind model.ProviderKind) bool {
+	return kind == model.KindOpenRouter || kind == model.KindGoogle
+}
+
+// forCore trims a provider's list to what core roles can use and reports how many models it dropped (ruling
+// F2a3-1). Core roles never use embeddings (ragx owns them, O6) and Google's list carries no dimensions, so a Google
+// sync keeps only models that generate content (chat) and never stores an embedding capability from Google.
+func forCore(kind model.ProviderKind, remote []model.RemoteModel) ([]model.RemoteModel, int) {
+	if kind != model.KindGoogle {
+		return remote, 0
+	}
+	kept := make([]model.RemoteModel, 0, len(remote))
+	for _, remoteModel := range remote {
+		if !slices.Contains(remoteModel.Capabilities, model.CapabilityChat) {
+			continue
+		}
+		remoteModel.Capabilities = slices.DeleteFunc(slices.Clone(remoteModel.Capabilities), func(capability model.Capability) bool {
+			return capability == model.CapabilityEmbedding
+		})
+		kept = append(kept, remoteModel)
+	}
+	return kept, len(remote) - len(kept)
 }
 
 func (s *ModelSyncServiceImpl) upsertRemoteModels(ctx context.Context, tx pgx.Tx, providerID uuid.UUID, remote []model.RemoteModel, result *model.SyncResult) ([]uuid.UUID, error) {

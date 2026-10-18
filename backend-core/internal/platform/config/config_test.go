@@ -325,3 +325,27 @@ func TestLoad_ProvisionBudgetMustFitTheRequestTimeout(t *testing.T) {
 	_, err := Load()
 	require.NoError(t, err, "2 × 5s + 10s backoff fits the 30s route")
 }
+
+func TestLoad_M2aDefaults(t *testing.T) {
+	setRequired(t)
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, 25*time.Second, cfg.Ragx.ToolTimeout)
+	require.Equal(t, 30, cfg.Conversation.PageDefaultLimit)
+	require.Equal(t, 100, cfg.Conversation.PageMaxLimit)
+}
+
+func TestLoad_RejectsDefaultPageAboveMax(t *testing.T) {
+	setRequired(t)
+	t.Setenv("CORE_CONVERSATION_PAGE_DEFAULT_LIMIT", "200")
+	t.Setenv("CORE_CONVERSATION_PAGE_MAX_LIMIT", "100")
+	_, err := Load()
+	require.ErrorContains(t, err, "CORE_CONVERSATION_PAGE_DEFAULT_LIMIT")
+}
+
+func TestLoad_RejectsZeroToolTimeout(t *testing.T) {
+	setRequired(t)
+	t.Setenv("CORE_RAGX_TOOL_TIMEOUT", "0s")
+	_, err := Load()
+	require.ErrorContains(t, err, "CORE_RAGX_TOOL_TIMEOUT")
+}

@@ -146,6 +146,8 @@ type RagxConfig struct {
 	MaxErrorBodyBytes     int64         `env:"MAX_ERROR_BODY_BYTES"`
 	MaxResponseBytes      int64         `env:"MAX_RESPONSE_BYTES"`
 	ProvisionAttempts     int           `env:"PROVISION_ATTEMPTS"`
+	// ToolTimeout bounds one agent tool call (Caller.CallTool); ragx's own tool deadline (RAG_TOOL_TIMEOUT_MS) is shorter.
+	ToolTimeout time.Duration `env:"TOOL_TIMEOUT"`
 }
 
 func (c RagxConfig) validate() []error {
@@ -157,10 +159,23 @@ func (c RagxConfig) validate() []error {
 	return append(errs, c.validateLimits()...)
 }
 
+// ConversationConfig bounds the conversation list page (meta.page, ruling A2-11).
+type ConversationConfig struct {
+	PageDefaultLimit int `env:"PAGE_DEFAULT_LIMIT"`
+	PageMaxLimit     int `env:"PAGE_MAX_LIMIT"`
+}
+
+func (c ConversationConfig) validate() []error {
+	if c.PageDefaultLimit < 1 || c.PageMaxLimit < c.PageDefaultLimit {
+		return []error{errors.New("CORE_CONVERSATION_PAGE_DEFAULT_LIMIT must be >= 1 and <= CORE_CONVERSATION_PAGE_MAX_LIMIT")}
+	}
+	return nil
+}
+
 func (c RagxConfig) validateLimits() []error {
 	var errs []error
-	if c.ConnectTimeout <= 0 || c.RequestTimeout <= 0 || c.ResponseHeaderTimeout <= 0 || c.IdleConnTimeout <= 0 {
-		errs = append(errs, errors.New("CORE_RAGX_*_TIMEOUT values must be > 0"))
+	if c.ConnectTimeout <= 0 || c.RequestTimeout <= 0 || c.ResponseHeaderTimeout <= 0 || c.IdleConnTimeout <= 0 || c.ToolTimeout <= 0 {
+		errs = append(errs, errors.New("CORE_RAGX_*_TIMEOUT values (including CORE_RAGX_TOOL_TIMEOUT) must be > 0"))
 	}
 	if c.MaxErrorBodyBytes < 1 || c.MaxResponseBytes < 1 || c.ProvisionAttempts < 1 {
 		errs = append(errs, errors.New("CORE_RAGX_MAX_ERROR_BODY_BYTES, CORE_RAGX_MAX_RESPONSE_BYTES and CORE_RAGX_PROVISION_ATTEMPTS must be >= 1"))
@@ -278,31 +293,32 @@ func (c PasswordHashConfig) validate() []error {
 }
 
 type Config struct {
-	ProviderMaxRemoteModels  int               `env:"PROVIDER_MAX_REMOTE_MODELS"`
-	ProviderMaxBreakers      int               `env:"PROVIDER_MAX_BREAKERS"`
-	ProviderHTTPTimeout      time.Duration     `env:"PROVIDER_HTTP_TIMEOUT"`
-	ProviderBreaker          BreakerConfig     `envPrefix:"PROVIDER_BREAKER_"`
-	ProviderMaxResponseBytes int64             `env:"PROVIDER_MAX_RESPONSE_BYTES"`
-	ProviderPrivateAllowlist []string          `env:"PROVIDER_PRIVATE_ALLOWLIST" envSeparator:","`
-	Auth                     AuthConfig        `envPrefix:"AUTH_"`
-	Vault                    VaultConfig       `envPrefix:"VAULT_"`
-	App                      AppConfig         `envPrefix:"APP_"`
-	Ragx                     RagxConfig        `envPrefix:"RAGX_"`
-	HTTP                     HTTPConfig        `envPrefix:"HTTP_"`
-	Metrics                  MetricsConfig     `envPrefix:"METRICS_"`
-	LLMLog                   LLMLogConfig      `envPrefix:"LLM_LOG_"`
-	Environment              string            `env:"ENV"`
-	ServiceName              string            `env:"SERVICE_NAME"`
-	HTTPAddr                 string            `env:"HTTP_ADDR"`
-	ShutdownTimeout          time.Duration     `env:"SHUTDOWN_TIMEOUT"`
-	ReadHeaderTimeout        time.Duration     `env:"READ_HEADER_TIMEOUT"`
-	DatabaseURL              string            `env:"DATABASE_URL,required,notEmpty"`
-	RedisURL                 string            `env:"REDIS_URL,required,notEmpty"`
-	LogsOTLPEndpoint         string            `env:"LOGS_OTLP_ENDPOINT"`
-	LogLevel                 string            `env:"LOG_LEVEL"`
-	Retry                    RetryConfig       `envPrefix:"RETRY_"`
-	Stream                   ConsumerConfig    `envPrefix:"STREAM_"`
-	OutboxRelay              OutboxRelayConfig `envPrefix:"RELAY_"`
+	ProviderMaxRemoteModels  int                `env:"PROVIDER_MAX_REMOTE_MODELS"`
+	ProviderMaxBreakers      int                `env:"PROVIDER_MAX_BREAKERS"`
+	ProviderHTTPTimeout      time.Duration      `env:"PROVIDER_HTTP_TIMEOUT"`
+	ProviderBreaker          BreakerConfig      `envPrefix:"PROVIDER_BREAKER_"`
+	ProviderMaxResponseBytes int64              `env:"PROVIDER_MAX_RESPONSE_BYTES"`
+	ProviderPrivateAllowlist []string           `env:"PROVIDER_PRIVATE_ALLOWLIST" envSeparator:","`
+	Auth                     AuthConfig         `envPrefix:"AUTH_"`
+	Vault                    VaultConfig        `envPrefix:"VAULT_"`
+	App                      AppConfig          `envPrefix:"APP_"`
+	Ragx                     RagxConfig         `envPrefix:"RAGX_"`
+	Conversation             ConversationConfig `envPrefix:"CONVERSATION_"`
+	HTTP                     HTTPConfig         `envPrefix:"HTTP_"`
+	Metrics                  MetricsConfig      `envPrefix:"METRICS_"`
+	LLMLog                   LLMLogConfig       `envPrefix:"LLM_LOG_"`
+	Environment              string             `env:"ENV"`
+	ServiceName              string             `env:"SERVICE_NAME"`
+	HTTPAddr                 string             `env:"HTTP_ADDR"`
+	ShutdownTimeout          time.Duration      `env:"SHUTDOWN_TIMEOUT"`
+	ReadHeaderTimeout        time.Duration      `env:"READ_HEADER_TIMEOUT"`
+	DatabaseURL              string             `env:"DATABASE_URL,required,notEmpty"`
+	RedisURL                 string             `env:"REDIS_URL,required,notEmpty"`
+	LogsOTLPEndpoint         string             `env:"LOGS_OTLP_ENDPOINT"`
+	LogLevel                 string             `env:"LOG_LEVEL"`
+	Retry                    RetryConfig        `envPrefix:"RETRY_"`
+	Stream                   ConsumerConfig     `envPrefix:"STREAM_"`
+	OutboxRelay              OutboxRelayConfig  `envPrefix:"RELAY_"`
 }
 
 const envPrefix = "CORE_"
@@ -406,6 +422,7 @@ func (c Config) validate() error {
 	errs = append(errs, c.Auth.validate()...)
 	errs = append(errs, c.App.validate()...)
 	errs = append(errs, c.Ragx.validate()...)
+	errs = append(errs, c.Conversation.validate()...)
 	errs = append(errs, c.validateProvisionBudget()...)
 	errs = append(errs, c.validateLoginLimiterKey()...)
 	errs = append(errs, c.validateProvider()...)

@@ -40,7 +40,8 @@ Never hand-edit the collection; edit the OpenAPI or postprocessor and regenerate
 The public model catalog folders are `LLM providers`, `LLM models`, and `LLM model roles`; their paths remain under `/api/v1`.
 The converter's random IDs/responses are removed, and optional generated filters are disabled.
 The cookie jar authenticates public requests. Login stores the CSRF token; mutations send it.
-Role assignment runs before the in-use deletion checks; logout runs last.
+Role assignment runs before the in-use deletion checks; `DELETE /api/v1/model-roles/{role}` (204) closes the Lifecycle folder after them, so the guards still see the role assigned; logout runs last.
+The org-scoped model-role requests (`/api/v1/orgs/{orgId}/model-roles…`) move to the end of the `Organizations` folder because they read `{{orgId}}`; they carry no expected status (the org is `failed` when ragx is unreachable, `ready` against a dev stack).
 Run the complete collection against an isolated backend: it assigns `chat.fast`.
 The example provider uses a denied loopback HTTP endpoint so connection/sync
 checks deterministically return 400 without calling a real external provider.

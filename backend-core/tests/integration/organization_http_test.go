@@ -63,6 +63,16 @@ func dataOf(t *testing.T, res *httptest.ResponseRecorder) map[string]any {
 	return body.Data
 }
 
+// listOf decodes the "data" array of a success response.
+func listOf(t *testing.T, res *httptest.ResponseRecorder) []any {
+	t.Helper()
+	var body struct {
+		Data []any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &body), res.Body.String())
+	return body.Data
+}
+
 func errorOf(t *testing.T, res *httptest.ResponseRecorder) map[string]any {
 	t.Helper()
 	var body struct {

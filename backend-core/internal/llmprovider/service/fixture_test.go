@@ -63,7 +63,7 @@ func newTestService(t *testing.T, catalog client.ModelCatalog) *serviceFixture {
 	providerService := NewProviderService(pool, secrets, providerRepo, catalog)
 	return &serviceFixture{
 		ProviderService:  providerService,
-		LLMModelService:  NewLLMModelService(pool, llmModelRepo),
+		LLMModelService:  NewLLMModelService(pool, llmModelRepo, roleRepo),
 		ModelSyncService: NewModelSyncService(pool, providerService, llmModelRepo, catalog, config.DefaultProviderMaxRemoteModels),
 		RoleService:      NewRoleService(pool, llmModelRepo, roleRepo),
 		ResolveService:   NewResolveService(pool, providerService, llmModelRepo, roleRepo),

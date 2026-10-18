@@ -273,6 +273,26 @@ paths:
           schema: { type: string, format: uuid },
           example: "{{modelId}}",
         }
+    patch:
+      tags: [LLM models]
+      operationId: updateLLMModelCapabilities
+      description: >-
+        Replaces the model's capabilities (the operator's edit, O8). The edit survives later syncs, and one that
+        would break a role still pinned to the model is refused with LLM_MODEL_CAPABILITY_MISMATCH.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LLMModelPatch" }
+            example: { capabilities: [chat, tools] }
+      responses:
+        "200": { $ref: "#/components/responses/Model" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/Error" }
     delete:
       tags: [LLM models]
       operationId: deleteLLMModel
@@ -339,6 +359,15 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    delete:
+      tags: [LLM model roles]
+      operationId: clearLLMModelRole
+      description: Clears the platform model of a role; idempotent. Orgs that inherit it then have no model for the role.
+      responses:
+        "204": { description: Cleared. }
+        "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
   /api/v1/orgs:
@@ -409,6 +438,59 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/orgs/{orgId}/model-roles:
+    parameters:
+      - { name: orgId, in: path, required: true, schema: { type: string, format: uuid }, example: "{{orgId}}" }
+    get:
+      tags: [LLM model roles]
+      operationId: listOrgModelRoles
+      description: Core's chat roles for the org, in Settings order, with the org override and what a run would use.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/SuccessResponse" }
+                  - { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/OrgModelRole" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/orgs/{orgId}/model-roles/{role}:
+    parameters:
+      - { name: orgId, in: path, required: true, schema: { type: string, format: uuid }, example: "{{orgId}}" }
+      - { name: role, in: path, required: true, schema: { $ref: "#/components/schemas/Role" }, example: chat.fast }
+    put:
+      tags: [LLM model roles]
+      operationId: assignOrgModelRole
+      description: Overrides the role's model for this org. Only core's chat roles; embedding and rerank belong to ragx.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [modelId], properties: { modelId: { type: string, format: uuid } } }
+            example: { modelId: "{{modelId}}" }
+      responses:
+        "200": { $ref: "#/components/responses/RoleAssignment" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [LLM model roles]
+      operationId: clearOrgModelRole
+      description: Clears the org's override; idempotent. The org then inherits the platform model.
+      responses:
+        "204": { description: Cleared; the org inherits the platform model. }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /api/v1/orgs/{orgId}/apps/ragx/{path}:
     parameters:
       - { name: orgId, in: path, required: true, schema: { type: string, format: uuid }, example: "{{orgId}}" }
@@ -795,6 +877,18 @@ components:
         inputPricePerMTok: { type: number }
         outputPricePerMTok: { type: number }
         source: { type: string, enum: [manual, sync] }
+        capabilitiesEdited: { type: boolean }
+    LLMModelPatch:
+      type: object
+      additionalProperties: false
+      required: [capabilities]
+      properties:
+        capabilities:
+          {
+            type: array,
+            minItems: 1,
+            items: { $ref: "#/components/schemas/Capability" },
+          }
     ModelInput:
       type: object
       additionalProperties: false
@@ -816,6 +910,15 @@ components:
           role: { $ref: "#/components/schemas/Role" },
           modelId: { type: string, format: uuid },
         }
+    OrgModelRole:
+      type: object
+      additionalProperties: false
+      required: [role, modelId, effectiveModelId, source]
+      properties:
+        role: { $ref: "#/components/schemas/Role" }
+        modelId: { type: [string, "null"], format: uuid, description: "The org's own override; null when it inherits." }
+        effectiveModelId: { type: [string, "null"], format: uuid, description: "What a run would use now; null when nothing is assigned." }
+        source: { type: string, enum: [org, platform, fallback, none] }
     SyncResult:
       type: object
       properties: { added: { type: integer }, updated: { type: integer }, skipped: { type: integer } }

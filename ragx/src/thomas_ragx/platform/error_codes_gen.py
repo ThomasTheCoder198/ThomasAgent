@@ -5,12 +5,15 @@ from typing import Final
 
 
 class ErrorCode(StrEnum):
+    AGENT_KB_INVALID = "AGENT_KB_INVALID"
+    AGENT_NOT_FOUND = "AGENT_NOT_FOUND"
     APP_TOKEN_INVALID = "APP_TOKEN_INVALID"
     AUTH_CSRF_INVALID = "AUTH_CSRF_INVALID"
     AUTH_INVALID_CREDENTIALS = "AUTH_INVALID_CREDENTIALS"
     AUTH_SESSION_EXPIRED = "AUTH_SESSION_EXPIRED"
     CLIENT_NETWORK_ERROR = "CLIENT_NETWORK_ERROR"
     CONFLICT = "CONFLICT"
+    CONVERSATION_NOT_FOUND = "CONVERSATION_NOT_FOUND"
     DEPENDENCY_TIMEOUT = "DEPENDENCY_TIMEOUT"
     FORBIDDEN = "FORBIDDEN"
     INGEST_CONTENT_CHANGED = "INGEST_CONTENT_CHANGED"
@@ -37,6 +40,9 @@ class ErrorCode(StrEnum):
     PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
     RAGX_UNAVAILABLE = "RAGX_UNAVAILABLE"
     RATE_LIMITED = "RATE_LIMITED"
+    RUN_ALREADY_ACTIVE = "RUN_ALREADY_ACTIVE"
+    RUN_DEADLINE_EXCEEDED = "RUN_DEADLINE_EXCEEDED"
+    RUN_NOT_ACTIVE = "RUN_NOT_ACTIVE"
     UNAUTHENTICATED = "UNAUTHENTICATED"
     UNSUPPORTED_MEDIA_TYPE = "UNSUPPORTED_MEDIA_TYPE"
     VALIDATION_FAILED = "VALIDATION_FAILED"
@@ -51,12 +57,15 @@ class ErrorDefinition:
 
 
 ERROR_DEFINITIONS: Final[dict[ErrorCode, ErrorDefinition]] = {
+    ErrorCode.AGENT_KB_INVALID: ErrorDefinition(http_status=422, retryable=False, message_vi="Knowledge Base không tồn tại trong tổ chức này.", message_en="The Knowledge Base does not exist in this organization."),
+    ErrorCode.AGENT_NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy agent.", message_en="Agent not found."),
     ErrorCode.APP_TOKEN_INVALID: ErrorDefinition(http_status=401, retryable=False, message_vi="Token gọi app không hợp lệ.", message_en="The app token is invalid."),
     ErrorCode.AUTH_CSRF_INVALID: ErrorDefinition(http_status=403, retryable=False, message_vi="Yêu cầu không hợp lệ, vui lòng tải lại trang.", message_en="Invalid request, please reload the page."),
     ErrorCode.AUTH_INVALID_CREDENTIALS: ErrorDefinition(http_status=401, retryable=False, message_vi="Email hoặc mật khẩu không đúng.", message_en="Incorrect email or password."),
     ErrorCode.AUTH_SESSION_EXPIRED: ErrorDefinition(http_status=401, retryable=False, message_vi="Phiên đăng nhập đã hết hạn.", message_en="Your session has expired."),
     ErrorCode.CLIENT_NETWORK_ERROR: ErrorDefinition(http_status=503, retryable=True, message_vi="Không kết nối được tới máy chủ.", message_en="Could not reach the server."),
     ErrorCode.CONFLICT: ErrorDefinition(http_status=409, retryable=False, message_vi="Dữ liệu bị xung đột với trạng thái hiện tại.", message_en="The request conflicts with the current state."),
+    ErrorCode.CONVERSATION_NOT_FOUND: ErrorDefinition(http_status=404, retryable=False, message_vi="Không tìm thấy hội thoại.", message_en="Conversation not found."),
     ErrorCode.DEPENDENCY_TIMEOUT: ErrorDefinition(http_status=504, retryable=True, message_vi="Dịch vụ phụ thuộc phản hồi quá chậm.", message_en="A dependency timed out."),
     ErrorCode.FORBIDDEN: ErrorDefinition(http_status=403, retryable=False, message_vi="Bạn không có quyền thực hiện thao tác này.", message_en="You are not allowed to do this."),
     ErrorCode.INGEST_CONTENT_CHANGED: ErrorDefinition(http_status=409, retryable=False, message_vi="Nội dung tệp đã thay đổi sau khi tải lên. Vui lòng tải lại.", message_en="The file changed after upload. Please upload it again."),
@@ -83,6 +92,9 @@ ERROR_DEFINITIONS: Final[dict[ErrorCode, ErrorDefinition]] = {
     ErrorCode.PROVIDER_UNAVAILABLE: ErrorDefinition(http_status=503, retryable=True, message_vi="Dịch vụ bên ngoài đang không khả dụng.", message_en="An upstream provider is unavailable."),
     ErrorCode.RAGX_UNAVAILABLE: ErrorDefinition(http_status=503, retryable=True, message_vi="Dịch vụ tài liệu đang không khả dụng. Vui lòng thử lại.", message_en="The document service is unavailable. Please try again."),
     ErrorCode.RATE_LIMITED: ErrorDefinition(http_status=429, retryable=True, message_vi="Quá nhiều yêu cầu, vui lòng thử lại sau.", message_en="Too many requests, please retry later."),
+    ErrorCode.RUN_ALREADY_ACTIVE: ErrorDefinition(http_status=409, retryable=True, message_vi="Hội thoại đang có lượt trả lời chạy.", message_en="A run is already in progress in this conversation."),
+    ErrorCode.RUN_DEADLINE_EXCEEDED: ErrorDefinition(http_status=504, retryable=True, message_vi="Lượt trả lời quá thời gian cho phép.", message_en="The run took too long."),
+    ErrorCode.RUN_NOT_ACTIVE: ErrorDefinition(http_status=409, retryable=False, message_vi="Lượt trả lời đã kết thúc.", message_en="The run has already finished."),
     ErrorCode.UNAUTHENTICATED: ErrorDefinition(http_status=401, retryable=False, message_vi="Bạn cần đăng nhập.", message_en="You need to sign in."),
     ErrorCode.UNSUPPORTED_MEDIA_TYPE: ErrorDefinition(http_status=415, retryable=False, message_vi="Kiểu nội dung yêu cầu không được hỗ trợ.", message_en="The request content type is not supported."),
     ErrorCode.VALIDATION_FAILED: ErrorDefinition(http_status=400, retryable=False, message_vi="Dữ liệu gửi lên không hợp lệ.", message_en="The request data is invalid."),

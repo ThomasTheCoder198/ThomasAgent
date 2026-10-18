@@ -15,7 +15,7 @@ import (
 )
 
 const llmModelColumns = `id, provider_id, model_ref, display_name, capabilities, context_window, embedding_dims,
-	input_price_per_mtok::float8, output_price_per_mtok::float8, source`
+	input_price_per_mtok::float8, output_price_per_mtok::float8, source, capabilities_edited`
 
 // LLMModelRepo stores the models of each provider, scoped by the tenant in ctx.
 type LLMModelRepo interface {
@@ -23,9 +23,19 @@ type LLMModelRepo interface {
 	DeleteStaleSyncModels(ctx context.Context, db postgres.DBTX, providerID uuid.UUID, keep []uuid.UUID) error
 	GetModel(ctx context.Context, db postgres.DBTX, id uuid.UUID) (model.LLMModel, error)
 	GetModelForShare(ctx context.Context, db postgres.DBTX, id uuid.UUID) (model.LLMModel, error)
+	GetModelForUpdate(ctx context.Context, db postgres.DBTX, id uuid.UUID) (model.LLMModel, error)
 	ListModels(ctx context.Context, db postgres.DBTX, providerID *uuid.UUID, capability *model.Capability) ([]model.LLMModel, error)
 	DeleteModel(ctx context.Context, db postgres.DBTX, id uuid.UUID) error
+	UpdateCapabilities(ctx context.Context, db postgres.DBTX, id uuid.UUID, capabilities []model.Capability) (model.LLMModel, error)
 }
+
+// rowLock is a SQL row-locking clause; only the two constants below are ever interpolated.
+type rowLock string
+
+const (
+	lockShare  rowLock = "FOR SHARE"
+	lockUpdate rowLock = "FOR UPDATE"
+)
 
 type llmModelRepo struct {
 	providers ProviderRepo
@@ -39,7 +49,7 @@ func scanLLMModel(row pgx.Row) (model.LLMModel, error) {
 	var llmModel model.LLMModel
 	var capabilities []string
 	err := row.Scan(&llmModel.ID, &llmModel.ProviderID, &llmModel.ModelRef, &llmModel.DisplayName, &capabilities, &llmModel.ContextWindow, &llmModel.EmbeddingDims,
-		&llmModel.InputPricePerMTok, &llmModel.OutputPricePerMTok, &llmModel.Source)
+		&llmModel.InputPricePerMTok, &llmModel.OutputPricePerMTok, &llmModel.Source, &llmModel.CapabilitiesEdited)
 	if stderrors.Is(err, pgx.ErrNoRows) {
 		return model.LLMModel{}, errors.ErrLLMModelNotFound
 	}
@@ -81,7 +91,7 @@ func (repo llmModelRepo) UpsertModel(ctx context.Context, db postgres.DBTX, inpu
 		embedding_dims, input_price_per_mtok, output_price_per_mtok, source)
 		VALUES ($10,$1,$2,$3,$4,$5,$6,$7,$8,$9)
 		ON CONFLICT (provider_id, model_ref) DO UPDATE SET display_name = EXCLUDED.display_name,
-			capabilities = EXCLUDED.capabilities, context_window = EXCLUDED.context_window,
+			capabilities = CASE WHEN models.capabilities_edited THEN models.capabilities ELSE EXCLUDED.capabilities END, context_window = EXCLUDED.context_window,
 			embedding_dims = EXCLUDED.embedding_dims, input_price_per_mtok = EXCLUDED.input_price_per_mtok,
 			output_price_per_mtok = EXCLUDED.output_price_per_mtok, updated_at = now()
 		WHERE models.source = 'sync' AND EXCLUDED.source = 'sync' AND models.tenant_id = EXCLUDED.tenant_id
@@ -91,7 +101,7 @@ func (repo llmModelRepo) UpsertModel(ctx context.Context, db postgres.DBTX, inpu
 	var llmModel model.LLMModel
 	var capabilities []string
 	err = row.Scan(&llmModel.ID, &llmModel.ProviderID, &llmModel.ModelRef, &llmModel.DisplayName, &capabilities, &llmModel.ContextWindow, &llmModel.EmbeddingDims,
-		&llmModel.InputPricePerMTok, &llmModel.OutputPricePerMTok, &llmModel.Source, &inserted)
+		&llmModel.InputPricePerMTok, &llmModel.OutputPricePerMTok, &llmModel.Source, &llmModel.CapabilitiesEdited, &inserted)
 	if postgres.IsForeignKeyViolation(err) {
 		return model.LLMModel{}, false, errors.ErrLLMProviderNotFound
 	}
@@ -131,11 +141,21 @@ func (llmModelRepo) GetModel(ctx context.Context, db postgres.DBTX, id uuid.UUID
 
 // GetModelForShare locks the row against deletion while a role is assigned to it.
 func (repo llmModelRepo) GetModelForShare(ctx context.Context, db postgres.DBTX, id uuid.UUID) (model.LLMModel, error) {
+	return repo.getModelLocked(ctx, db, id, lockShare)
+}
+
+// GetModelForUpdate takes the lock that conflicts with GetModelForShare, so a capability edit and a role assignment of the
+// same model serialize; share locks alone are compatible with each other and would let both commit.
+func (repo llmModelRepo) GetModelForUpdate(ctx context.Context, db postgres.DBTX, id uuid.UUID) (model.LLMModel, error) {
+	return repo.getModelLocked(ctx, db, id, lockUpdate)
+}
+
+func (repo llmModelRepo) getModelLocked(ctx context.Context, db postgres.DBTX, id uuid.UUID, lock rowLock) (model.LLMModel, error) {
 	tenantID, err := tenant.ID(ctx)
 	if err != nil {
 		return model.LLMModel{}, err
 	}
-	if _, err = db.Exec(ctx, `SELECT id FROM models WHERE id=$1 AND tenant_id=$2 FOR SHARE`, id, tenantID); err != nil {
+	if _, err = db.Exec(ctx, `SELECT id FROM models WHERE id=$1 AND tenant_id=$2 `+string(lock), id, tenantID); err != nil {
 		return model.LLMModel{}, fmt.Errorf("lock model: %w", err)
 	}
 	return repo.GetModel(ctx, db, id)
@@ -185,4 +205,14 @@ func (llmModelRepo) DeleteModel(ctx context.Context, db postgres.DBTX, id uuid.U
 		return errors.ErrLLMModelNotFound
 	}
 	return nil
+}
+
+// UpdateCapabilities is the operator's edit; capabilities_edited makes every later sync keep it (O8).
+func (llmModelRepo) UpdateCapabilities(ctx context.Context, db postgres.DBTX, id uuid.UUID, capabilities []model.Capability) (model.LLMModel, error) {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return model.LLMModel{}, err
+	}
+	return scanLLMModel(db.QueryRow(ctx, `UPDATE models SET capabilities = $3, capabilities_edited = true, updated_at = now()
+		WHERE id = $1 AND tenant_id = $2 RETURNING `+llmModelColumns, id, tenantID, capabilityStrings(capabilities)))
 }

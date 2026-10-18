@@ -57,6 +57,21 @@ func (c *LLMModelController) HandleDeleteModel(ctx *gin.Context) {
 	httpx.Respond(ctx, http.StatusOK, dto.DeleteResponse{Deleted: true}, err)
 }
 
+func (c *LLMModelController) HandleUpdateModel(ctx *gin.Context) {
+	id, err := httpx.PathUUID(ctx, "modelId")
+	if err != nil {
+		httpx.Fail(ctx, err)
+		return
+	}
+	var request dto.UpdateModelRequest
+	if err := httpx.DecodeJSON(ctx.Writer, ctx.Request, &request, c.maxBodyBytes); err != nil {
+		httpx.Fail(ctx, err)
+		return
+	}
+	llmModel, err := c.llmModelService.UpdateCapabilities(ctx.Request.Context(), id, request.Capabilities)
+	httpx.Respond(ctx, http.StatusOK, dto.NewLLMModelResponse(llmModel), err)
+}
+
 func optionalProviderID(ctx *gin.Context) (*uuid.UUID, error) {
 	raw := ctx.Query("providerId")
 	if raw == "" {

@@ -6,7 +6,7 @@ Encrypts secrets with AES-256-GCM and persists encrypted rows. Rotation and re-e
 ## Entry points
 - `NewCipher(keyID, masterKeyBase64)` constructs the cipher from base64 of exactly 32 bytes.
 - `Seal` and `Open` encrypt and authenticate bytes using caller-supplied AAD.
-- `NewStore`, `Put`, `Replace`, `Get`, `Delete` manage secret rows through `postgres.DBTX`.
+- `NewStore`, `Put`, `Replace`, `Get`, `Delete` manage secret rows through `postgres.DBTX`. `GetWithVersion` is `Get` plus the row's `updated_at`, which changes on every replace; callers that cache clients per key use it as the cache version. `Get` is `GetWithVersion` without the version: the envelope and `updated_at` come from one query, so the version always belongs to the key returned with it.
 
 ## Dependencies
 - Uses: Go crypto, google UUID, shared `internal/errors` sentinels and `postgres.DBTX` (pool or transaction).

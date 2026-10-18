@@ -37,5 +37,6 @@ func TestCatalog_RecordsOutboundByProviderKind(t *testing.T) {
 	catalog.Metrics = fake
 	_, err := catalog.ListModels(context.Background(), uuid.New(), model.KindOpenRouter, server.URL, "")
 	require.NoError(t, err)
-	require.Equal(t, []recordedOutbound{{target: string(model.KindOpenRouter), outcome: metrics.OutcomeSuccess}}, fake.calls)
+	success := recordedOutbound{target: string(model.KindOpenRouter), outcome: metrics.OutcomeSuccess}
+	require.Equal(t, []recordedOutbound{success, success}, fake.calls, "the chat list and the decision list")
 }

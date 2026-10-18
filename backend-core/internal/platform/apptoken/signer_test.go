@@ -17,6 +17,10 @@ import (
 
 const vectorPath = "../../../../contracts/app-token.json"
 
+func TestToolScope(t *testing.T) {
+	require.Equal(t, Scope("tool:kb_search"), ToolScope("kb_search"))
+}
+
 type vectorFile struct {
 	Issuer   string `json:"issuer"`
 	Audience string `json:"audience"`

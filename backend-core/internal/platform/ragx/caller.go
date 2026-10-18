@@ -10,8 +10,11 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apptoken"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/calllog"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
@@ -43,18 +46,23 @@ type TokenSigner interface {
 	Issue(apptoken.Claims) (apptoken.Issued, error)
 }
 
+type ToolLogger interface {
+	Tool(context.Context, calllog.ToolCall)
+}
+
 type Caller struct {
-	api    *Client
-	http   *http.Client
-	base   *url.URL
-	signer TokenSigner
-	log    *slog.Logger
-	cfg    config.RagxConfig
+	api     *Client
+	http    *http.Client
+	base    *url.URL
+	signer  TokenSigner
+	log     *slog.Logger
+	cfg     config.RagxConfig
+	toolLog ToolLogger
 }
 
 // NewRagxCaller does not use outbound.NewClient: ragx is a configured first-party service on a private address, and
 // that client's whole-request timeout would cut the app proxy's forwards. Deadlines come from the context.
-func NewRagxCaller(cfg config.RagxConfig, signer TokenSigner, recorder outbound.Recorder, log *slog.Logger) (*Caller, error) {
+func NewRagxCaller(cfg config.RagxConfig, signer TokenSigner, recorder outbound.Recorder, log *slog.Logger, toolLog ToolLogger) (*Caller, error) {
 	client := &http.Client{
 		Transport:     outbound.Instrument(newRagxTransport(cfg), outbound.TargetRagx, recorder, true),
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
@@ -67,7 +75,7 @@ func NewRagxCaller(cfg config.RagxConfig, signer TokenSigner, recorder outbound.
 	if err != nil {
 		return nil, fmt.Errorf("ragx url: %w", err)
 	}
-	return &Caller{api: api, http: client, base: baseURL, signer: signer, log: log, cfg: cfg}, nil
+	return &Caller{api: api, http: client, base: baseURL, signer: signer, log: log, cfg: cfg, toolLog: toolLog}, nil
 }
 
 func newRagxTransport(cfg config.RagxConfig) *http.Transport {
@@ -91,7 +99,7 @@ type call struct {
 }
 
 // begin signs with the same request id the transport will send: ragx rejects a token whose rid differs.
-func (c *Caller) begin(ctx context.Context, operation string, scope apptoken.Scope, bounded bool) (call, error) {
+func (c *Caller) begin(ctx context.Context, operation string, scope apptoken.Scope, kbID string, timeout time.Duration) (call, error) {
 	orgID, err := tenant.ID(ctx)
 	if err != nil {
 		return call{}, err
@@ -99,13 +107,13 @@ func (c *Caller) begin(ctx context.Context, operation string, scope apptoken.Sco
 	if !requestid.IsValid(requestid.FromContext(ctx)) {
 		ctx = requestid.NewContext(ctx, requestid.NewJob())
 	}
-	issued, err := c.signer.Issue(apptoken.Claims{OrgID: orgID, Scope: scope, RequestID: requestid.FromContext(ctx)})
+	issued, err := c.signer.Issue(apptoken.Claims{OrgID: orgID, KnowledgeBaseID: kbID, Scope: scope, RequestID: requestid.FromContext(ctx)})
 	if err != nil {
 		return call{}, err
 	}
 	cancel := context.CancelFunc(func() {})
-	if bounded {
-		ctx, cancel = context.WithTimeout(ctx, c.cfg.RequestTimeout)
+	if timeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, timeout)
 	}
 	authorize := func(_ context.Context, req *http.Request) error {
 		req.Header.Set(httpx.HeaderAuthorization, httpx.AuthSchemeBearer+" "+issued.Token)
@@ -178,7 +186,7 @@ func readJSON[B any](c *Caller, cl call, send sendFunc) (B, error) {
 
 // doJSON runs one bounded JSON call; the one place that pairs begin with its cancel.
 func doJSON[B any](c *Caller, ctx context.Context, operation string, scope apptoken.Scope, send sendFunc) (B, error) {
-	cl, err := c.begin(ctx, operation, scope, true)
+	cl, err := c.begin(ctx, operation, scope, "", c.cfg.RequestTimeout)
 	if err != nil {
 		var zero B
 		return zero, err
@@ -199,5 +207,13 @@ func (c *Caller) ProvisionOrg(ctx context.Context, name string, externalParsing 
 	}
 	return doData[Org](c, ctx, opProvisionOrg, apptoken.ScopeOrgProvision, func(ctx context.Context, editors []RequestEditorFn) (*http.Response, error) {
 		return c.api.ProvisionOrg(ctx, orgID, &ProvisionOrgParams{}, ProvisionOrgJSONRequestBody{Name: name, ExternalParsing: externalParsing, SettingsVersion: settingsVersion}, editors...)
+	})
+}
+
+const opGetKnowledgeBase = "get_knowledge_base"
+
+func (c *Caller) GetKnowledgeBase(ctx context.Context, kbID uuid.UUID) (KnowledgeBase, error) {
+	return doData[KnowledgeBase](c, ctx, opGetKnowledgeBase, apptoken.ScopeKBRead, func(ctx context.Context, editors []RequestEditorFn) (*http.Response, error) {
+		return c.api.GetKnowledgeBase(ctx, kbID, &GetKnowledgeBaseParams{}, editors...)
 	})
 }

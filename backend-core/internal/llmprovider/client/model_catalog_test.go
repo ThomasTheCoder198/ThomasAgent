@@ -35,6 +35,10 @@ func TestCatalogMapsOpenRouterAndBoundsBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/models", r.URL.Path)
 		require.Equal(t, "Bearer "+secretKey, r.Header.Get("Authorization"))
+		if r.URL.Query().Get("output_modalities") == "decisions" {
+			_, _ = io.WriteString(w, `{"data":[]}`)
+			return
+		}
 		_, err := io.WriteString(w, payload)
 		require.NoError(t, err)
 	}))
@@ -212,4 +216,80 @@ func TestCatalogUnknownPricesRemainNullable(t *testing.T) {
 	for _, value := range []string{"-1", "NaN", "Inf", "unknown"} {
 		require.Nil(t, perMillion(value))
 	}
+}
+
+const decisionsPayload = `{"data":[
+ {"id":"typesafe/jev-1.14","name":"TypeSafe: Jev 1.13","context_length":32768,"architecture":{"input_modalities":["text"],"output_modalities":["decisions"]},"pricing":{"prompt":"0.0000001","completion":"0"}},
+ {"id":"sample/model","name":"Sample","context_length":8192,"architecture":{"input_modalities":["text"],"output_modalities":["decisions"]},"pricing":{"prompt":"0","completion":"0"}}]}`
+
+func TestCatalogAddsOpenRouterDecisionModels(t *testing.T) {
+	chat := `{"data":[{"id":"sample/model","name":"Sample","context_length":8192,"architecture":{"input_modalities":["text"],"output_modalities":["text"]},"supported_parameters":["tools"],"pricing":{"prompt":"0.000001","completion":"0.000002"}},
+	 {"id":"other/chat","name":"Other","context_length":4096,"architecture":{"input_modalities":["text"],"output_modalities":["text"]},"pricing":{"prompt":"0","completion":"0"}}]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/models", r.URL.Path)
+		if r.URL.Query().Get("output_modalities") == "decisions" {
+			_, _ = io.WriteString(w, decisionsPayload)
+			return
+		}
+		_, _ = io.WriteString(w, chat)
+	}))
+	defer srv.Close()
+	models, err := catalogForTest(srv.Client(), 1<<16, 1, nil).ListModels(platformContext(t.Context()), uuid.New(), model.KindOpenRouter, srv.URL, secretKey)
+	require.NoError(t, err)
+	byRef := map[string]model.RemoteModel{}
+	for _, m := range models {
+		byRef[m.ModelRef] = m
+	}
+	require.Len(t, byRef, 3)
+	require.Equal(t, []model.Capability{model.CapabilityDecision}, byRef["typesafe/jev-1.14"].Capabilities)
+	require.Equal(t, 32768, *byRef["typesafe/jev-1.14"].ContextWindow)
+	require.Equal(t, []model.Capability{model.CapabilityDecision}, byRef["sample/model"].Capabilities, "a decision listing wins over the chat facts")
+	require.ElementsMatch(t, []model.Capability{model.CapabilityChat}, byRef["other/chat"].Capabilities)
+}
+
+func TestCatalogKeepsChatModelsWhenTheDecisionListFails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("output_modalities") == "decisions" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = io.WriteString(w, `{"data":[{"id":"other/chat","architecture":{"output_modalities":["text"]}}]}`)
+	}))
+	defer srv.Close()
+	models, err := catalogForTest(srv.Client(), 1<<16, 1, nil).ListModels(platformContext(t.Context()), uuid.New(), model.KindOpenRouter, srv.URL, "")
+	require.NoError(t, err, "the alpha decision list never fails a sync")
+	require.Len(t, models, 1)
+}
+
+func TestCatalogMapsGoogleNativeList(t *testing.T) {
+	payload := `{"models":[
+	 {"name":"models/gemini-2.5-flash","displayName":"Gemini 2.5 Flash","inputTokenLimit":1048576,"supportedGenerationMethods":["generateContent","countTokens"]},
+	 {"name":"models/gemini-embedding-001","displayName":"Gemini Embedding","inputTokenLimit":2048,"supportedGenerationMethods":["embedContent"]},
+	 {"name":"models/aqa","displayName":"AQA","inputTokenLimit":7168,"supportedGenerationMethods":["generateAnswer"]}],
+	 "nextPageToken":"ignored"}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/models", r.URL.Path)
+		require.Equal(t, "1000", r.URL.Query().Get("pageSize"))
+		require.Equal(t, secretKey, r.Header.Get("x-goog-api-key"))
+		require.Empty(t, r.Header.Get("Authorization"), "Google takes the key in x-goog-api-key, never as a bearer")
+		_, _ = io.WriteString(w, payload)
+	}))
+	defer srv.Close()
+	models, err := catalogForTest(srv.Client(), 1<<16, 1, nil).ListModels(platformContext(t.Context()), uuid.New(), model.KindGoogle, srv.URL, secretKey)
+	require.NoError(t, err)
+	require.Len(t, models, 3)
+	require.Equal(t, "gemini-2.5-flash", models[0].ModelRef)
+	require.Equal(t, "Gemini 2.5 Flash", models[0].DisplayName)
+	require.Equal(t, 1048576, *models[0].ContextWindow)
+	require.Equal(t, []model.Capability{model.CapabilityChat}, models[0].Capabilities)
+	require.Equal(t, []model.Capability{model.CapabilityEmbedding}, models[1].Capabilities)
+	require.Empty(t, models[2].Capabilities, "an unknown method gives no capability: the UI shows 'chưa rõ năng lực'")
+	require.Nil(t, models[0].InputPricePerMTok)
+}
+
+func TestCatalogRejectsAGoogleBodyWithoutModels(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, `{"data":[]}`) }))
+	defer srv.Close()
+	_, err := catalogForTest(srv.Client(), 1<<16, 1, nil).ListModels(platformContext(t.Context()), uuid.New(), model.KindGoogle, srv.URL, secretKey)
+	require.Equal(t, errors.CodeLLMProviderRejected, code(t, err))
 }

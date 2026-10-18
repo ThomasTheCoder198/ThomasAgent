@@ -248,3 +248,49 @@ test("orders the Apps folder right after Organizations, with no expected statuse
   const apps = output.item.find((folder) => folder.name === "Apps");
   assert.ok(!JSON.stringify(apps).includes("expected status"));
 });
+
+test("runs the platform role clear in Lifecycle after the in-use guards and accepts its 204", () => {
+  const request = (name, method, path) => ({
+    name,
+    request: { method, url: { host: ["{{baseUrl}}"], path } },
+  });
+  const input = structuredClone(raw);
+  input.item.push({
+    name: "LLM model roles",
+    item: [request("clear role", "DELETE", ["api", "v1", "model-roles", ":role"])],
+  });
+  input.item.push({
+    name: "LLM models",
+    item: [request("delete model", "DELETE", ["api", "v1", "models", ":modelId"])],
+  });
+  const output = postprocess(input);
+  const lifecycle = output.item.find((folder) => folder.name === "Lifecycle");
+  assert.deepEqual(
+    lifecycle.item.map((item) => item.name),
+    ["delete model", "clear role"],
+  );
+  assert.match(lifecycle.item[1].event[0].script.exec.join("\n"), /expected status.*204/);
+  assert.match(output.event.find((e) => e.listen === "test").script.exec.join("\n"), /code === 204\) return/);
+});
+
+test("runs the org model-role requests after the organization is created", () => {
+  const request = (name, method, path) => ({
+    name,
+    request: { method, url: { host: ["{{baseUrl}}"], path } },
+  });
+  const input = structuredClone(raw);
+  input.item.push(
+    {
+      name: "LLM model roles",
+      item: [request("list org roles", "GET", ["api", "v1", "orgs", ":orgId", "model-roles"])],
+    },
+    { name: "Organizations", item: [request("create", "POST", ["api", "v1", "orgs"])] },
+  );
+  const output = postprocess(input);
+  const organizations = output.item.find((folder) => folder.name === "Organizations");
+  assert.deepEqual(
+    organizations.item.map((item) => item.name),
+    ["create", "list org roles"],
+  );
+  assert.equal(output.item.find((folder) => folder.name === "LLM model roles").item.length, 0);
+});

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -20,16 +21,18 @@ import (
 type LLMModelService interface {
 	CreateModel(ctx context.Context, input model.LLMModelInput) (model.LLMModel, error)
 	DeleteModel(ctx context.Context, id uuid.UUID) error
+	UpdateCapabilities(ctx context.Context, id uuid.UUID, capabilities []model.Capability) (model.LLMModel, error)
 	ListModels(ctx context.Context, providerID *uuid.UUID, capability *model.Capability) ([]model.LLMModel, error)
 }
 
 type LLMModelServiceImpl struct {
 	pool   *pgxpool.Pool
 	models repository.LLMModelRepo
+	roles  repository.RoleRepo
 }
 
-func NewLLMModelService(pool *pgxpool.Pool, models repository.LLMModelRepo) LLMModelService {
-	return &LLMModelServiceImpl{pool: pool, models: models}
+func NewLLMModelService(pool *pgxpool.Pool, models repository.LLMModelRepo, roles repository.RoleRepo) LLMModelService {
+	return &LLMModelServiceImpl{pool: pool, models: models, roles: roles}
 }
 
 func (s *LLMModelServiceImpl) CreateModel(ctx context.Context, input model.LLMModelInput) (model.LLMModel, error) {
@@ -55,6 +58,65 @@ func (s *LLMModelServiceImpl) DeleteModel(ctx context.Context, id uuid.UUID) err
 		}
 		return audit.Record(ctx, tx, audit.Event{Actor: auditActorOwner, Action: auditActionModelDelete, TargetType: auditTargetModel, TargetID: id.String()})
 	})
+}
+
+func (s *LLMModelServiceImpl) UpdateCapabilities(ctx context.Context, id uuid.UUID, capabilities []model.Capability) (model.LLMModel, error) {
+	capabilities, err := normalizeCapabilities(capabilities)
+	if err != nil {
+		return model.LLMModel{}, err
+	}
+	var updated model.LLMModel
+	err = postgres.WithTransaction(ctx, s.pool, func(tx pgx.Tx) error {
+		if err := s.checkCapabilityEdit(ctx, tx, id, capabilities); err != nil {
+			return err
+		}
+		var err error
+		updated, err = s.models.UpdateCapabilities(ctx, tx, id, capabilities)
+		if err != nil {
+			return err
+		}
+		return audit.Record(ctx, tx, audit.Event{Actor: auditActorOwner, Action: auditActionModelUpdate, TargetType: auditTargetModel,
+			TargetID: id.String(), Metadata: map[string]any{"capabilities": capabilities}})
+	})
+	return updated, err
+}
+
+// checkCapabilityEdit locks the model row FOR UPDATE before it reads the roles. Role assignment only takes FOR SHARE, which
+// conflicts with FOR UPDATE, so an assignment either committed before this read (the edit sees its role) or waits for
+// this transaction and then sees the new capabilities. A share lock here would not conflict with the assignment's.
+func (s *LLMModelServiceImpl) checkCapabilityEdit(ctx context.Context, tx pgx.Tx, id uuid.UUID, capabilities []model.Capability) error {
+	current, err := s.models.GetModelForUpdate(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	if slices.Contains(capabilities, model.CapabilityEmbedding) && (current.EmbeddingDims == nil || *current.EmbeddingDims <= 0) {
+		return errors.FieldError("embeddingDims", errors.FieldCodeRequired)
+	}
+	roles, err := s.roles.RolesUsingModel(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	next := model.LLMModel{Capabilities: capabilities}
+	for _, role := range roles {
+		if !next.FitsRole(role) {
+			return capabilityMismatch(role)
+		}
+	}
+	return nil
+}
+
+// normalizeCapabilities sorts, deduplicates and validates an operator's capability list.
+func normalizeCapabilities(capabilities []model.Capability) ([]model.Capability, error) {
+	capabilities = slices.Compact(slices.Sorted(slices.Values(capabilities)))
+	if len(capabilities) == 0 {
+		return nil, errors.FieldError("capabilities", errors.FieldCodeRequired)
+	}
+	for _, capability := range capabilities {
+		if !model.IsValidCapability(capability) {
+			return nil, errors.FieldError("capabilities", errors.FieldCodeInvalid)
+		}
+	}
+	return capabilities, nil
 }
 
 func (s *LLMModelServiceImpl) ListModels(ctx context.Context, providerID *uuid.UUID, capability *model.Capability) ([]model.LLMModel, error) {

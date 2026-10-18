@@ -13,6 +13,7 @@ const (
 
 	// Names the app proxy forwards to ragx (spec §14.2); one spelling for httpx and platform/ragx.
 	HeaderContentType    = "Content-Type"
+	MediaTypeJSON        = "application/json"
 	HeaderAcceptLanguage = "Accept-Language"
 	HeaderIdempotencyKey = "Idempotency-Key"
 )

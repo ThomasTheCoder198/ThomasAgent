@@ -203,3 +203,36 @@ func TestSyncSkipsAndCountsMalformedRemoteModel(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, models, 1)
 }
+
+// Ruling F2a3-1: core roles never use embeddings (ragx owns them, O6), so a Google sync keeps only models that
+// generate content and never stores an embedding capability from Google's list, which carries no dimensions.
+func TestSyncGoogleKeepsGenerativeModelsAndSkipsTheRest(t *testing.T) {
+	window := 1048576
+	cat := &fakeCatalog{models: []model.RemoteModel{
+		{ModelRef: "gemini-2.5-flash", DisplayName: "Gemini 2.5 Flash", Capabilities: []model.Capability{model.CapabilityChat}, ContextWindow: &window},
+		{ModelRef: "gemini-embedding-001", DisplayName: "Gemini Embedding", Capabilities: []model.Capability{model.CapabilityEmbedding}},
+		{ModelRef: "models-both", DisplayName: "Both", Capabilities: []model.Capability{model.CapabilityChat, model.CapabilityEmbedding}},
+		{ModelRef: "aqa", DisplayName: "AQA"},
+	}}
+	s := newTestService(t, cat)
+	ctx := platformContext(context.Background())
+	provider, err := s.CreateProvider(ctx, model.ProviderInput{Kind: model.KindGoogle, Name: "Google", APIKey: ptr(secretKey)})
+	require.NoError(t, err)
+
+	res, err := s.SyncModels(ctx, provider.ID)
+	require.NoError(t, err, "an embedding model without dimensions never fails the sync")
+	require.Equal(t, model.SyncResult{Added: 2, Skipped: 2}, res)
+
+	models, err := s.ListModels(ctx, &provider.ID, nil)
+	require.NoError(t, err)
+	require.Len(t, models, 2)
+	byRef := map[string]model.LLMModel{}
+	for _, llmModel := range models {
+		byRef[llmModel.ModelRef] = llmModel
+	}
+	require.Equal(t, []model.Capability{model.CapabilityChat}, byRef["gemini-2.5-flash"].Capabilities)
+	require.Equal(t, window, *byRef["gemini-2.5-flash"].ContextWindow)
+	require.Equal(t, []model.Capability{model.CapabilityChat}, byRef["models-both"].Capabilities, "no embedding capability from Google")
+	require.NotContains(t, byRef, "gemini-embedding-001")
+	require.NotContains(t, byRef, "aqa")
+}

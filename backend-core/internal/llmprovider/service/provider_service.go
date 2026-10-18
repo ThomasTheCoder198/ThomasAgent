@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -28,6 +29,8 @@ type ProviderService interface {
 	TestProvider(ctx context.Context, id uuid.UUID) (int, error)
 	// GetProviderWithKey returns the provider and its decrypted API key, for sync and resolve only.
 	GetProviderWithKey(ctx context.Context, id uuid.UUID) (model.StoredProvider, string, error)
+	// GetProviderAccess is GetProviderWithKey plus the key's version, for resolution only.
+	GetProviderAccess(ctx context.Context, id uuid.UUID) (model.ProviderAccess, error)
 }
 
 type ProviderServiceImpl struct {
@@ -173,6 +176,23 @@ func (s *ProviderServiceImpl) GetProviderWithKey(ctx context.Context, id uuid.UU
 	}
 	apiKey, err := s.secrets.Get(ctx, s.pool, *provider.SecretID)
 	return provider, apiKey, errors.Normalize(err)
+}
+
+func (s *ProviderServiceImpl) GetProviderAccess(ctx context.Context, id uuid.UUID) (model.ProviderAccess, error) {
+	provider, err := s.providers.GetProvider(ctx, s.pool, id)
+	if err != nil {
+		return model.ProviderAccess{}, errors.Normalize(err)
+	}
+	access := model.ProviderAccess{StoredProvider: provider}
+	if provider.SecretID == nil {
+		return access, nil
+	}
+	apiKey, version, err := s.secrets.GetWithVersion(ctx, s.pool, *provider.SecretID)
+	if err != nil {
+		return model.ProviderAccess{}, errors.Normalize(err)
+	}
+	access.APIKey, access.KeyVersion = apiKey, version.UTC().Format(time.RFC3339Nano)
+	return access, nil
 }
 
 func normalizeProvider(input *model.ProviderInput) error {

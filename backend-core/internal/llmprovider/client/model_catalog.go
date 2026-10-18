@@ -26,12 +26,16 @@ const (
 	headerAuthorization = "Authorization"
 	bearerPrefix        = "Bearer "
 	headerRetryAfter    = "Retry-After"
+	headerGoogleAPIKey  = "x-goog-api-key"
 	modelsPath          = "/models"
+	decisionsQuery      = "output_modalities=decisions"
+	googleModelsQuery   = "pageSize=1000"
 	catalogOperation    = "provider.list_models"
 	catalogSuccess      = "success"
+	fieldDecisionsList  = "decisions"
 )
 
-// ModelCatalog lists the models a provider publishes at GET /models.
+// ModelCatalog lists the models a provider publishes at its model list endpoint.
 type ModelCatalog interface {
 	ListModels(ctx context.Context, providerID uuid.UUID, kind model.ProviderKind, baseURL, apiKey string) ([]model.RemoteModel, error)
 }
@@ -41,8 +45,8 @@ type OutboundRecorder interface {
 	ObserveOutbound(target, outcome string, elapsed time.Duration)
 }
 
-// HTTPModelCatalog calls a provider's GET /models with retry, a circuit breaker per provider
-// and a response size cap. Only OpenRouter responses carry capabilities and prices.
+// HTTPModelCatalog calls a provider's model list with retry, a circuit breaker per provider
+// and a response size cap. OpenRouter and Google lists carry model facts (O8); other kinds give names only.
 type HTTPModelCatalog struct {
 	Client           *http.Client
 	Policy           retry.Policy
@@ -87,32 +91,80 @@ func (c *HTTPModelCatalog) ListModels(ctx context.Context, providerID uuid.UUID,
 		return nil, err
 	}
 	defer c.releaseBreaker(entry)
+	guarded := func(req listRequest, decode func(io.Reader) error) error {
+		return retry.Do(ctx, c.Policy, func(ctx context.Context) error {
+			return entry.breaker.Execute(ctx, func(ctx context.Context) error { return c.fetch(ctx, kind, req, decode) })
+		})
+	}
+	if kind == model.KindGoogle {
+		var body googleModels
+		if err := guarded(googleRequest(baseURL, apiKey), c.decodeGoogle(&body)); err != nil {
+			return nil, err
+		}
+		return toGoogleModels(body), nil
+	}
 	var body openRouterModels
-	err = retry.Do(ctx, c.Policy, func(ctx context.Context) error {
-		return entry.breaker.Execute(ctx, func(ctx context.Context) error { return c.fetch(ctx, kind, baseURL, apiKey, &body) })
-	})
-	if err != nil {
+	if err := guarded(bearerRequest(baseURL, "", apiKey), c.decodeData(&body)); err != nil {
 		return nil, err
 	}
 	if kind != model.KindOpenRouter {
 		return toPlainModels(body), nil
 	}
-	return toOpenRouterModels(body), nil
+	return c.withDecisionModels(ctx, kind, baseURL, apiKey, toOpenRouterModels(body)), nil
+}
+
+// withDecisionModels adds OpenRouter's decision models (ruling A2-5). The list is alpha: one attempt, outside the
+// breaker, and a failure only logs, so it never fails or trips a sync of the chat models.
+func (c *HTTPModelCatalog) withDecisionModels(ctx context.Context, kind model.ProviderKind, baseURL, apiKey string, models []model.RemoteModel) []model.RemoteModel {
+	var body openRouterModels
+	if err := c.fetch(ctx, kind, bearerRequest(baseURL, decisionsQuery, apiKey), c.decodeData(&body)); err != nil {
+		if c.log != nil {
+			c.log.WarnContext(ctx, catalogOperation, slog.Bool(fieldDecisionsList, false), slog.String(logging.FieldErrorCode, string(errors.CodeOf(err))))
+		}
+		return models
+	}
+	return mergeDecisionModels(models, toDecisionModels(body))
+}
+
+// listRequest is one GET of a provider's model list; the key is in a header and never in the URL.
+type listRequest struct {
+	url    string
+	header http.Header
+}
+
+func bearerRequest(baseURL, rawQuery, apiKey string) listRequest {
+	target := strings.TrimRight(baseURL, "/") + modelsPath
+	if rawQuery != "" {
+		target += "?" + rawQuery
+	}
+	header := http.Header{}
+	if apiKey != "" {
+		header.Set(headerAuthorization, bearerPrefix+apiKey)
+	}
+	return listRequest{url: target, header: header}
+}
+
+func googleRequest(baseURL, apiKey string) listRequest {
+	header := http.Header{}
+	if apiKey != "" {
+		header.Set(headerGoogleAPIKey, apiKey)
+	}
+	return listRequest{url: strings.TrimRight(baseURL, "/") + modelsPath + "?" + googleModelsQuery, header: header}
 }
 
 func (c *HTTPModelCatalog) isConfigured() bool {
 	return c.Client != nil && c.Breaker != nil && c.MaxResponseBytes > 0 && c.MaxResponseBytes < int64(maxRetryAfter) && c.Policy.MaxAttempts > 0 && c.MaxBreakers > 0
 }
 
-func (c *HTTPModelCatalog) fetch(ctx context.Context, kind model.ProviderKind, baseURL, apiKey string, out *openRouterModels) (err error) {
+func (c *HTTPModelCatalog) fetch(ctx context.Context, kind model.ProviderKind, list listRequest, decode func(io.Reader) error) (err error) {
 	start := time.Now()
 	defer func() { c.observe(ctx, kind, err, time.Since(start)) }()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+modelsPath, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, list.url, nil)
 	if err != nil {
 		return errors.ErrLLMProviderRejected
 	}
-	if apiKey != "" {
-		req.Header.Set(headerAuthorization, bearerPrefix+apiKey)
+	for name, values := range list.header {
+		req.Header[name] = values
 	}
 	res, err := c.Client.Do(req)
 	if err != nil {
@@ -129,7 +181,7 @@ func (c *HTTPModelCatalog) fetch(ctx context.Context, kind model.ProviderKind, b
 	if err = errorForStatus(res.StatusCode); err != nil {
 		return withRetryAfter(err, res.Header.Get(headerRetryAfter))
 	}
-	return c.decodeModels(res.Body, out)
+	return decode(res.Body)
 }
 
 func (c *HTTPModelCatalog) observe(ctx context.Context, kind model.ProviderKind, err error, elapsed time.Duration) {
@@ -145,27 +197,51 @@ func (c *HTTPModelCatalog) observe(ctx context.Context, kind model.ProviderKind,
 	}
 }
 
-func (c *HTTPModelCatalog) decodeModels(body io.Reader, out *openRouterModels) error {
+// readCapped reads at most MaxResponseBytes; a larger body is the provider's fault, not ours.
+func (c *HTTPModelCatalog) readCapped(body io.Reader) ([]byte, error) {
 	raw, err := io.ReadAll(io.LimitReader(body, c.MaxResponseBytes+1))
 	if err != nil {
-		return errors.ErrProviderUnavailable
+		return nil, errors.ErrProviderUnavailable
 	}
 	if int64(len(raw)) > c.MaxResponseBytes {
-		return errors.ErrLLMProviderRejected
+		return nil, errors.ErrLLMProviderRejected
 	}
-	var envelope struct {
-		Data []json.RawMessage `json:"data"`
-	}
-	if err := json.Unmarshal(raw, &envelope); err != nil || envelope.Data == nil {
-		return errors.ErrLLMProviderRejected
-	}
-	out.Data = make([]openRouterModel, len(envelope.Data))
-	for index, entry := range envelope.Data {
-		var decoded openRouterModel
-		if err := json.Unmarshal(entry, &decoded); err == nil {
-			out.Data[index] = decoded
+	return raw, nil
+}
+
+func (c *HTTPModelCatalog) decodeData(out *openRouterModels) func(io.Reader) error {
+	return func(body io.Reader) error {
+		raw, err := c.readCapped(body)
+		if err != nil {
+			return err
 		}
-		// A zero model is rejected and counted by sync without losing valid siblings.
+		var envelope struct {
+			Data []json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(raw, &envelope); err != nil || envelope.Data == nil {
+			return errors.ErrLLMProviderRejected
+		}
+		out.Data = make([]openRouterModel, len(envelope.Data))
+		for index, entry := range envelope.Data {
+			var decoded openRouterModel
+			if err := json.Unmarshal(entry, &decoded); err == nil {
+				out.Data[index] = decoded
+			}
+			// A zero model is rejected and counted by sync without losing valid siblings.
+		}
+		return nil
 	}
-	return nil
+}
+
+func (c *HTTPModelCatalog) decodeGoogle(out *googleModels) func(io.Reader) error {
+	return func(body io.Reader) error {
+		raw, err := c.readCapped(body)
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(raw, out); err != nil || out.Models == nil {
+			return errors.ErrLLMProviderRejected
+		}
+		return nil
+	}
 }

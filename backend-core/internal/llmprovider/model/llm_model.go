@@ -2,7 +2,8 @@ package model
 
 import "github.com/google/uuid"
 
-// Where a model row came from; sync never overwrites a manual row.
+// Where a model row came from; sync never overwrites a manual row. CapabilitiesEdited marks an operator's
+// capability edit, which sync keeps (O8).
 const (
 	ModelSourceManual = "manual"
 	ModelSourceSync   = "sync"
@@ -20,6 +21,7 @@ type LLMModel struct {
 	InputPricePerMTok  *float64
 	OutputPricePerMTok *float64
 	Source             string
+	CapabilitiesEdited bool
 }
 
 type LLMModelInput struct {

@@ -8,9 +8,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
@@ -98,6 +100,79 @@ func TestStorePersistsEncrypted(t *testing.T) {
 	require.NoError(t, s.Delete(ctx, pool, id))
 	_, err = s.Get(ctx, pool, id)
 	require.ErrorIs(t, err, errors.ErrVaultSecretNotFound)
+}
+
+func TestStore_GetWithVersionChangesOnReplace(t *testing.T) {
+	pool := pgtest.Start(t)
+	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
+	c, err := NewCipher("v1", randomKey(t))
+	require.NoError(t, err)
+	store := NewStore(c)
+	id, err := store.Put(ctx, pool, "first")
+	require.NoError(t, err)
+	plain, v1, err := store.GetWithVersion(ctx, pool, id)
+	require.NoError(t, err)
+	require.Equal(t, "first", plain)
+	require.NoError(t, store.Replace(ctx, pool, id, "second"))
+	plain, v2, err := store.GetWithVersion(ctx, pool, id)
+	require.NoError(t, err)
+	require.Equal(t, "second", plain)
+	require.True(t, v2.After(v1), "a replaced key has a newer version")
+}
+
+// afterQueryRowDB runs hook once, right after the first QueryRow has been scanned, to model a writer landing between
+// two reads.
+type afterQueryRowDB struct {
+	postgres.DBTX
+	queryRows int
+	hook      func()
+}
+
+func (d *afterQueryRowDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	d.queryRows++
+	row := d.DBTX.QueryRow(ctx, sql, args...)
+	if d.queryRows != 1 {
+		return row
+	}
+	return hookedRow{Row: row, hook: d.hook}
+}
+
+type hookedRow struct {
+	pgx.Row
+	hook func()
+}
+
+func (r hookedRow) Scan(dest ...any) error {
+	err := r.Row.Scan(dest...)
+	r.hook()
+	return err
+}
+
+func TestStore_GetWithVersionVersionBelongsToReturnedKey(t *testing.T) {
+	pool := pgtest.Start(t)
+	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
+	c, err := NewCipher("v1", randomKey(t))
+	require.NoError(t, err)
+	store := NewStore(c)
+	id, err := store.Put(ctx, pool, "first")
+	require.NoError(t, err)
+	_, v1, err := store.GetWithVersion(ctx, pool, id)
+	require.NoError(t, err)
+
+	// A Replace lands right after the first read. One query means key and version both come from the old row;
+	// two queries would pair the old version with the new key.
+	db := &afterQueryRowDB{DBTX: pool}
+	db.hook = func() { require.NoError(t, store.Replace(ctx, pool, id, "second")) }
+	plain, version, err := store.GetWithVersion(ctx, db, id)
+	require.NoError(t, err)
+	require.Equal(t, "first", plain)
+	require.True(t, version.Equal(v1), "the version belongs to the key it was returned with")
+	require.Equal(t, 1, db.queryRows, "key and version come from one query")
+
+	plain, version, err = store.GetWithVersion(ctx, pool, id)
+	require.NoError(t, err)
+	require.Equal(t, "second", plain)
+	require.True(t, version.After(v1))
 }
 
 func TestStoreUpgradesLegacyAADWithoutLosingSecret(t *testing.T) {

@@ -74,6 +74,45 @@ func toOpenRouterModels(body openRouterModels) []model.RemoteModel {
 	return out
 }
 
+// toDecisionModels maps OpenRouter's decision list: a decision model only decides (O8), so it carries exactly
+// the decision capability, whatever its parameters say.
+func toDecisionModels(body openRouterModels) []model.RemoteModel {
+	out := make([]model.RemoteModel, 0, len(body.Data))
+	for _, m := range body.Data {
+		if m.ID == "" {
+			continue
+		}
+		var contextWindow *int
+		if m.ContextLength > 0 {
+			length := m.ContextLength
+			contextWindow = &length
+		}
+		name := m.Name
+		if name == "" {
+			name = m.ID
+		}
+		out = append(out, model.RemoteModel{ModelRef: m.ID, DisplayName: name, Capabilities: []model.Capability{model.CapabilityDecision},
+			ContextWindow: contextWindow, InputPricePerMTok: perMillion(m.Pricing.Prompt), OutputPricePerMTok: perMillion(m.Pricing.Completion)})
+	}
+	return out
+}
+
+// mergeDecisionModels replaces a chat row that is also a decision model and appends the others.
+func mergeDecisionModels(models, decisions []model.RemoteModel) []model.RemoteModel {
+	index := make(map[string]int, len(models))
+	for i, m := range models {
+		index[m.ModelRef] = i
+	}
+	for _, decision := range decisions {
+		if i, ok := index[decision.ModelRef]; ok {
+			models[i] = decision
+			continue
+		}
+		models = append(models, decision)
+	}
+	return models
+}
+
 // perMillion converts OpenRouter's per-token price; unknown or negative prices stay nil.
 func perMillion(perToken string) *float64 {
 	pricePerToken, err := strconv.ParseFloat(perToken, 64)

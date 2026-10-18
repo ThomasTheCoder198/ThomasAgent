@@ -27,6 +27,7 @@ func testControllers() ControllerContainer {
 		ProviderController: llmcontroller.NewProviderController(nil, nil, 1),
 		LLMModelController: llmcontroller.NewLLMModelController(nil, 1),
 		RoleController:     llmcontroller.NewRoleController(nil, 1),
+		OrgRoleController:  llmcontroller.NewOrgRoleController(nil, 1),
 
 		OrganizationController: orgcontroller.NewOrganizationController(nil, 1),
 		AppProxyController:     appcontroller.NewAppProxyController(nil, 1),

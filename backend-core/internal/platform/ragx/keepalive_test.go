@@ -136,7 +136,7 @@ func TestCaller_ClosesIdleRagxConnectionsAfterTheConfiguredTimeout(t *testing.T)
 	require.NoError(t, err)
 	cfg := testConfig(server.URL)
 	cfg.IdleConnTimeout = idle
-	caller, _, _ := callerWith(t, cfg, key)
+	caller, _, _ := callerWith(t, cfg, key, discardToolLog{})
 
 	_, err = caller.Forward(orgContext(), readRequest())
 	require.NoError(t, err)

@@ -15,6 +15,11 @@ import (
 
 type Scope string
 
+const toolScopePrefix = "tool:"
+
+// ToolScope identifies a ragx tool and requires a KB claim.
+func ToolScope(name string) Scope { return Scope(toolScopePrefix + name) }
+
 const (
 	ScopeOrgProvision Scope = "org:provision"
 	ScopeKBRead       Scope = "kb:read"

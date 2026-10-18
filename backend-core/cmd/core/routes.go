@@ -40,9 +40,11 @@ func registerRoutes(engine *gin.Engine, c ControllerContainer, mw middlewares) {
 	session.POST("/api/v1/providers/:providerId/sync", c.ProviderController.HandleSyncProvider)
 	session.GET("/api/v1/models", c.LLMModelController.HandleListModels)
 	session.POST("/api/v1/models", c.LLMModelController.HandleCreateModel)
+	session.PATCH("/api/v1/models/:modelId", c.LLMModelController.HandleUpdateModel)
 	session.DELETE("/api/v1/models/:modelId", c.LLMModelController.HandleDeleteModel)
 	session.GET("/api/v1/model-roles", c.RoleController.HandleListRoles)
 	session.PUT("/api/v1/model-roles/:role", c.RoleController.HandleAssignRole)
+	session.DELETE("/api/v1/model-roles/:role", c.RoleController.HandleClearRole)
 	session.GET("/api/v1/orgs", c.OrganizationController.HandleListOrganizations)
 	session.POST("/api/v1/orgs", c.OrganizationController.HandleCreateOrganization)
 	session.GET("/api/v1/orgs/:orgId", c.OrganizationController.HandleGetOrganization)
@@ -54,4 +56,7 @@ func registerRoutes(engine *gin.Engine, c ControllerContainer, mw middlewares) {
 	for _, method := range appmodel.ForwardedMethods() {
 		orgScoped.Handle(method, appProxyRoute, c.AppProxyController.HandleForward)
 	}
+	orgScoped.GET("/api/v1/orgs/:orgId/model-roles", c.OrgRoleController.HandleListOrgRoles)
+	orgScoped.PUT("/api/v1/orgs/:orgId/model-roles/:role", c.OrgRoleController.HandleAssignOrgRole)
+	orgScoped.DELETE("/api/v1/orgs/:orgId/model-roles/:role", c.OrgRoleController.HandleClearOrgRole)
 }

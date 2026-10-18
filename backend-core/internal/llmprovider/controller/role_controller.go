@@ -42,3 +42,11 @@ func (c *RoleController) HandleAssignRole(ctx *gin.Context) {
 	err := c.roleService.AssignRole(ctx.Request.Context(), role, request.ModelID)
 	httpx.Respond(ctx, http.StatusOK, dto.RoleAssignmentResponse{Role: role, ModelID: request.ModelID}, err)
 }
+
+func (c *RoleController) HandleClearRole(ctx *gin.Context) {
+	if err := c.roleService.ClearRole(ctx.Request.Context(), model.Role(ctx.Param("role"))); err != nil {
+		httpx.Fail(ctx, err)
+		return
+	}
+	ctx.Status(http.StatusNoContent)
+}

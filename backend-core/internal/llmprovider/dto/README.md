@@ -4,7 +4,7 @@
 JSON request and response bodies of the provider, model and role endpoints and their conversions.
 
 ## Entry points
-- `provider.go`, `llm_model.go`, `role.go`
+- `provider.go`, `llm_model.go` (`LLMModelResponse.CapabilitiesEdited`, `UpdateModelRequest`), `role.go`, `org_role.go` (`OrgRoleResponse`)
 - `DeleteResponse` (`common.go`)
 
 ## Dependencies

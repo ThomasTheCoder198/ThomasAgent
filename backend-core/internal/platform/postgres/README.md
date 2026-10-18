@@ -26,7 +26,7 @@ go test ./internal/platform/postgres/... -count=1
 ```
 Docker Desktop must run with Linux containers; tests use postgres:18.6-alpine.
 Tests apply and roll back platform, identity/registry and hardening migrations, reject deliberately broken
-SQL, verify status transitions from pending to applied and back, and check that connection failure is returned before a pool is exposed.
+SQL, roll back through named migrations (`migrateDownThrough`) rather than counting Down steps, derive the expected status count from the embedded `migrations.FS`, verify status transitions from pending to applied and back, and check that connection failure is returned before a pool is exposed.
 
 ## Conventions
 See the [shared naming glossary](../../../../docs/glossary.md) for terms used across services.

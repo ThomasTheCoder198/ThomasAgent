@@ -22,6 +22,7 @@ the old defaults without modifying row ownership.
 - `core migrate status` reports applied and pending migration versions.
 - `20261015000001_org_settings_version.sql` adds `organizations.settings_version` (positive bigint, default 1); Down removes it.
 - `20261017000001_agents_chat.sql` creates `agents`, `conversations`, `messages`, `runs` (one `running` run per conversation, `uq_runs_one_active`) and `run_steps`, all tenant-scoped (children reference their parent by `(parent_id, tenant_id)` so a row cannot name another tenant's parent), and adds `models.capabilities_edited`; Down drops them and the column.
+- `20261018000001_conversations_retention_index.sql` indexes `conversations.updated_at` for the cross-tenant inactivity purge; Down removes the index.
 
 ## Dependencies
 - Uses: Go embed and Postgres SQL, interpreted by Goose.

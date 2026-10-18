@@ -67,6 +67,7 @@ func (rt *coreRuntime) serveHTTP(ctx context.Context) error {
 		organizations:  services.OrganizationService,
 	})
 	go rt.purgeExpiredSessions(ctx, services.AuthService)
+	go rt.purgeInactiveConversations(ctx, services.RetentionService)
 	go rt.serveMetrics(ctx)
 	return rt.listenAndServe(ctx, engine)
 }

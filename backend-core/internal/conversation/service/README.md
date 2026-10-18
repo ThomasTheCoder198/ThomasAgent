@@ -5,6 +5,7 @@ Business rules and transactions of the Conversations API (list, get, rename, del
 
 ## Entry points
 - `ConversationService` / `ConversationServiceImpl` / `NewConversationService` (`conversation_service.go`), plus `ParseLimit` for the controller.
+- `RetentionService` / `RetentionServiceImpl` / `NewRetentionService` (`retention_service.go`) scans all tenants in bounded batches from an injected clock; the scheduled core job is its only caller.
 - `ChatStore` / `ChatStoreImpl` / `NewChatStore` (`chat_store.go`): `EnsureConversation`, `LoadHistory`, `AppendUserMessage`, `StartRun`, `DropLastAssistant`, `RecordStep`, `FinishRun`, `SaveSummary`, `ListMessagesRange`, `SetTitle`, `ActiveRun`.
 - `encodeCursor` / `decodeCursor` (`cursor.go`).
 - `agentservice.KnowledgeBaseLookup` is the only ragx dependency, declared by the agent service and reused here.

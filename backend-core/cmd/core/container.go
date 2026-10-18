@@ -109,6 +109,7 @@ func (rt *coreRuntime) initRepositoryContainer(pool *pgxpool.Pool) RepositoryCon
 type ServiceContainer struct {
 	AgentService        agentservice.AgentService
 	ConversationService convservice.ConversationService
+	RetentionService    convservice.RetentionService
 	// ChatStore is the persistence port of the M2b run loop.
 	ChatStore        convservice.ChatStore
 	AuthService      authservice.AuthService
@@ -140,6 +141,7 @@ func (rt *coreRuntime) initServiceContainer(ctx context.Context, pool *pgxpool.P
 		AgentService: agentservice.NewAgentService(pool, repositories.AgentRepo, clients.Ragx, resolveService, rt.log),
 		ConversationService: convservice.NewConversationService(pool, repositories.ConversationRepo, repositories.MessageRepo,
 			repositories.AgentRepo, clients.Ragx, rt.cfg.Conversation, rt.log),
+		RetentionService: convservice.NewRetentionService(pool, repositories.ConversationRepo, rt.cfg.Conversation, time.Now),
 		ChatStore:        convservice.NewChatStore(pool, repositories.ConversationRepo, repositories.MessageRepo, repositories.RunRepo, repositories.AgentRepo),
 		AuthService:      authService,
 		ProviderService:  providerService,

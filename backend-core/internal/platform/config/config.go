@@ -161,15 +161,28 @@ func (c RagxConfig) validate() []error {
 
 // ConversationConfig bounds the conversation list page (meta.page, ruling A2-11).
 type ConversationConfig struct {
-	PageDefaultLimit int `env:"PAGE_DEFAULT_LIMIT"`
-	PageMaxLimit     int `env:"PAGE_MAX_LIMIT"`
+	PageDefaultLimit       int           `env:"PAGE_DEFAULT_LIMIT"`
+	PageMaxLimit           int           `env:"PAGE_MAX_LIMIT"`
+	Retention              time.Duration `env:"RETENTION"`
+	RetentionPurgeInterval time.Duration `env:"RETENTION_PURGE_INTERVAL"`
+	RetentionPurgeBatch    int           `env:"RETENTION_PURGE_BATCH"`
 }
 
 func (c ConversationConfig) validate() []error {
+	var errs []error
 	if c.PageDefaultLimit < 1 || c.PageMaxLimit < c.PageDefaultLimit {
-		return []error{errors.New("CORE_CONVERSATION_PAGE_DEFAULT_LIMIT must be >= 1 and <= CORE_CONVERSATION_PAGE_MAX_LIMIT")}
+		errs = append(errs, errors.New("CORE_CONVERSATION_PAGE_DEFAULT_LIMIT must be >= 1 and <= CORE_CONVERSATION_PAGE_MAX_LIMIT"))
 	}
-	return nil
+	if c.Retention <= 0 {
+		errs = append(errs, errors.New("CORE_CONVERSATION_RETENTION must be > 0"))
+	}
+	if c.RetentionPurgeInterval <= 0 {
+		errs = append(errs, errors.New("CORE_CONVERSATION_RETENTION_PURGE_INTERVAL must be > 0"))
+	}
+	if c.RetentionPurgeBatch < 1 {
+		errs = append(errs, errors.New("CORE_CONVERSATION_RETENTION_PURGE_BATCH must be >= 1"))
+	}
+	return errs
 }
 
 func (c RagxConfig) validateLimits() []error {

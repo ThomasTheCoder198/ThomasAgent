@@ -11,7 +11,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/migrations"
 )
 
-// The agents/chat migration is the newest one, so Down rolls back exactly it; both directions run on the
+// Roll back the retention index before the agents/chat migration; both directions run on the
 // throwaway container of pgtest, never on a dev database.
 func TestChatMigration_DownAndUpAgain(t *testing.T) {
 	pool := pgtest.Start(t)
@@ -34,6 +34,9 @@ func TestChatMigration_DownAndUpAgain(t *testing.T) {
 		require.True(t, present(table), table)
 	}
 	require.True(t, capabilitiesEdited())
+	require.True(t, present("idx_conversations_updated_at"))
+	require.NoError(t, postgres.Migrate(ctx, url, migrations.FS, postgres.Down))
+	require.False(t, present("idx_conversations_updated_at"))
 
 	require.NoError(t, postgres.Migrate(ctx, url, migrations.FS, postgres.Down))
 	for _, table := range chatTables {
@@ -46,4 +49,6 @@ func TestChatMigration_DownAndUpAgain(t *testing.T) {
 		require.True(t, present(table), table)
 	}
 	require.True(t, capabilitiesEdited())
+	require.NoError(t, postgres.Migrate(ctx, url, migrations.FS, postgres.Up))
+	require.True(t, present("idx_conversations_updated_at"))
 }

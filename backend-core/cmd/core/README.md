@@ -22,6 +22,7 @@ mixing it with HTTP, migration or worker logic.
 | `server.go`       | `serveHTTP` opens Postgres and Redis, builds dependencies, starts the HTTP server and its background jobs. |
 | `routes.go`       | Registers every path, method and per-route middleware on the Gin engine; ordinary routes carry request deadlines and future stream routes mount separately. |
 | `session_purge.go` | Runs the scheduled cross-tenant expired-session purge with its own job request id. |
+| `conversation_purge.go` | Runs the scheduled cross-tenant inactive-conversation purge with its own job request id, count, duration and outcome metric. |
 | `migrate.go`      | `applyMigrations` applies or rolls back migrations; `reportMigrationStatus` logs each returned status row.                                                          |
 | `outbox_relay.go` | `runOutboxRelay` starts the worker that publishes committed outbox events to Redis Streams.                                                                         |
 | `healthcheck.go`  | `checkHTTPHealth` checks the local HTTP liveness endpoint for Docker.                                                                                               |

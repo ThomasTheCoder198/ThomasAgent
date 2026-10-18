@@ -2,6 +2,7 @@
 
 ## Purpose
 SQL for the `conversations`, `messages`, `runs` and `run_steps` tables. Every method takes the pool or a service transaction and scopes conversation rows by the tenant and authenticated user in ctx. Conversation insertion derives its owner from ctx and refuses a conflicting supplied owner.
+The system-only `PurgeInactiveAcrossTenants` deletes a bounded batch of inactive conversations while skipping rows with a running run. Child rows cascade with each deletion.
 
 ## Entry points
 - `ConversationRepo` (`conversation_repository.go`): `ListPage` returns up to `limit+1` rows so the caller can tell a next page exists.

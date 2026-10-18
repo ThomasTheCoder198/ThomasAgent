@@ -27,6 +27,24 @@ func TestLoad_AppliesDefaults(t *testing.T) {
 	require.Equal(t, "info", cfg.LogLevel)
 	require.Equal(t, 100, cfg.OutboxRelay.BatchSize)
 	require.Equal(t, 500*time.Millisecond, cfg.OutboxRelay.PollInterval)
+	require.Equal(t, 720*time.Hour, cfg.Conversation.Retention)
+	require.Equal(t, time.Hour, cfg.Conversation.RetentionPurgeInterval)
+	require.Equal(t, 500, cfg.Conversation.RetentionPurgeBatch)
+}
+
+func TestLoad_RejectsInvalidConversationRetention(t *testing.T) {
+	for name, value := range map[string]string{
+		"CORE_CONVERSATION_RETENTION":                "0s",
+		"CORE_CONVERSATION_RETENTION_PURGE_INTERVAL": "0s",
+		"CORE_CONVERSATION_RETENTION_PURGE_BATCH":    "0",
+	} {
+		t.Run(name, func(t *testing.T) {
+			setRequired(t)
+			t.Setenv(name, value)
+			_, err := Load()
+			require.ErrorContains(t, err, name)
+		})
+	}
 }
 
 func TestLoad_FailsWithoutRequired(t *testing.T) {

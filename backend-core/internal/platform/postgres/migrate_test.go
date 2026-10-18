@@ -103,8 +103,9 @@ func TestMigrate_UpAndDown(t *testing.T) {
 		VALUES ('default','thomas.ingest.requested','{}','req_m052migration-0001')`)
 	require.NoError(t, err)
 
-	// Down removes the agents/chat tables first, then the org version, organizations, trace columns, request IDs,
+	// Down removes the retention index, then agents/chat tables, org version, organizations, trace columns, request IDs,
 	// AAD expansion, tenant defaults, hardening, identity/registry and platform.
+	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	var agentsExist bool
 	require.NoError(t, pool.QueryRow(ctx, `SELECT to_regclass('agents') IS NOT NULL`).Scan(&agentsExist))

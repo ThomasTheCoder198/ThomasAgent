@@ -29,6 +29,7 @@ type ConversationRepo interface {
 	SaveSummary(ctx context.Context, db postgres.DBTX, id uuid.UUID, summary string, throughSeq int64) error
 	Touch(ctx context.Context, db postgres.DBTX, id uuid.UUID) error
 	DeleteConversation(ctx context.Context, db postgres.DBTX, id uuid.UUID) error
+	PurgeInactiveAcrossTenants(ctx context.Context, db postgres.DBTX, cutoff time.Time, batch int) (int64, error)
 }
 
 type conversationRepo struct{}
@@ -136,6 +137,18 @@ func (conversationRepo) Touch(ctx context.Context, db postgres.DBTX, id uuid.UUI
 
 func (conversationRepo) DeleteConversation(ctx context.Context, db postgres.DBTX, id uuid.UUID) error {
 	return execOne(ctx, db, `DELETE FROM conversations WHERE id = $1 AND tenant_id = $2 AND user_id = $3`, id)
+}
+
+// PurgeInactiveAcrossTenants is reserved for the system job; request paths remain tenant and user scoped.
+func (conversationRepo) PurgeInactiveAcrossTenants(ctx context.Context, db postgres.DBTX, cutoff time.Time, batch int) (int64, error) {
+	tag, err := db.Exec(ctx, `DELETE FROM conversations WHERE id IN (
+		SELECT c.id FROM conversations c WHERE c.updated_at < $1 AND NOT EXISTS (
+			SELECT 1 FROM runs r WHERE r.conversation_id = c.id AND r.status = 'running')
+		ORDER BY c.updated_at LIMIT $2 FOR UPDATE SKIP LOCKED)`, cutoff, batch)
+	if err != nil {
+		return 0, fmt.Errorf("purge inactive conversations: %w", err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 // execOne runs a statement whose first three parameters are id, tenant and user, and maps "no row" to not found.

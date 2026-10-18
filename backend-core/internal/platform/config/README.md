@@ -33,6 +33,7 @@ Metric buckets must be nonempty, finite, positive and strictly ascending. The me
 `RagxConfig` (`CORE_RAGX_*`) configures `internal/platform/ragx`: the base URL, the connect, request (typed calls) and response-header timeouts, `IDLE_CONN_TIMEOUT` (60s, > 0; keep it below ragx's keep-alive), the cap on a ragx error body (`MAX_ERROR_BODY_BYTES`), the cap on a forwarded response (`MAX_RESPONSE_BYTES`) `PROVISION_ATTEMPTS` and `TOOL_TIMEOUT` (25s, > 0; bounds one agent tool call, ragx's own deadline is shorter). The forward uses the HTTP route's deadline. Budget rule: `PROVISION_ATTEMPTS × REQUEST_TIMEOUT + (attempts − 1) × CORE_RETRY_MAX_DELAY` must stay below `CORE_HTTP_REQUEST_TIMEOUT`, or startup fails. Defaults are in `config.yaml`. Ruling F22 (no `IdleConnTimeout`) was reversed by the owner on 2026-10-14 after R-EOF.
 
 `ConversationConfig` (`CORE_CONVERSATION_*`) bounds the conversation list page: `PAGE_DEFAULT_LIMIT` (30) must be >= 1 and not above `PAGE_MAX_LIMIT` (100).
+It also sets inactive conversation retention (720h), purge interval (1h), and batch size (500). All three must be positive.
 
 Log levels are validated through `logging.ParseLevel`, the same parser used to construct loggers; unknown names fail startup.
 

@@ -41,14 +41,15 @@ The public model catalog folders are `LLM providers`, `LLM models`, and `LLM mod
 The converter's random IDs/responses are removed, and optional generated filters are disabled.
 The cookie jar authenticates public requests. Login stores the CSRF token; mutations send it.
 Role assignment runs before the in-use deletion checks; `DELETE /api/v1/model-roles/{role}` (204) closes the Lifecycle folder after them, so the guards still see the role assigned; logout runs last.
-The org-scoped model-role requests (`/api/v1/orgs/{orgId}/model-roles…`) move to the end of the `Organizations` folder because they read `{{orgId}}`; they carry no expected status (the org is `failed` when ragx is unreachable, `ready` against a dev stack).
+The org-scoped model-role requests (`/api/v1/orgs/{orgId}/model-roles…`) move to the end of the `Organizations` folder because they read `{{orgId}}`; they carry no expected status (the org is `failed` when ragx is unreachable, `ready` against a dev stack or the collection test's fake ragx).
 Run the complete collection against an isolated backend: it assigns `chat.fast`.
 The example provider uses a denied loopback HTTP endpoint so connection/sync
 checks deterministically return 400 without calling a real external provider.
 Positive catalog/sync behavior is covered by LLM provider integration tests.
 The `Organizations` folder runs after the model roles, with `POST /api/v1/orgs` first (it saves `orgId`). Each run creates one
-`API test <timestamp>` organization; organizations cannot be deleted yet. In `TestAPI_GeneratedPostmanCollection` ragx is
-unreachable (`CORE_RAGX_URL=http://127.0.0.1:1`), so the organization ends `failed`; against a dev stack with ragx up it ends `ready`.
+`API test <timestamp>` organization; organizations cannot be deleted yet. In `TestAPI_GeneratedPostmanCollection` ragx is a
+small in-process fake that answers provisioning and the default KB read, so the organization ends `ready` and the Agents folder passes `RequireOrg`; against a dev stack with ragx up it ends `ready` too.
+The `Conversations` folder documents the conversation routes (list, get, rename, delete) but `run.mjs` does not run it yet: a conversation exists only after a chat (M2b), so get, rename and delete would read `{{conversationId}}` with nothing to read. M2b's chat request saves it and adds the folder to the run.
 The `Apps` folder documents the generic ragx proxy (`/api/v1/orgs/{orgId}/apps/ragx/{path}`) but `run.mjs` does not run it: the proxy is pinned by Go integration tests (`backend-core/tests/integration/appproxy_http_test.go`), not by Newman.
 Keep credentials out of committed environments and generated artifacts. See the parent README for environment overrides.
 

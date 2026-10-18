@@ -12,6 +12,7 @@ Structured logger setup is injected by the application. Core has no tracing midd
 - `HeaderContentType`, `HeaderAcceptLanguage`, `HeaderIdempotencyKey` and `ValidIdempotencyKey` are the one definition of the headers the app proxy forwards; `platform/ragx` and `appproxy` reuse them.
 - `EventStream` commits SSE headers and serializes flushed data and heartbeat frames. `NewEventStream` requires typed heartbeat and positive per-write timeout settings. Deadlines also bound the initial header flush; write failures close `Done` so producers stop. Request cancellation closes `Done` independently of an in-progress heartbeat write through `context.AfterFunc`. `Close` unregisters this callback.
 - `ResponseCommitted` checks Gin's `Written()` state and unwraps nested writers. `Success`, `Fail`, and `Respond` adapt the net/http response primitives for controllers.
+- `RespondPage(c, status, data, page, err)` is `Respond` for a cursor-paged list: it adds `meta.page = {cursor, limit}` from `PageInfo` (a nil `Cursor` serializes as `null` and marks the last page). Other responses carry no `page` (`omitempty`).
 - `LimitRequestDuration` sets the context deadline for ordinary routes.
 - `PathUUID(c, name)` parses a UUID path parameter into a field error named after the parameter.
 - `NewRouter` registers assignRequestID → caller middleware → injectErrorLogger → recoverPanics.
@@ -34,7 +35,7 @@ golangci-lint run ./internal/platform/...
 ## Conventions
 See the [shared naming glossary](../../../../docs/glossary.md) for terms used across services.
 Response terminology and JSON shape: [glossary](../../../../docs/glossary.md).
-The current ResponseMeta type supplies requestId; pagination is reserved for paginated handlers.
+`ResponseMeta` carries `requestId`, and `page` only for `RespondPage` (spec §18.2; the Conversations list is its first user).
 5xx details are never serialized; they are logged once via ErrorLogger.
 All 5xx codes and custom messages become the catalog INTERNAL_ERROR response.
 404, 405 and recovered panics use the error response. ErrorLogger may be nil.

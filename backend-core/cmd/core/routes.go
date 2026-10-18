@@ -64,4 +64,8 @@ func registerRoutes(engine *gin.Engine, c ControllerContainer, mw middlewares) {
 	orgScoped.GET("/api/v1/orgs/:orgId/agents/:agentId", c.AgentController.HandleGetAgent)
 	orgScoped.PATCH("/api/v1/orgs/:orgId/agents/:agentId", c.AgentController.HandleUpdateAgent)
 	orgScoped.DELETE("/api/v1/orgs/:orgId/agents/:agentId", c.AgentController.HandleDeleteAgent)
+	orgScoped.GET("/api/v1/orgs/:orgId/conversations", c.ConversationController.HandleListConversations)
+	orgScoped.GET("/api/v1/orgs/:orgId/conversations/:conversationId", c.ConversationController.HandleGetConversation)
+	orgScoped.PATCH("/api/v1/orgs/:orgId/conversations/:conversationId", c.ConversationController.HandleRenameConversation)
+	orgScoped.DELETE("/api/v1/orgs/:orgId/conversations/:conversationId", c.ConversationController.HandleDeleteConversation)
 }

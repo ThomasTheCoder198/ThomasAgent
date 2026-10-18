@@ -25,7 +25,7 @@ func TestChatRepositories_RoundTripAndTenantScope(t *testing.T) {
 	seedReadyOrg(t, pool, "org-a")
 	seedReadyOrg(t, pool, "org-b")
 	userID := seedUser(t, pool, "owner@test.local")
-	ctxA, ctxB := orgContext("org-a"), orgContext("org-b")
+	ctxA, ctxB := conversationContext("org-a", userID), conversationContext("org-b", userID)
 
 	agents := agentrepository.NewAgentRepo()
 	override := uuid.New()
@@ -98,7 +98,8 @@ func newChatFixture(t *testing.T) chatFixture {
 	pool := pgtest.Start(t)
 	seedReadyOrg(t, pool, "org-a")
 	seedReadyOrg(t, pool, "org-b")
-	f := chatFixture{pool: pool, userID: seedUser(t, pool, "owner@test.local"), ctxA: orgContext("org-a"), ctxB: orgContext("org-b"),
+	userID := seedUser(t, pool, "owner@test.local")
+	f := chatFixture{pool: pool, userID: userID, ctxA: conversationContext("org-a", userID), ctxB: conversationContext("org-b", userID),
 		agentA: uuid.New(), agentB: uuid.New(), convA: uuid.New(), convB: uuid.New(), runA: uuid.New(),
 		conversations: convrepository.NewConversationRepo(), messages: convrepository.NewMessageRepo(), runs: convrepository.NewRunRepo()}
 	agents := agentrepository.NewAgentRepo()
@@ -123,6 +124,18 @@ func requireCode(t *testing.T, want errors.Code, err error, msg string) {
 	t.Helper()
 	require.Error(t, err, msg)
 	require.Equal(t, want, errors.CodeOf(err), msg)
+}
+
+func TestChatRepositories_InsertConversationRejectsDifferentOwner(t *testing.T) {
+	f := newChatFixture(t)
+	id := uuid.New()
+	_, err := f.conversations.InsertConversation(f.ctxA, f.pool, convmodel.Conversation{
+		ID: id, AgentID: f.agentA, UserID: uuid.New(),
+	})
+	requireCode(t, errors.CodeConversationNotFound, err, "the requested owner differs from the authenticated user")
+	var count int
+	require.NoError(t, f.pool.QueryRow(context.Background(), `SELECT count(*) FROM conversations WHERE id = $1`, id).Scan(&count))
+	require.Zero(t, count)
 }
 
 func TestChatRepositories_RejectCrossTenantInserts(t *testing.T) {

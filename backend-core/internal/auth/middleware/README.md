@@ -4,7 +4,7 @@
 Gin middleware that guards routes: browser sessions with CSRF.
 
 ## Entry points
-- `RequireSession`, `UserFromContext` (`session_middleware.go`)
+- `RequireSession`, `UserFromContext`, `WithUser` (`session_middleware.go`)
 
 ## Dependencies
 - Uses: `auth/service`, `auth/util`, `platform/httpx`, `platform/tenant`
@@ -18,3 +18,4 @@ TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/auth/middleware -count=1
 
 ## Conventions
 A stale session cookie gets both cookies cleared in the 401.
+`WithUser` carries the authenticated user to downstream services and test contexts; conversation ownership reads it from context.

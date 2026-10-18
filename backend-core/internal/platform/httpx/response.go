@@ -16,8 +16,15 @@ const (
 	contentTypeJSON = mediaTypeJSON + "; charset=utf-8"
 )
 
+// PageInfo is meta.page of a list response (spec §18.2); a nil Cursor marks the last page.
+type PageInfo struct {
+	Cursor *string `json:"cursor"`
+	Limit  int     `json:"limit"`
+}
+
 type ResponseMeta struct {
-	RequestID string `json:"requestId"`
+	RequestID string    `json:"requestId"`
+	Page      *PageInfo `json:"page,omitempty"`
 }
 
 type ErrorDetail struct {
@@ -55,6 +62,15 @@ func Respond(c *gin.Context, status int, data any, err error) {
 		return
 	}
 	Success(c, status, data)
+}
+
+// RespondPage is Respond for a cursor-paged list.
+func RespondPage(c *gin.Context, status int, data any, page PageInfo, err error) {
+	if err != nil {
+		Fail(c, err)
+		return
+	}
+	writeJSON(c.Writer, status, successResponse{Data: data, Meta: ResponseMeta{RequestID: requestid.FromContext(c.Request.Context()), Page: &page}})
 }
 
 func withErrorLogger(ctx context.Context, l ErrorLogger) context.Context {

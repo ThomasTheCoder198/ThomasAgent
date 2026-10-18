@@ -8,6 +8,7 @@ const FOLDER_ORDER = [
   "LLM model roles",
   "Organizations",
   "Agents",
+  "Conversations",
   "Apps",
   "Lifecycle",
   "Logout",
@@ -225,7 +226,7 @@ export function postprocess(collection) {
   });
   const keep = (collection.variable ?? []).filter(
     (v) =>
-      !["baseUrl", "csrfToken", "providerId", "modelId", "orgId", "agentId", "kbId"].includes(
+      !["baseUrl", "csrfToken", "providerId", "modelId", "orgId", "agentId", "conversationId", "kbId"].includes(
         v.key,
       ),
   );
@@ -237,6 +238,7 @@ export function postprocess(collection) {
     { key: "modelId", value: "" },
     { key: "orgId", value: "" },
     { key: "agentId", value: "" },
+    { key: "conversationId", value: "" },
     { key: "kbId", value: "" },
   ];
   return collection;

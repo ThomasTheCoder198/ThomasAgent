@@ -30,6 +30,9 @@ type RunRepo interface {
 	GetRun(ctx context.Context, db postgres.DBTX, id uuid.UUID) (model.Run, error)
 	FinishRun(ctx context.Context, db postgres.DBTX, run model.Run) error
 	InsertStep(ctx context.Context, db postgres.DBTX, step model.RunStep) error
+	// PeakInputTokens is the largest input_tokens of a model step in the conversation's latest finished run, 0 when
+	// there is none.
+	PeakInputTokens(ctx context.Context, db postgres.DBTX, conversationID uuid.UUID) (int64, error)
 }
 
 type runRepo struct{}
@@ -127,4 +130,21 @@ func (runRepo) InsertStep(ctx context.Context, db postgres.DBTX, step model.RunS
 		return errors.ErrRunNotActive
 	}
 	return nil
+}
+
+func (runRepo) PeakInputTokens(ctx context.Context, db postgres.DBTX, conversationID uuid.UUID) (int64, error) {
+	tenantID, err := tenant.ID(ctx)
+	if err != nil {
+		return 0, err
+	}
+	var peak int64
+	err = db.QueryRow(ctx, `SELECT COALESCE(MAX(s.input_tokens), 0) FROM run_steps s
+		WHERE s.tenant_id = $2 AND s.kind = $3 AND s.run_id = (
+			SELECT r.id FROM runs r WHERE r.conversation_id = $1 AND r.tenant_id = $2 AND r.status <> $4
+			ORDER BY r.finished_at DESC NULLS LAST, r.started_at DESC LIMIT 1)`,
+		conversationID, tenantID, model.StepKindModel, model.RunStatusRunning).Scan(&peak)
+	if err != nil {
+		return 0, fmt.Errorf("peak input tokens: %w", err)
+	}
+	return peak, nil
 }

@@ -28,6 +28,8 @@ mixing it with HTTP, migration or worker logic.
 
 Organization routes (`GET`/`POST /api/v1/orgs`, `GET`/`PATCH /api/v1/orgs/{orgId}`, `POST /api/v1/orgs/{orgId}/provision`) sit in the session group of `routes.go`. `middlewares.organizations` carries the `OrganizationLookup` that `RequireOrg` uses on org-scoped routes. The app proxy route `/api/v1/orgs/:orgId/apps/ragx/*path` (`appProxyRoute`, the six methods from `appmodel.ForwardedMethods()`) sits behind `LimitRequestDuration` → `RequireSession` (CSRF) → `RequireOrg`, in that order. The organization service takes its attempts from `CORE_RAGX_PROVISION_ATTEMPTS`, not `CORE_RETRY_MAX_ATTEMPTS`.
 
+The business routes (org model roles, agents and conversations) are registered in the same `RequireOrg` group. `container.go` also exposes `ServiceContainer.ChatStore`, the persistence port M2b's run loop takes from the container. `api_collection_test.go` runs the generated Postman collection against an isolated real core with a small in-process fake ragx (provisioning and the collection KB read only; other KB IDs return `KB_NOT_FOUND`), so its organization ends `ready` and the Agents folder passes `RequireOrg`.
+
 The CLI dispatches `serve` through `runProcess` ? `executeCommand` ? `serveHTTP`. Compose and the Dockerfile both invoke `core serve`. The same compiled `core` executable serves three roles in Compose: `migrate`
 exits after preparing the database, `serve` runs the API, and `outbox-relay` runs the
 outbox worker. Separate processes give the API and worker independent lifetimes;

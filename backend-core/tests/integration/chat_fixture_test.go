@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	authmiddleware "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/middleware"
+	authmodel "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/model"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
@@ -30,4 +32,8 @@ func seedUser(t *testing.T, pool *pgxpool.Pool, email string) uuid.UUID {
 
 func orgContext(orgID string) context.Context {
 	return tenant.WithID(context.Background(), orgID)
+}
+
+func conversationContext(orgID string, userID uuid.UUID) context.Context {
+	return authmiddleware.WithUser(orgContext(orgID), authmodel.User{ID: userID})
 }

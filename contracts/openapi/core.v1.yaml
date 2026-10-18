@@ -569,6 +569,88 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /api/v1/orgs/{orgId}/conversations:
+    parameters:
+      - { name: orgId, in: path, required: true, schema: { type: string, format: uuid }, example: "{{orgId}}" }
+    get:
+      tags: [Conversations]
+      operationId: listConversations
+      description: >-
+        The org's conversations, most recently updated first, one cursor page at a time. Send the previous
+        response's meta.page.cursor to get the next page; a null cursor marks the last page. Every row has
+        lines ["kb"] because every Agent has one KB. A conversation only exists after a chat (M2b), so this
+        request is not part of the API collection's run yet.
+      parameters:
+        - { name: cursor, in: query, required: false, description: "Opaque cursor from the previous page.", schema: { type: string } }
+        - { name: limit, in: query, required: false, description: "Page size, 1 to 100; the default is CORE_CONVERSATION_PAGE_DEFAULT_LIMIT (30).", schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: One page of conversations.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/SuccessResponse" }
+                  - type: object
+                    required: [meta]
+                    properties:
+                      data: { type: array, items: { $ref: "#/components/schemas/ConversationSummary" } }
+                      meta: { $ref: "#/components/schemas/PageMeta" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/orgs/{orgId}/conversations/{conversationId}:
+    parameters:
+      - { name: orgId, in: path, required: true, schema: { type: string, format: uuid }, example: "{{orgId}}" }
+      - { name: conversationId, in: path, required: true, schema: { type: string, format: uuid }, example: "{{conversationId}}" }
+    get:
+      tags: [Conversations]
+      operationId: getConversation
+      description: >-
+        The conversation with its chat scope and every stored message in UIMessage shape. M2b: the collection
+        has no conversation to read until the chat request creates one. Another org's id, and a malformed one, are
+        CONVERSATION_NOT_FOUND.
+      responses:
+        "200":
+          description: The conversation.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/SuccessResponse" }
+                  - { type: object, properties: { data: { $ref: "#/components/schemas/ConversationDetail" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Conversations]
+      operationId: renameConversation
+      description: Renames the conversation (trimmed, 1 to 200 characters). M2b - runs once the chat request has created a conversation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [title], properties: { title: { type: string, minLength: 1, maxLength: 200 } } }
+            example: { title: "Giá gói Pro" }
+      responses:
+        "204": { description: Renamed. }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+    delete:
+      tags: [Conversations]
+      operationId: deleteConversation
+      description: Deletes the conversation with its messages and runs. M2b - runs once the chat request has created a conversation.
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /api/v1/orgs/{orgId}/apps/ragx/{path}:
     parameters:
       - { name: orgId, in: path, required: true, schema: { type: string, format: uuid }, example: "{{orgId}}" }
@@ -893,10 +975,75 @@ components:
             chat.default: { type: [string, "null"], format: uuid }
             chat.fast: { type: [string, "null"], format: uuid }
             vision: { type: [string, "null"], format: uuid }
+    ConversationSummary:
+      type: object
+      additionalProperties: false
+      required: [id, title, agentId, lines, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, description: "Empty until the first turn is titled." }
+        agentId: { type: string, format: uuid }
+        lines: { type: array, items: { type: string }, description: "Tool-source lines of the conversation; always [\"kb\"] in M2." }
+        updatedAt: { type: string, format: date-time }
+    ChatScope:
+      type: object
+      additionalProperties: false
+      required: [agent, kb, toolSources]
+      properties:
+        agent:
+          type: object
+          additionalProperties: false
+          required: [id, name]
+          properties: { id: { type: string, format: uuid }, name: { type: string } }
+        kb:
+          type: object
+          additionalProperties: false
+          required: [id, name, missing]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string, description: "From ragx at read time; empty when the KB is missing or ragx could not be reached." }
+            missing: { type: boolean, description: "True only when ragx reports KB_NOT_FOUND; during a ragx outage it stays false with an empty name." }
+        toolSources:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [line, name]
+            properties: { line: { type: string, example: kb }, name: { type: string } }
+    UIMessage:
+      type: object
+      description: AI SDK 7 UIMessage, stored and returned verbatim.
+      required: [id, role, parts, metadata]
+      properties:
+        id: { type: string }
+        role: { type: string, enum: [user, assistant] }
+        parts: { type: array, items: { type: object, additionalProperties: true } }
+        metadata: { type: object, additionalProperties: true }
+    ConversationDetail:
+      type: object
+      additionalProperties: false
+      required: [id, title, agentId, scope, messages]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        agentId: { type: string, format: uuid }
+        scope: { $ref: "#/components/schemas/ChatScope" }
+        messages: { type: array, items: { $ref: "#/components/schemas/UIMessage" } }
     Meta:
       type: object
       required: [requestId]
       properties: { requestId: { type: string } }
+    PageMeta:
+      type: object
+      required: [requestId, page]
+      properties:
+        requestId: { type: string }
+        page:
+          type: object
+          required: [cursor, limit]
+          properties:
+            cursor: { type: [string, "null"], description: Cursor of the next page; null on the last page }
+            limit: { type: integer }
     SuccessResponse:
       type: object
       required: [data, meta]

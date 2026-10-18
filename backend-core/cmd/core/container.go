@@ -19,6 +19,9 @@ import (
 	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
 	authrepository "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
 	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
+	convcontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/conversation/controller"
+	convrepository "github.com/thomasthecoder198/thomastheragx/backend-core/internal/conversation/repository"
+	convservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/conversation/service"
 	llmclient "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/client"
 	llmcontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/controller"
 	llmrepository "github.com/thomasthecoder198/thomastheragx/backend-core/internal/llmprovider/repository"
@@ -73,12 +76,15 @@ func (rt *coreRuntime) initClientContainer(signingKey ed25519.PrivateKey) (Clien
 }
 
 type RepositoryContainer struct {
-	AgentRepo    agentrepository.AgentRepo
-	UserRepo     authrepository.UserRepo
-	SessionRepo  authrepository.SessionRepo
-	ProviderRepo llmrepository.ProviderRepo
-	LLMModelRepo llmrepository.LLMModelRepo
-	RoleRepo     llmrepository.RoleRepo
+	AgentRepo        agentrepository.AgentRepo
+	ConversationRepo convrepository.ConversationRepo
+	MessageRepo      convrepository.MessageRepo
+	RunRepo          convrepository.RunRepo
+	UserRepo         authrepository.UserRepo
+	SessionRepo      authrepository.SessionRepo
+	ProviderRepo     llmrepository.ProviderRepo
+	LLMModelRepo     llmrepository.LLMModelRepo
+	RoleRepo         llmrepository.RoleRepo
 
 	OrganizationRepo orgrepository.OrganizationRepo
 }
@@ -86,19 +92,25 @@ type RepositoryContainer struct {
 func (rt *coreRuntime) initRepositoryContainer(pool *pgxpool.Pool) RepositoryContainer {
 	providerRepo := llmrepository.NewProviderRepo()
 	return RepositoryContainer{
-		AgentRepo:    agentrepository.NewAgentRepo(),
-		UserRepo:     authrepository.NewUserRepo(pool),
-		SessionRepo:  authrepository.NewSessionRepo(pool, rt.cfg.Auth.SessionTouchInterval),
-		ProviderRepo: providerRepo,
-		LLMModelRepo: llmrepository.NewLLMModelRepo(providerRepo),
-		RoleRepo:     llmrepository.NewRoleRepo(),
+		AgentRepo:        agentrepository.NewAgentRepo(),
+		ConversationRepo: convrepository.NewConversationRepo(),
+		MessageRepo:      convrepository.NewMessageRepo(),
+		RunRepo:          convrepository.NewRunRepo(),
+		UserRepo:         authrepository.NewUserRepo(pool),
+		SessionRepo:      authrepository.NewSessionRepo(pool, rt.cfg.Auth.SessionTouchInterval),
+		ProviderRepo:     providerRepo,
+		LLMModelRepo:     llmrepository.NewLLMModelRepo(providerRepo),
+		RoleRepo:         llmrepository.NewRoleRepo(),
 
 		OrganizationRepo: orgrepository.NewOrganizationRepo(),
 	}
 }
 
 type ServiceContainer struct {
-	AgentService     agentservice.AgentService
+	AgentService        agentservice.AgentService
+	ConversationService convservice.ConversationService
+	// ChatStore is the persistence port of the M2b run loop.
+	ChatStore        convservice.ChatStore
 	AuthService      authservice.AuthService
 	ProviderService  llmservice.ProviderService
 	LLMModelService  llmservice.LLMModelService
@@ -125,7 +137,10 @@ func (rt *coreRuntime) initServiceContainer(ctx context.Context, pool *pgxpool.P
 	resolveService := llmservice.NewResolveService(pool, providerService, repositories.LLMModelRepo, repositories.RoleRepo)
 	organizationService := orgservice.NewOrganizationService(pool, repositories.OrganizationRepo, clients.Ragx, provisionPolicy, uuid.NewString)
 	return ServiceContainer{
-		AgentService:     agentservice.NewAgentService(pool, repositories.AgentRepo, clients.Ragx, resolveService, rt.log),
+		AgentService: agentservice.NewAgentService(pool, repositories.AgentRepo, clients.Ragx, resolveService, rt.log),
+		ConversationService: convservice.NewConversationService(pool, repositories.ConversationRepo, repositories.MessageRepo,
+			repositories.AgentRepo, clients.Ragx, rt.cfg.Conversation, rt.log),
+		ChatStore:        convservice.NewChatStore(pool, repositories.ConversationRepo, repositories.MessageRepo, repositories.RunRepo, repositories.AgentRepo),
 		AuthService:      authService,
 		ProviderService:  providerService,
 		LLMModelService:  llmservice.NewLLMModelService(pool, repositories.LLMModelRepo, repositories.RoleRepo),
@@ -140,12 +155,13 @@ func (rt *coreRuntime) initServiceContainer(ctx context.Context, pool *pgxpool.P
 }
 
 type ControllerContainer struct {
-	AgentController    *agentcontroller.AgentController
-	AuthController     *authcontroller.AuthController
-	ProviderController *llmcontroller.ProviderController
-	LLMModelController *llmcontroller.LLMModelController
-	RoleController     *llmcontroller.RoleController
-	OrgRoleController  *llmcontroller.OrgRoleController
+	AgentController        *agentcontroller.AgentController
+	ConversationController *convcontroller.ConversationController
+	AuthController         *authcontroller.AuthController
+	ProviderController     *llmcontroller.ProviderController
+	LLMModelController     *llmcontroller.LLMModelController
+	RoleController         *llmcontroller.RoleController
+	OrgRoleController      *llmcontroller.OrgRoleController
 
 	OrganizationController *orgcontroller.OrganizationController
 	AppProxyController     *appcontroller.AppProxyController
@@ -158,7 +174,8 @@ func (rt *coreRuntime) initControllerContainer(services ServiceContainer, redisC
 	}
 	maxBodyBytes := rt.cfg.HTTP.MaxBodyBytes
 	return ControllerContainer{
-		AgentController: agentcontroller.NewAgentController(services.AgentService, maxBodyBytes),
+		AgentController:        agentcontroller.NewAgentController(services.AgentService, maxBodyBytes),
+		ConversationController: convcontroller.NewConversationController(services.ConversationService, rt.cfg.Conversation, maxBodyBytes),
 		AuthController: authcontroller.NewAuthController(authcontroller.AuthControllerParams{
 			AuthService:        services.AuthService,
 			Limiter:            authlimiter.NewLoginLimiter(redisClient, rt.cfg.Auth, []byte(rt.cfg.Auth.LoginLimiterKey)),

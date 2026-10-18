@@ -24,6 +24,11 @@ func UserFromContext(ctx context.Context) (model.User, bool) {
 	return user, ok
 }
 
+// WithUser carries an already authenticated user into downstream work and tests.
+func WithUser(ctx context.Context, user model.User) context.Context {
+	return context.WithValue(ctx, userContextKey{}, user)
+}
+
 // RequireSession authenticates the session cookie, checks the CSRF header on unsafe methods,
 // and puts the session's tenant and user into the request context. A cookie that no longer
 // matches a live session (expired, purged or logged out elsewhere) is cleared in the response.
@@ -49,7 +54,7 @@ func RequireSession(authService service.AuthService, cookieSecure bool) gin.Hand
 			return
 		}
 		requestContext := tenant.WithID(req.Context(), session.TenantID)
-		ctx.Request = req.WithContext(context.WithValue(requestContext, userContextKey{}, user))
+		ctx.Request = req.WithContext(WithUser(requestContext, user))
 		ctx.Next()
 	}
 }

@@ -183,3 +183,25 @@ func TestResponseCommitted_GinWriterAfterWriteAndFlush(t *testing.T) {
 	performRequest(r, http.MethodGet, "/flush", "en")
 	require.False(t, ResponseCommitted(httptest.NewRecorder()))
 }
+
+func TestRespondPage_WritesMetaPage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	res := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(res)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/x", nil)
+	next := "abc"
+	RespondPage(ctx, http.StatusOK, []string{"a"}, PageInfo{Cursor: &next, Limit: 1}, nil)
+	require.JSONEq(t, `{"data":["a"],"meta":{"requestId":"","page":{"cursor":"abc","limit":1}}}`, res.Body.String())
+
+	res = httptest.NewRecorder()
+	ctx, _ = gin.CreateTestContext(res)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/x", nil)
+	RespondPage(ctx, http.StatusOK, []string{}, PageInfo{Limit: 30}, nil)
+	require.JSONEq(t, `{"data":[],"meta":{"requestId":"","page":{"cursor":null,"limit":30}}}`, res.Body.String())
+
+	res = httptest.NewRecorder()
+	ctx, _ = gin.CreateTestContext(res)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/x", nil)
+	RespondPage(ctx, http.StatusOK, nil, PageInfo{Limit: 1}, errors.ErrNotFound)
+	require.Equal(t, http.StatusNotFound, res.Code, "an error is answered like Respond, without a page")
+}

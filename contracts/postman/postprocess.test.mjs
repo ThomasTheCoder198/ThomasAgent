@@ -249,6 +249,24 @@ test("orders the Apps folder right after Organizations, with no expected statuse
   assert.ok(!JSON.stringify(apps).includes("expected status"));
 });
 
+test("orders the Conversations folder after Agents and declares conversationId", () => {
+  const request = (name, method, path) => ({
+    name,
+    request: { method, url: { host: ["{{baseUrl}}"], path } },
+  });
+  const input = structuredClone(raw);
+  input.item.push(
+    { name: "Conversations", item: [request("list", "GET", ["api", "v1", "orgs", ":orgId", "conversations"])] },
+    { name: "Agents", item: [request("list agents", "GET", ["api", "v1", "orgs", ":orgId", "agents"])] },
+    { name: "Apps", item: [] },
+  );
+  const output = postprocess(input);
+  const names = output.item.map((folder) => folder.name);
+  assert.equal(names.indexOf("Conversations"), names.indexOf("Agents") + 1);
+  assert.ok(names.indexOf("Conversations") < names.indexOf("Apps"));
+  assert.ok(output.variable.some((v) => v.key === "conversationId" && v.value === ""));
+});
+
 test("runs the platform role clear in Lifecycle after the in-use guards and accepts its 204", () => {
   const request = (name, method, path) => ({
     name,

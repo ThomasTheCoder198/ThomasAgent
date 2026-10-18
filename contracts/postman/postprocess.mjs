@@ -7,6 +7,7 @@ const FOLDER_ORDER = [
   "LLM models",
   "LLM model roles",
   "Organizations",
+  "Agents",
   "Apps",
   "Lifecycle",
   "Logout",
@@ -24,6 +25,7 @@ const SAVE_ID_BY_ROUTE = {
   "POST /api/v1/providers": "providerId",
   "POST /api/v1/models": "modelId",
   "POST /api/v1/orgs": "orgId",
+  "POST /api/v1/orgs/{orgId}/agents": "agentId",
 };
 const EXPECTED_STATUS_BY_ROUTE = {
   "GET /healthz": 200,
@@ -48,6 +50,11 @@ const EXPECTED_STATUS_BY_ROUTE = {
   "GET /api/v1/orgs/{orgId}": 200,
   "PATCH /api/v1/orgs/{orgId}": 200,
   "POST /api/v1/orgs/{orgId}/provision": 200,
+  "GET /api/v1/orgs/{orgId}/agents": 200,
+  "POST /api/v1/orgs/{orgId}/agents": 201,
+  "GET /api/v1/orgs/{orgId}/agents/{agentId}": 200,
+  "PATCH /api/v1/orgs/{orgId}/agents/{agentId}": 200,
+  "DELETE /api/v1/orgs/{orgId}/agents/{agentId}": 204,
 };
 const ORGANIZATIONS_FOLDER = "Organizations";
 // Org model-role requests read {{orgId}}, so they run in the Organizations folder after the create request.
@@ -211,11 +218,14 @@ export function postprocess(collection) {
         `if (pm.response.code === 201) pm.collectionVariables.set('${idVar}', pm.response.json().data.id);`,
       );
     }
+    if (route === "POST /api/v1/orgs/{orgId}/provision") {
+      tests.push("if (pm.response.code === 200) pm.collectionVariables.set('kbId', pm.response.json().data.defaultKnowledgeBaseId);");
+    }
     if (tests.length) req.event = [script("test", tests)];
   });
   const keep = (collection.variable ?? []).filter(
     (v) =>
-      !["baseUrl", "csrfToken", "providerId", "modelId", "orgId"].includes(
+      !["baseUrl", "csrfToken", "providerId", "modelId", "orgId", "agentId", "kbId"].includes(
         v.key,
       ),
   );
@@ -226,6 +236,8 @@ export function postprocess(collection) {
     { key: "providerId", value: "" },
     { key: "modelId", value: "" },
     { key: "orgId", value: "" },
+    { key: "agentId", value: "" },
+    { key: "kbId", value: "" },
   ];
   return collection;
 }

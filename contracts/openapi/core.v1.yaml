@@ -18,6 +18,7 @@ tags:
   - name: LLM models
   - name: LLM model roles
   - name: Organizations
+  - name: Agents
   - name: Apps
 security:
   - sessionCookie: []
@@ -491,6 +492,83 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /api/v1/orgs/{orgId}/agents:
+    parameters:
+      - { name: orgId, in: path, required: true, schema: { type: string, format: uuid }, example: "{{orgId}}" }
+    get:
+      tags: [Agents]
+      operationId: listAgents
+      responses:
+        "200":
+          description: Agents in creation order.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/SuccessResponse" }
+                  - { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Agent" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Agents]
+      operationId: createAgent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentCreate" }
+            example: { name: "Hỗ trợ khách hàng", kbId: "{{kbId}}" }
+      responses:
+        "201": { $ref: "#/components/responses/Agent" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /api/v1/orgs/{orgId}/agents/{agentId}:
+    parameters:
+      - { name: orgId, in: path, required: true, schema: { type: string, format: uuid }, example: "{{orgId}}" }
+      - { name: agentId, in: path, required: true, schema: { type: string, format: uuid }, example: "{{agentId}}" }
+    get:
+      tags: [Agents]
+      operationId: getAgent
+      responses:
+        "200": { $ref: "#/components/responses/Agent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Agents]
+      operationId: updateAgent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentPatch" }
+            example: { name: "Hỗ trợ khách hàng" }
+      responses:
+        "200": { $ref: "#/components/responses/Agent" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Agents]
+      operationId: deleteAgent
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /api/v1/orgs/{orgId}/apps/ragx/{path}:
     parameters:
       - { name: orgId, in: path, required: true, schema: { type: string, format: uuid }, example: "{{orgId}}" }
@@ -603,6 +681,14 @@ components:
     sessionCookie: { type: apiKey, in: cookie, name: thomas_session }
     csrfHeader: { type: apiKey, in: header, name: X-CSRF-Token }
   responses:
+    Agent:
+      description: Agent.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/SuccessResponse" }
+              - { type: object, properties: { data: { $ref: "#/components/schemas/Agent" } } }
     AppProxyResponse:
       description: The app's own response, verbatim (2xx, or a 4xx catalog error)
       content:
@@ -758,6 +844,55 @@ components:
                     },
                 }
   schemas:
+    ModelOverrides:
+      type: object
+      additionalProperties: false
+      description: Agent model pins; only these roles can be pinned (ruling A2-10).
+      properties:
+        chat.default: { type: string, format: uuid }
+        chat.fast: { type: string, format: uuid }
+        vision: { type: string, format: uuid }
+    Agent:
+      type: object
+      additionalProperties: false
+      required: [id, name, description, instructions, kbId, kbName, kbMissing, modelOverrides, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 280 }
+        instructions: { type: string, maxLength: 8000 }
+        kbId: { type: string, format: uuid }
+        kbName: { type: string, description: "From ragx at read time; empty when the KB is missing or ragx could not be reached." }
+        kbMissing: { type: boolean, description: "True only when ragx reports KB_NOT_FOUND." }
+        modelOverrides: { $ref: "#/components/schemas/ModelOverrides" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AgentCreate:
+      type: object
+      additionalProperties: false
+      required: [name, kbId]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 280 }
+        instructions: { type: string, maxLength: 8000 }
+        kbId: { type: string, format: uuid }
+        modelOverrides: { $ref: "#/components/schemas/ModelOverrides" }
+    AgentPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 280 }
+        instructions: { type: string, maxLength: 8000 }
+        kbId: { type: string, format: uuid }
+        modelOverrides:
+          type: object
+          additionalProperties: false
+          description: A null value removes that role's pin.
+          properties:
+            chat.default: { type: [string, "null"], format: uuid }
+            chat.fast: { type: [string, "null"], format: uuid }
+            vision: { type: [string, "null"], format: uuid }
     Meta:
       type: object
       required: [requestId]

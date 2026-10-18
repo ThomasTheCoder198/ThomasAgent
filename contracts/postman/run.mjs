@@ -10,6 +10,7 @@ const PUBLIC_FOLDERS = [
   "LLM models",
   "LLM model roles",
   "Organizations",
+  "Agents",
 ];
 const FINAL_FOLDERS = ["Lifecycle", "Logout"];
 const FAILED_EXIT_CODE = 1;

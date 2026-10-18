@@ -10,6 +10,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	agentcontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/agent/controller"
+	agentrepository "github.com/thomasthecoder198/thomastheragx/backend-core/internal/agent/repository"
+	agentservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/agent/service"
 	appcontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/appproxy/controller"
 	appservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/appproxy/service"
 	authcontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/controller"
@@ -70,6 +73,7 @@ func (rt *coreRuntime) initClientContainer(signingKey ed25519.PrivateKey) (Clien
 }
 
 type RepositoryContainer struct {
+	AgentRepo    agentrepository.AgentRepo
 	UserRepo     authrepository.UserRepo
 	SessionRepo  authrepository.SessionRepo
 	ProviderRepo llmrepository.ProviderRepo
@@ -82,6 +86,7 @@ type RepositoryContainer struct {
 func (rt *coreRuntime) initRepositoryContainer(pool *pgxpool.Pool) RepositoryContainer {
 	providerRepo := llmrepository.NewProviderRepo()
 	return RepositoryContainer{
+		AgentRepo:    agentrepository.NewAgentRepo(),
 		UserRepo:     authrepository.NewUserRepo(pool),
 		SessionRepo:  authrepository.NewSessionRepo(pool, rt.cfg.Auth.SessionTouchInterval),
 		ProviderRepo: providerRepo,
@@ -93,6 +98,7 @@ func (rt *coreRuntime) initRepositoryContainer(pool *pgxpool.Pool) RepositoryCon
 }
 
 type ServiceContainer struct {
+	AgentService     agentservice.AgentService
 	AuthService      authservice.AuthService
 	ProviderService  llmservice.ProviderService
 	LLMModelService  llmservice.LLMModelService
@@ -119,6 +125,7 @@ func (rt *coreRuntime) initServiceContainer(ctx context.Context, pool *pgxpool.P
 	resolveService := llmservice.NewResolveService(pool, providerService, repositories.LLMModelRepo, repositories.RoleRepo)
 	organizationService := orgservice.NewOrganizationService(pool, repositories.OrganizationRepo, clients.Ragx, provisionPolicy, uuid.NewString)
 	return ServiceContainer{
+		AgentService:     agentservice.NewAgentService(pool, repositories.AgentRepo, clients.Ragx, resolveService, rt.log),
 		AuthService:      authService,
 		ProviderService:  providerService,
 		LLMModelService:  llmservice.NewLLMModelService(pool, repositories.LLMModelRepo, repositories.RoleRepo),
@@ -133,6 +140,7 @@ func (rt *coreRuntime) initServiceContainer(ctx context.Context, pool *pgxpool.P
 }
 
 type ControllerContainer struct {
+	AgentController    *agentcontroller.AgentController
 	AuthController     *authcontroller.AuthController
 	ProviderController *llmcontroller.ProviderController
 	LLMModelController *llmcontroller.LLMModelController
@@ -150,6 +158,7 @@ func (rt *coreRuntime) initControllerContainer(services ServiceContainer, redisC
 	}
 	maxBodyBytes := rt.cfg.HTTP.MaxBodyBytes
 	return ControllerContainer{
+		AgentController: agentcontroller.NewAgentController(services.AgentService, maxBodyBytes),
 		AuthController: authcontroller.NewAuthController(authcontroller.AuthControllerParams{
 			AuthService:        services.AuthService,
 			Limiter:            authlimiter.NewLoginLimiter(redisClient, rt.cfg.Auth, []byte(rt.cfg.Auth.LoginLimiterKey)),

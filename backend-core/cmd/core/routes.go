@@ -59,4 +59,9 @@ func registerRoutes(engine *gin.Engine, c ControllerContainer, mw middlewares) {
 	orgScoped.GET("/api/v1/orgs/:orgId/model-roles", c.OrgRoleController.HandleListOrgRoles)
 	orgScoped.PUT("/api/v1/orgs/:orgId/model-roles/:role", c.OrgRoleController.HandleAssignOrgRole)
 	orgScoped.DELETE("/api/v1/orgs/:orgId/model-roles/:role", c.OrgRoleController.HandleClearOrgRole)
+	orgScoped.GET("/api/v1/orgs/:orgId/agents", c.AgentController.HandleListAgents)
+	orgScoped.POST("/api/v1/orgs/:orgId/agents", c.AgentController.HandleCreateAgent)
+	orgScoped.GET("/api/v1/orgs/:orgId/agents/:agentId", c.AgentController.HandleGetAgent)
+	orgScoped.PATCH("/api/v1/orgs/:orgId/agents/:agentId", c.AgentController.HandleUpdateAgent)
+	orgScoped.DELETE("/api/v1/orgs/:orgId/agents/:agentId", c.AgentController.HandleDeleteAgent)
 }

@@ -30,6 +30,13 @@ test("runner includes the Organizations folder before the final folders", () => 
   assert.ok(folder.indexOf("Organizations") < folder.indexOf("Lifecycle"));
 });
 
+// Agents read {{kbId}}, which the Organizations folder captures from provisioning.
+test("runner includes the Agents folder after Organizations", () => {
+  const { folder } = buildRunOptions(fixtureEnvironment);
+  assert.ok(folder.indexOf("Organizations") < folder.indexOf("Agents"));
+  assert.ok(folder.indexOf("Agents") < folder.indexOf("Lifecycle"));
+});
+
 test("runner has no Internal folder and no service token variable even when one is set", () => {
   const options = buildRunOptions({
     ...fixtureEnvironment,

@@ -1,0 +1,10 @@
+data: {"type":"start","messageId":"msg-golden","messageMetadata":{"runId":"11111111-2222-4333-8444-555555555555"}}
+
+data: {"type":"text-start","id":"t1"}
+
+data: {"type":"text-delta","id":"t1","delta":"Đang trả lời"}
+
+data: {"type":"error","errorText":"PROVIDER_UNAVAILABLE"}
+
+data: [DONE]
+

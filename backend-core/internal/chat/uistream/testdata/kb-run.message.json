@@ -1,0 +1,174 @@
+{
+  "id": "msg-golden",
+  "metadata": {
+    "runId": "11111111-2222-4333-8444-555555555555"
+  },
+  "role": "assistant",
+  "parts": [
+    {
+      "type": "data-compaction",
+      "id": "11111111-2222-4333-8444-555555555555-compaction",
+      "data": {
+        "summarizedTurns": 6
+      }
+    },
+    {
+      "type": "reasoning",
+      "id": "r1",
+      "text": "Cần tìm chính sách.",
+      "providerMetadata": {
+        "thomas": {
+          "durationMs": 900
+        }
+      },
+      "state": "done"
+    },
+    {
+      "type": "dynamic-tool",
+      "toolName": "kb_search",
+      "toolCallId": "call-1",
+      "state": "output-available",
+      "input": {
+        "query": "chính sách hoàn tiền"
+      },
+      "output": {
+        "results": [
+          {
+            "source": 1,
+            "chunkId": "c-1",
+            "fileId": "2b1e7c3a-0000-4000-8000-000000000002",
+            "fileName": "policy.pdf",
+            "nodeId": "9b2f0c1e-0000-4000-8000-000000000001",
+            "section": [
+              "Chính sách",
+              "Hoàn tiền"
+            ],
+            "pageStart": 3,
+            "pageEnd": 3,
+            "score": 0.91,
+            "blocks": [
+              {
+                "label": "[1.1]",
+                "blockId": "b-1",
+                "text": "Khách được hoàn tiền trong 7 ngày.",
+                "locator": {
+                  "kind": "pdf_bbox",
+                  "page": 3,
+                  "bbox": [
+                    10,
+                    20,
+                    300,
+                    80
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "insufficientEvidence": false
+      },
+      "toolMetadata": {
+        "line": "kb",
+        "source": "Knowledge Base",
+        "durationMs": 640
+      }
+    },
+    {
+      "type": "data-status",
+      "id": "11111111-2222-4333-8444-555555555555-s1",
+      "data": {
+        "label": "Đang tìm trong KB…"
+      }
+    },
+    {
+      "type": "dynamic-tool",
+      "toolName": "kb_read_section",
+      "toolCallId": "call-2",
+      "state": "output-error",
+      "input": {
+        "nodeId": "9b2f0c1e-0000-4000-8000-000000000001"
+      },
+      "errorText": "DEPENDENCY_TIMEOUT",
+      "toolMetadata": {
+        "line": "kb",
+        "source": "Knowledge Base",
+        "durationMs": 20000
+      }
+    },
+    {
+      "type": "data-steer",
+      "id": "11111111-2222-4333-8444-555555555555-steer-1",
+      "data": {
+        "text": "Chỉ cần bảng giá"
+      }
+    },
+    {
+      "type": "source-document",
+      "sourceId": "S1",
+      "mediaType": "application/pdf",
+      "title": "Chính sách › Hoàn tiền",
+      "filename": "policy.pdf",
+      "providerMetadata": {
+        "thomas": {
+          "fileId": "2b1e7c3a-0000-4000-8000-000000000002",
+          "kbId": "3c2f8d4b-0000-4000-8000-000000000003",
+          "fileName": "policy.pdf",
+          "kbName": "Chính sách",
+          "section": [
+            "Chính sách",
+            "Hoàn tiền"
+          ],
+          "pageStart": 3,
+          "pageEnd": 3,
+          "blockIds": [
+            "b-1"
+          ],
+          "score": 0.91,
+          "locators": [
+            {
+              "kind": "pdf_bbox",
+              "page": 3,
+              "bbox": [
+                10,
+                20,
+                300,
+                80
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "text",
+      "text": "Khách được hoàn tiền trong 7 ngày [1].",
+      "state": "done"
+    },
+    {
+      "type": "data-citations",
+      "id": "11111111-2222-4333-8444-555555555555-citations",
+      "data": {
+        "flags": [
+          {
+            "sourceId": "S1",
+            "claim": "Khách được hoàn tiền trong 7 ngày",
+            "probability": 0.2
+          }
+        ]
+      }
+    },
+    {
+      "type": "data-usage",
+      "id": "11111111-2222-4333-8444-555555555555-usage",
+      "data": {
+        "runId": "11111111-2222-4333-8444-555555555555",
+        "inputTokens": 1200,
+        "outputTokens": 80,
+        "costUsd": 0.0012,
+        "ttftMs": 700,
+        "durationMs": 3100,
+        "contextWindow": 128000
+      }
+    }
+  ]
+}

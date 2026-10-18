@@ -1,0 +1,7 @@
+# Dev-only: publish ragx Postgres and Redis on loopback so debugging tools (MCP servers, psql) can reach them.
+# Enable by setting COMPOSE_FILE=compose.yaml:compose.dev-ports.yaml in deploy/ragx/.env. Never use in production.
+services:
+  ragx-postgres:
+    ports: ["127.0.0.1:${RAGX_POSTGRES_HOST_PORT:-15432}:5432"]
+  ragx-redis:
+    ports: ["127.0.0.1:${RAGX_REDIS_HOST_PORT:-16380}:6379"]

@@ -119,11 +119,22 @@ func TestMigrate_UpAndDown(t *testing.T) {
 	}
 	require.Equal(t, 4, runLeaseColumns(), "the run lease migration adds the lease columns and the request id")
 
-	// Down removes the run lease columns, then the outbox traceparent column, the retention index, agents/chat tables,
-	// org version, organizations, trace columns, request IDs, AAD expansion, tenant defaults, hardening,
-	// identity/registry and platform.
+	runModelColumns := func() int {
+		var count int
+		require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_name = 'runs'
+			AND column_name IN ('requested_model_id', 'locale')`).Scan(&count))
+		return count
+	}
+	require.Equal(t, 2, runModelColumns(), "the run model migration adds the requested model and the locale")
+
+	// Down removes the run model columns, then the run lease columns, the outbox traceparent column, the retention
+	// index, agents/chat tables, org version, organizations, trace columns, request IDs, AAD expansion, tenant
+	// defaults, hardening, identity/registry and platform.
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.Zero(t, runLeaseColumns(), "the first Down removes the run lease columns")
+	require.Zero(t, runModelColumns(), "the first Down removes the run model columns")
+	require.Equal(t, 4, runLeaseColumns())
+	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
+	require.Zero(t, runLeaseColumns(), "the second Down removes the run lease columns")
 	require.True(t, traceparentColumn())
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	require.False(t, traceparentColumn(), "the second Down removes the outbox traceparent column")

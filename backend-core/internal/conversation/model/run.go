@@ -50,6 +50,10 @@ type Run struct {
 	FinishedAt         *time.Time
 	// RequestID is the X-Request-Id of the chat request that began the run (W9).
 	RequestID string
+	// RequestedModelID is the composer's model for this run (B2-8); nil lets the Agent's override or the role decide.
+	RequestedModelID *uuid.UUID
+	// Locale is the request's UI language, vi or en (B2-9); it words the run's status labels.
+	Locale string
 	// QueuedFor is how long the run waited for a worker, measured by the database clock; only ClaimRun fills it.
 	QueuedFor time.Duration
 }
@@ -90,7 +94,16 @@ type BeginRunInput struct {
 	RegenerateMessageID string
 	AssistantMessageID  string
 	Deadline            time.Time
+	// RequestedModelID and Locale ride on the run row for the worker (B2-8, B2-9). An empty Locale means LocaleVI.
+	RequestedModelID *uuid.UUID
+	Locale           string
 }
+
+// Locales a run row can store (CHECK constraint of migration 20261019000001).
+const (
+	LocaleVI = "vi"
+	LocaleEN = "en"
+)
 
 // Triggers the chat endpoint accepts (wire contract).
 const (

@@ -588,6 +588,45 @@ export interface components {
             /** @description The X-Request-Id of the chat request that started the run; empty for runs created before it was stored */
             requestId: string;
         };
+        /** @description providerMetadata.thomas of a source-document stream part. Locators are ragx's Locator objects passed through as they came. */
+        CitationLocator: {
+            /** Format: uuid */
+            fileId: string;
+            /** Format: uuid */
+            kbId: string;
+            fileName: string;
+            /** @description The ingested version the cited blocks belong to; absent when unknown */
+            fileVersion?: number;
+            kbName: string;
+            section: string[];
+            pageStart: number | null;
+            pageEnd: number | null;
+            blockIds: string[];
+            score: number;
+            locators: ({
+                /** @description ragx Locator kind: pdf_bbox, sheet_range, text_lines or docx_paragraph */
+                kind: string;
+            } & {
+                [key: string]: unknown;
+            })[];
+        };
+        /** @description The data-usage stream part, sent once at the end of a completed run. */
+        RunUsage: {
+            /** Format: uuid */
+            runId: string;
+            /** Format: int64 */
+            inputTokens: number;
+            /** Format: int64 */
+            outputTokens: number;
+            /** @description Null when the provider reports no cost */
+            costUsd: number | null;
+            /** Format: int64 */
+            ttftMs: number;
+            /** Format: int64 */
+            durationMs: number;
+            /** @description Effective context window of the chat model; the configured default when the provider reports none */
+            contextWindow: number;
+        };
         Meta: {
             requestId: string;
         };

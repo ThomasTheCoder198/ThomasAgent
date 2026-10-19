@@ -11,7 +11,7 @@ metrics. It does not call models or tools; M1 (ragx tools), M2 (agent loop) and 
 
 ## Dependencies
 - Uses: slog (through `logging.NewLogger`), `internal/platform/metrics`, `internal/platform/config`, `internal/platform/outbound` (`IsRagxTraceID`).
-- Used by: future model and tool callers.
+- Used by: `platform/ragx` (`ToolLogger`, one `tool.call` per `CallTool`), the chat run loop (`llm.call`) and `cmd/core` (`ClientContainer.CallLog`).
 
 ## Run & test
 ```bash

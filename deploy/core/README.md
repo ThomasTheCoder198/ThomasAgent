@@ -52,4 +52,4 @@ On Linux the distroless `nonroot` user (uid 65532) must be able to read the dev 
 `chmod 0644 deploy/ragx/dev-app-signing-key.pem` (dev only; never relax a production key).
 `CORE_RAGX_URL` defaults to `http://host.docker.internal:8090`; `CORE_APP_SIGNING_KEY_HOST_FILE` overrides the mounted file.
 
-`core-worker` owns the outbox relay, periodic cleanup and the `chat.runs` consumer that executes chat runs (several replicas may run; each run executes under a lease, at most once). Its readiness also needs the consumer group to exist. Its internal `CORE_WORKER_ADDR` endpoint serves health, readiness and metrics; Prometheus scrapes it on port 9465.
+`core-worker` owns the outbox relay, periodic cleanup and the `chat.runs` consumer that executes chat runs (several replicas may run; each run executes under a lease, at most once). Its readiness also needs the consumer group to exist. Its internal `CORE_WORKER_ADDR` endpoint serves health, readiness and metrics; Prometheus scrapes it on port 9465. The chat run loop calls ragx tools, so `core-worker` gets the same `CORE_RAGX_URL` and app signing key mount as `core`.

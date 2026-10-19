@@ -74,6 +74,7 @@ class SearchResultResponse(CamelModel):
     chunk_id: str
     file_id: UUID
     file_name: str
+    file_version: int
     node_id: UUID
     section: list[str]
     page_start: int | None

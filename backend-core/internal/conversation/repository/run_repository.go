@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"cmp"
 	"context"
 	stderrors "errors"
 	"fmt"
@@ -18,7 +19,7 @@ import (
 
 const (
 	runColumns = `id, conversation_id, assistant_message_id, status, route, model_ref, error_code, input_tokens,
-		output_tokens, deadline_at, started_at, finished_at, request_id`
+		output_tokens, deadline_at, started_at, finished_at, request_id, requested_model_id, locale`
 	// constraintOneActiveRun is the partial unique index of migration 20261017000001.
 	constraintOneActiveRun = "uq_runs_one_active"
 )
@@ -60,9 +61,11 @@ func (runRepo) InsertRun(ctx context.Context, db postgres.DBTX, run model.Run) e
 	if err != nil {
 		return err
 	}
-	tag, err := db.Exec(ctx, `INSERT INTO runs (id, tenant_id, conversation_id, assistant_message_id, status, route, model_ref, deadline_at, request_id)
-		SELECT $1, c.tenant_id, c.id, $4, $5, $6, $7, $8, $9 FROM conversations c WHERE c.id = $3 AND c.tenant_id = $2`,
-		run.ID, tenantID, run.ConversationID, run.AssistantMessageID, run.Status, run.Route, run.ModelRef, run.DeadlineAt, run.RequestID)
+	tag, err := db.Exec(ctx, `INSERT INTO runs (id, tenant_id, conversation_id, assistant_message_id, status, route, model_ref, deadline_at, request_id,
+			requested_model_id, locale)
+		SELECT $1, c.tenant_id, c.id, $4, $5, $6, $7, $8, $9, $10, $11 FROM conversations c WHERE c.id = $3 AND c.tenant_id = $2`,
+		run.ID, tenantID, run.ConversationID, run.AssistantMessageID, run.Status, run.Route, run.ModelRef, run.DeadlineAt, run.RequestID,
+		run.RequestedModelID, cmp.Or(run.Locale, model.LocaleVI))
 	var pgErr *pgconn.PgError
 	if stderrors.As(err, &pgErr) && pgErr.ConstraintName == constraintOneActiveRun {
 		return errors.ErrRunAlreadyActive
@@ -113,7 +116,8 @@ func (runRepo) GetRun(ctx context.Context, db postgres.DBTX, id uuid.UUID) (mode
 
 func scanRun(row pgx.Row, run *model.Run) error {
 	return row.Scan(&run.ID, &run.ConversationID, &run.AssistantMessageID, &run.Status, &run.Route, &run.ModelRef, &run.ErrorCode,
-		&run.InputTokens, &run.OutputTokens, &run.DeadlineAt, &run.StartedAt, &run.FinishedAt, &run.RequestID)
+		&run.InputTokens, &run.OutputTokens, &run.DeadlineAt, &run.StartedAt, &run.FinishedAt, &run.RequestID,
+		&run.RequestedModelID, &run.Locale)
 }
 
 // FinishRun writes the terminal state once; a run that is no longer running is RUN_NOT_ACTIVE.
@@ -199,7 +203,7 @@ func (runRepo) ClaimRun(ctx context.Context, db postgres.DBTX, runID uuid.UUID, 
 		RETURNING `+runColumns+`, EXTRACT(EPOCH FROM now() - started_at)::float8`,
 		runID, tenantID, userID, lease.Owner, lease.Token, d.Seconds()).Scan(
 		&run.ID, &run.ConversationID, &run.AssistantMessageID, &run.Status, &run.Route, &run.ModelRef, &run.ErrorCode,
-		&run.InputTokens, &run.OutputTokens, &run.DeadlineAt, &run.StartedAt, &run.FinishedAt, &run.RequestID, &queuedSeconds)
+		&run.InputTokens, &run.OutputTokens, &run.DeadlineAt, &run.StartedAt, &run.FinishedAt, &run.RequestID, &run.RequestedModelID, &run.Locale, &queuedSeconds)
 	if stderrors.Is(err, pgx.ErrNoRows) {
 		return model.Run{}, false, nil
 	}

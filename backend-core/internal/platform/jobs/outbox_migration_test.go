@@ -23,10 +23,12 @@ func TestOutboxTraceparentMigration_UpDownUp(t *testing.T) {
 	var count int
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FROM information_schema.columns WHERE table_name='outbox' AND column_name='traceparent'`).Scan(&count))
 	require.Equal(t, 1, count)
-	// The run lease migration sits on top of it, so it is rolled back first.
-	require.NoError(t, postgres.Migrate(t.Context(), url, migrations.FS, postgres.Down))
-	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FROM information_schema.columns WHERE table_name='outbox' AND column_name='traceparent'`).Scan(&count))
-	require.Equal(t, 1, count, "the first Down removes only the run lease columns")
+	// The run model and run lease migrations sit on top of it, so they are rolled back first.
+	for range 2 {
+		require.NoError(t, postgres.Migrate(t.Context(), url, migrations.FS, postgres.Down))
+		require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FROM information_schema.columns WHERE table_name='outbox' AND column_name='traceparent'`).Scan(&count))
+		require.Equal(t, 1, count, "the first two Downs remove only run columns")
+	}
 	require.NoError(t, postgres.Migrate(t.Context(), url, migrations.FS, postgres.Down))
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FROM information_schema.columns WHERE table_name='outbox' AND column_name='traceparent'`).Scan(&count))
 	require.Zero(t, count)

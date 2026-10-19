@@ -21,7 +21,13 @@ from thomas_ragx.platform.tracing import (
 )
 from thomas_ragx.providers.embedding import Embedder
 from thomas_ragx.registry.model import Capability, ModelHandle, Role
-from thomas_ragx.retrieval.qdrant_store import FIELD_FILE, QdrantStore, any_condition, tenant_filter
+from thomas_ragx.retrieval.qdrant_store import (
+    FIELD_FILE,
+    FIELD_VERSION,
+    QdrantStore,
+    any_condition,
+    tenant_filter,
+)
 from thomas_ragx.retrieval.rerank import Reranker
 from thomas_ragx.retrieval.sparse import SparseEncoder
 
@@ -57,6 +63,7 @@ class SearchResult:
     chunk_id: str
     file_id: UUID
     file_name: str
+    file_version: int
     node_id: UUID
     section: tuple[str, ...]
     page_start: int | None
@@ -88,6 +95,7 @@ def _result(source: int, point: ScoredPoint, score: float) -> SearchResult:
         chunk_id=str(payload["chunk_id"]),
         file_id=UUID(str(payload["file_id"])),
         file_name=str(payload["file_name"]),
+        file_version=int(payload[FIELD_VERSION]),
         node_id=UUID(str(payload["node_id"])),
         section=tuple(payload.get("section") or ()),
         page_start=payload.get("page_start"),

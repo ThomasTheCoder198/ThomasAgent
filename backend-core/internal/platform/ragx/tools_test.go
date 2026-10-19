@@ -89,11 +89,24 @@ func TestCallTool_RefusesBadInputBeforeAnyRequest(t *testing.T) {
 func TestCallTool_UsesTheToolTimeout(t *testing.T) {
 	cfg := testConfig("")
 	cfg.ToolTimeout = 50 * time.Millisecond
-	caller, _ := slowCaller(t, cfg, 2*time.Second)
+	cfg.RequestTimeout = 5 * time.Second // only ToolTimeout can end the call within the assertion below (A2-8)
+	caller, _ := slowCaller(t, cfg, 500*time.Millisecond)
 	start := time.Now()
 	_, err := caller.CallTool(orgContext(), testKB, ToolKBSearch, json.RawMessage(`{"query":"x"}`))
 	require.Equal(t, errors.CodeRagxUnavailable, errors.CodeOf(err))
-	require.Less(t, time.Since(start), time.Second)
+	require.Less(t, time.Since(start), 400*time.Millisecond, "RequestTimeout must not bound a tool call")
+}
+
+func TestCallTool_AnEmptyOrNullDataMemberIsACatalogError(t *testing.T) {
+	for name, body := range map[string]string{"missing": `{"meta":{"requestId":"x"}}`, "null": `{"data":null,"meta":{"requestId":"x"}}`} {
+		t.Run(name, func(t *testing.T) {
+			caller, _, _, _ := newCaller(t, func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, http.StatusOK, body) })
+			data, err := caller.CallTool(orgContext(), testKB, ToolKBSearch, json.RawMessage(`{"query":"x"}`))
+			require.Nil(t, data)
+			require.Equal(t, errors.CodeRagxUnavailable, errors.CodeOf(err))
+			require.ErrorIs(t, err, errors.ErrRagxResponseNoData)
+		})
+	}
 }
 
 func TestGetKnowledgeBase_ReadsWithKBReadScope(t *testing.T) {

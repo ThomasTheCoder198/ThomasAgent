@@ -462,3 +462,43 @@ func TestLoad_ChatHeartbeatTimeoutMustFitInsideTheLeaseThird(t *testing.T) {
 	_, err := Load()
 	require.ErrorContains(t, err, "CORE_CHAT_RUN_HEARTBEAT_TIMEOUT")
 }
+
+func TestConfig_ChatDefaults(t *testing.T) {
+	cfg := loadDefaultsForTest(t)
+	c := cfg.Chat
+	require.Equal(t, 20, c.MaxSteps)
+	require.Equal(t, 5*time.Minute, c.RunDeadline)
+	require.Equal(t, 20, c.HistoryTurns)
+	require.InDelta(t, 0.7, c.CompactionRatio, 1e-9)
+	require.Equal(t, 4, c.CompactionKeepTurns)
+	require.Equal(t, 4, c.CompactionMaxPages)
+	require.InDelta(t, 0.85, c.RouterThreshold, 1e-9)
+	require.True(t, c.RouterEnabled)
+	require.True(t, c.CitationCheckEnabled)
+	require.InDelta(t, 0.5, c.CitationFlagBelow, 1e-9)
+	require.Equal(t, 16, c.CitationMaxPairs)
+	require.Equal(t, 32000, c.ToolOutputMaxChars)
+	require.Equal(t, 60, c.TitleMaxRunes)
+	require.Equal(t, 8000, c.MessageMaxRunes)
+	require.Equal(t, 5, c.SteerMaxPending)
+	require.Equal(t, 2000, c.SteerMaxRunes)
+	require.Equal(t, 128000, c.DefaultContextWindow)
+	require.Equal(t, 10*time.Second, c.FinishTimeout)
+	require.Equal(t, 4, c.MaxParallelTools)
+	require.Equal(t, 8, c.MaxToolCallsPerStep)
+	require.Equal(t, 4096, c.MaxOutputTokens)
+	require.Equal(t, 64, c.TitleMaxOutputTokens)
+	require.Equal(t, 1024, c.SummaryMaxOutputTokens)
+}
+
+func TestConfig_ChatRejectsOutOfRangeRatios(t *testing.T) {
+	cfg := loadDefaultsForTest(t)
+	cfg.Chat.CompactionRatio = 1.5
+	require.ErrorContains(t, cfg.validate(), "CORE_CHAT_COMPACTION_RATIO")
+	cfg = loadDefaultsForTest(t)
+	cfg.Chat.MaxParallelTools = 0
+	require.ErrorContains(t, cfg.validate(), "CORE_CHAT_")
+	cfg = loadDefaultsForTest(t)
+	cfg.Chat.CitationFlagBelow = -0.1
+	require.ErrorContains(t, cfg.validate(), "CORE_CHAT_CITATION_FLAG_BELOW")
+}

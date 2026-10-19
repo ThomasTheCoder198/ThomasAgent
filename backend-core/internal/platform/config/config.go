@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -74,6 +75,30 @@ type ChatConfig struct {
 	RunStreamMaxBytes    int64         `env:"RUN_STREAM_MAX_BYTES"`
 	RunStreamGrace       time.Duration `env:"RUN_STREAM_GRACE"`
 	RelayStatusCheck     time.Duration `env:"RELAY_STATUS_CHECK"`
+
+	// The run loop's own tunables (plan M2b, index Global Constraints).
+	MaxSteps            int     `env:"MAX_STEPS"`
+	HistoryTurns        int     `env:"HISTORY_TURNS"`
+	CompactionRatio     float64 `env:"COMPACTION_RATIO"`
+	CompactionKeepTurns int     `env:"COMPACTION_KEEP_TURNS"`
+	// CompactionMaxPages bounds the summary calls of one compaction; each page is HistoryTurns turns (B2-5).
+	CompactionMaxPages     int     `env:"COMPACTION_MAX_PAGES"`
+	RouterThreshold        float64 `env:"ROUTER_THRESHOLD"`
+	RouterEnabled          bool    `env:"ROUTER_ENABLED"`
+	CitationCheckEnabled   bool    `env:"CITATION_CHECK_ENABLED"`
+	CitationFlagBelow      float64 `env:"CITATION_FLAG_BELOW"`
+	CitationMaxPairs       int     `env:"CITATION_MAX_PAIRS"`
+	ToolOutputMaxChars     int     `env:"TOOL_OUTPUT_MAX_CHARS"`
+	TitleMaxRunes          int     `env:"TITLE_MAX_RUNES"`
+	MessageMaxRunes        int     `env:"MESSAGE_MAX_RUNES"`
+	SteerMaxPending        int     `env:"STEER_MAX_PENDING"`
+	SteerMaxRunes          int     `env:"STEER_MAX_RUNES"`
+	DefaultContextWindow   int     `env:"DEFAULT_CONTEXT_WINDOW"`
+	MaxParallelTools       int     `env:"MAX_PARALLEL_TOOLS"`
+	MaxToolCallsPerStep    int     `env:"MAX_TOOL_CALLS_PER_STEP"`
+	MaxOutputTokens        int     `env:"MAX_OUTPUT_TOKENS"`
+	TitleMaxOutputTokens   int     `env:"TITLE_MAX_OUTPUT_TOKENS"`
+	SummaryMaxOutputTokens int     `env:"SUMMARY_MAX_OUTPUT_TOKENS"`
 }
 
 // HeartbeatDivisor makes the heartbeat fire three times per lease, so one missed beat does not lose the run.
@@ -87,7 +112,28 @@ func (c ChatConfig) validate() []error {
 	if c.JobVisibilityTimeout <= 0 || c.JobVisibilityTimeout <= c.RunDeadline+c.FinishTimeout {
 		errs = append(errs, errors.New("CORE_CHAT_JOB_VISIBILITY_TIMEOUT must be > CORE_CHAT_RUN_DEADLINE + CORE_CHAT_FINISH_TIMEOUT"))
 	}
-	return append(errs, c.validateLeaseAndStream()...)
+	errs = append(errs, c.validateLeaseAndStream()...)
+	return append(errs, c.validateLoop()...)
+}
+
+func (c ChatConfig) validateLoop() []error {
+	var errs []error
+	positives := []int{c.MaxSteps, c.HistoryTurns, c.CompactionKeepTurns, c.CompactionMaxPages, c.CitationMaxPairs, c.ToolOutputMaxChars,
+		c.TitleMaxRunes, c.MessageMaxRunes, c.SteerMaxPending, c.SteerMaxRunes, c.DefaultContextWindow,
+		c.MaxParallelTools, c.MaxToolCallsPerStep, c.MaxOutputTokens, c.TitleMaxOutputTokens, c.SummaryMaxOutputTokens}
+	if slices.Min(positives) < 1 {
+		errs = append(errs, errors.New("CORE_CHAT_* counts and sizes must be >= 1"))
+	}
+	if c.CompactionRatio <= 0 || c.CompactionRatio > 1 {
+		errs = append(errs, errors.New("CORE_CHAT_COMPACTION_RATIO must be in (0, 1]"))
+	}
+	if c.RouterThreshold < 0 || c.RouterThreshold > 1 {
+		errs = append(errs, errors.New("CORE_CHAT_ROUTER_THRESHOLD must be in [0, 1]"))
+	}
+	if c.CitationFlagBelow < 0 || c.CitationFlagBelow > 1 {
+		errs = append(errs, errors.New("CORE_CHAT_CITATION_FLAG_BELOW must be in [0, 1]"))
+	}
+	return errs
 }
 
 func (c ChatConfig) validateLeaseAndStream() []error {

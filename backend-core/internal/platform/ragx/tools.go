@@ -19,6 +19,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
 )
 
+// ToolName is the name of a ragx tool (POST /v1/tools/{name}); it is also the suffix of the token scope.
 type ToolName string
 
 const (
@@ -32,6 +33,10 @@ const (
 	fieldInput                   = "input"
 )
 
+var jsonNull = []byte("null")
+
+// scopeKeys are the input keys that name an org or KB. Core signs both into the token, so a model must never choose them;
+// matching ignores case because a model may spell a key any way, and the chat run's input scrubber uses the same rule.
 var scopeKeys = []string{"kbid", "kb_id", "orgid", "org_id", "tenantid", "tenant_id"}
 
 func IsScopeKey(key string) bool { return slices.Contains(scopeKeys, strings.ToLower(key)) }
@@ -90,8 +95,11 @@ func (c *Caller) readToolData(res *http.Response) (json.RawMessage, error) {
 		return nil, errors.ErrRagxUnavailable.WithCause(errors.ErrRagxResponseTooLarge)
 	}
 	var body dataBody[json.RawMessage]
-	if err := json.Unmarshal(raw, &body); err != nil || len(body.Data) == 0 {
+	if err := json.Unmarshal(raw, &body); err != nil {
 		return nil, errors.ErrRagxUnavailable.WithCause(fmt.Errorf("decode ragx tool response: %w", err))
+	}
+	if len(body.Data) == 0 || bytes.Equal(body.Data, jsonNull) { // a null result would crash the run loop's presenter
+		return nil, errors.ErrRagxUnavailable.WithCause(errors.ErrRagxResponseNoData)
 	}
 	return body.Data, nil
 }

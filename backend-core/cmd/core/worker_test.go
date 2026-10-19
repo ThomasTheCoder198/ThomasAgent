@@ -180,7 +180,9 @@ func startServeWorker(t *testing.T, rt *coreRuntime, env workerEnv, jobs []perio
 	ctx, cancel := context.WithCancel(tenant.WithID(t.Context(), tenant.PlatformID))
 	t.Cleanup(cancel)
 	done := make(chan error, 1)
-	go func() { done <- rt.serveWorker(ctx, env.pool, env.redis, jobs) }()
+	go func() {
+		done <- rt.serveWorker(ctx, env.pool, env.redis, jobs, completingExecutor{store: newTestChatStore(env.pool, rt)})
+	}()
 	return workerRun{cancel: cancel, done: done}
 }
 
@@ -245,9 +247,22 @@ func TestWorker_RelayPublishesOutboxRows(t *testing.T) {
 	require.NoError(t, run.stop(t))
 }
 
+// withClientConfig gives a runtime the settings that building the clients and the run loop needs (the vault key, the
+// app signing key, a ragx address and the provider HTTP policy), as `core serve` and `core worker` both do.
+func withClientConfig(t *testing.T, rt *coreRuntime) {
+	t.Helper()
+	rt.cfg.Vault = config.VaultConfig{KeyID: "v1", MasterKey: testVaultMasterKey}
+	rt.cfg.App = config.AppConfig{SigningKey: testSigningKeyPEM(t), SigningKeyID: "test-1", TokenIssuer: "thomas-core", TokenAudience: "ragx", TokenTTL: time.Minute}
+	rt.cfg.Ragx = config.RagxConfig{URL: "http://127.0.0.1:1", ConnectTimeout: time.Second, RequestTimeout: time.Second, ResponseHeaderTimeout: time.Second, MaxErrorBodyBytes: 1 << 10, MaxResponseBytes: 1 << 10, ProvisionAttempts: 1, ToolTimeout: time.Second}
+	rt.cfg.ProviderHTTPTimeout = time.Second
+	rt.cfg.ProviderMaxResponseBytes = config.DefaultProviderMaxResponseBytes
+	rt.cfg.ProviderBreaker = config.BreakerConfig{FailureThreshold: 5, OpenTimeout: time.Second, HalfOpenMaxCalls: 1}
+}
+
 func TestWorker_RunsPeriodicJobsWithJobRequestID(t *testing.T) {
 	env := startWorkerEnv(t)
 	rt, out := workerRuntime(t, env, freeAddr(t), time.Second)
+	withClientConfig(t, rt)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	done := make(chan error, 1)
@@ -350,6 +365,7 @@ func TestOutboxRelayAlias_LogsOneDeprecationLineAndRunsWorker(t *testing.T) {
 		t.Run(command, func(t *testing.T) {
 			env := startWorkerEnv(t)
 			rt, out := workerRuntime(t, env, freeAddr(t), time.Second)
+			withClientConfig(t, rt)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			done := make(chan error, 1)
@@ -379,14 +395,9 @@ func TestServeHTTP_DoesNotRunPeriodicJobs(t *testing.T) {
 	require.NoError(t, err)
 	rt, out := workerRuntime(t, env, "", time.Second)
 	rt.cfg.HTTPAddr = freeAddr(t)
-	rt.cfg.Vault = config.VaultConfig{KeyID: "v1", MasterKey: testVaultMasterKey}
+	withClientConfig(t, rt)
 	rt.cfg.Auth = config.AuthConfig{OwnerEmail: "owner@example.com", OwnerPassword: "correct horse battery", SessionTTL: time.Hour, LoginMaxAttempts: 10, LoginWindow: time.Minute, MinPasswordLength: 12, SessionPurgeInterval: 10 * time.Millisecond}
 	rt.cfg.HTTP = config.HTTPConfig{MaxBodyBytes: 1 << 10, RequestTimeout: time.Second}
-	rt.cfg.App = config.AppConfig{SigningKey: testSigningKeyPEM(t), SigningKeyID: "test-1", TokenIssuer: "thomas-core", TokenAudience: "ragx", TokenTTL: time.Minute}
-	rt.cfg.Ragx = config.RagxConfig{URL: "http://127.0.0.1:1", ConnectTimeout: time.Second, RequestTimeout: time.Second, ResponseHeaderTimeout: time.Second, MaxErrorBodyBytes: 1 << 10, MaxResponseBytes: 1 << 10, ProvisionAttempts: 1}
-	rt.cfg.ProviderHTTPTimeout = time.Second
-	rt.cfg.ProviderMaxResponseBytes = config.DefaultProviderMaxResponseBytes
-	rt.cfg.ProviderBreaker = config.BreakerConfig{FailureThreshold: 5, OpenTimeout: time.Second, HalfOpenMaxCalls: 1}
 	serveCtx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	done := make(chan error, 1)

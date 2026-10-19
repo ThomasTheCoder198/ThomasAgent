@@ -46,6 +46,7 @@ type TokenSigner interface {
 	Issue(apptoken.Claims) (apptoken.Issued, error)
 }
 
+// ToolLogger writes the tool.call line of a CallTool; *calllog.Logger implements it.
 type ToolLogger interface {
 	Tool(context.Context, calllog.ToolCall)
 }
@@ -60,8 +61,9 @@ type Caller struct {
 	toolLog ToolLogger
 }
 
-// NewRagxCaller does not use outbound.NewClient: ragx is a configured first-party service on a private address, and
-// that client's whole-request timeout would cut the app proxy's forwards. Deadlines come from the context.
+// NewRagxCaller needs a toolLog: CallTool writes one tool.call line per call. It does not use outbound.NewClient: ragx
+// is a configured first-party service on a private address, and that client's whole-request timeout would cut the app
+// proxy's forwards. Deadlines come from the context.
 func NewRagxCaller(cfg config.RagxConfig, signer TokenSigner, recorder outbound.Recorder, log *slog.Logger, toolLog ToolLogger) (*Caller, error) {
 	client := &http.Client{
 		Transport:     outbound.Instrument(newRagxTransport(cfg), outbound.TargetRagx, recorder, true),
@@ -98,7 +100,8 @@ type call struct {
 	start     time.Time
 }
 
-// begin signs with the same request id the transport will send: ragx rejects a token whose rid differs.
+// begin signs with the same request id the transport will send: ragx rejects a token whose rid differs. kbID is ""
+// for calls that carry no KB claim, and timeout 0 leaves the deadline to the caller's context (the app proxy).
 func (c *Caller) begin(ctx context.Context, operation string, scope apptoken.Scope, kbID string, timeout time.Duration) (call, error) {
 	orgID, err := tenant.ID(ctx)
 	if err != nil {
@@ -212,6 +215,8 @@ func (c *Caller) ProvisionOrg(ctx context.Context, name string, externalParsing 
 
 const opGetKnowledgeBase = "get_knowledge_base"
 
+// GetKnowledgeBase reads one KB under scope kb:read. Ragx answers KB_NOT_FOUND for another org's KB as well as a missing
+// one, which passes through so the caller can treat both as "gone".
 func (c *Caller) GetKnowledgeBase(ctx context.Context, kbID uuid.UUID) (KnowledgeBase, error) {
 	return doData[KnowledgeBase](c, ctx, opGetKnowledgeBase, apptoken.ScopeKBRead, func(ctx context.Context, editors []RequestEditorFn) (*http.Response, error) {
 		return c.api.GetKnowledgeBase(ctx, kbID, &GetKnowledgeBaseParams{}, editors...)

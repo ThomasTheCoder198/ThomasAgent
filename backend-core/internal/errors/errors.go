@@ -45,7 +45,9 @@ const (
 	CodeRunInterrupted             Code = "RUN_INTERRUPTED"
 	CodeRunNotActive               Code = "RUN_NOT_ACTIVE"
 	CodeRunOutputTooLarge          Code = "RUN_OUTPUT_TOO_LARGE"
+	CodeRunStepLimit               Code = "RUN_STEP_LIMIT"
 	CodeRunStreamIncomplete        Code = "RUN_STREAM_INCOMPLETE"
+	CodeSteerQueueFull             Code = "STEER_QUEUE_FULL"
 	CodeUnauthenticated            Code = "UNAUTHENTICATED"
 	CodeUnsupportedMediaType       Code = "UNSUPPORTED_MEDIA_TYPE"
 	CodeValidationFailed           Code = "VALIDATION_FAILED"
@@ -92,7 +94,9 @@ const (
 	ErrRunInterrupted             NamedError = NamedError(CodeRunInterrupted)
 	ErrRunNotActive               NamedError = NamedError(CodeRunNotActive)
 	ErrRunOutputTooLarge          NamedError = NamedError(CodeRunOutputTooLarge)
+	ErrRunStepLimit               NamedError = NamedError(CodeRunStepLimit)
 	ErrRunStreamIncomplete        NamedError = NamedError(CodeRunStreamIncomplete)
+	ErrSteerQueueFull             NamedError = NamedError(CodeSteerQueueFull)
 	ErrUnauthenticated            NamedError = NamedError(CodeUnauthenticated)
 	ErrUnsupportedMediaType       NamedError = NamedError(CodeUnsupportedMediaType)
 	ErrValidationFailed           NamedError = NamedError(CodeValidationFailed)
@@ -180,8 +184,12 @@ func LookupDefinition(code Code) ErrorDefinition {
 		return ErrorDefinition{HTTPStatus: 409, Retryable: false, MessageVI: "Lượt trả lời đã kết thúc.", MessageEN: "The run has already finished."}
 	case CodeRunOutputTooLarge:
 		return ErrorDefinition{HTTPStatus: 422, Retryable: false, MessageVI: "Câu trả lời vượt quá giới hạn cho phép.", MessageEN: "The answer exceeded the allowed size."}
+	case CodeRunStepLimit:
+		return ErrorDefinition{HTTPStatus: 422, Retryable: false, MessageVI: "Lượt trả lời vượt số bước cho phép.", MessageEN: "The run used too many steps."}
 	case CodeRunStreamIncomplete:
 		return ErrorDefinition{HTTPStatus: 503, Retryable: true, MessageVI: "Kết nối bị gián đoạn — tải lại để xem câu trả lời", MessageEN: "The connection was interrupted — reload to see the answer"}
+	case CodeSteerQueueFull:
+		return ErrorDefinition{HTTPStatus: 429, Retryable: true, MessageVI: "Đã gửi quá nhiều chỉ dẫn cho lượt này.", MessageEN: "Too many steer messages for this run."}
 	case CodeUnauthenticated:
 		return ErrorDefinition{HTTPStatus: 401, Retryable: false, MessageVI: "Bạn cần đăng nhập.", MessageEN: "You need to sign in."}
 	case CodeUnsupportedMediaType:

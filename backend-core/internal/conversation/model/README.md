@@ -5,7 +5,7 @@ Domain types of conversations, messages, runs and run steps, plus the paging typ
 
 ## Entry points
 - `Conversation`, `Message`, `History`, `ConversationSummary`, `ConversationDetail`, `Scope`, `Page`, `PageMeta` (`conversation.go`)
-- `Run` (with `RequestID`), `RunStep`, `RunStatus*`, `StepKind*`, `StepOutcome*` (`run.go`)
+- `Run` (with `RequestID`, `RequestedModelID`, `Locale`), `RunStep`, `RunStatus*`, `StepKind*`, `StepOutcome*` (`run.go`)
 - `Lease`, `ClaimResult*`, `BeginRunInput`, `Trigger*`, `RunSummary`, `ChatRunJob`, `StreamChatRuns` (`run.go`): the run lease and the job that carries a run to the worker. They live here, not in `chat`, so `conversation/service` (BeginRun) and `chat/worker` share them without an import cycle.
 - `ConversationDetail.LastRun` is the latest run as a `RunSummary` (nil when none).
 

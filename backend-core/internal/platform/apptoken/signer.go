@@ -17,7 +17,7 @@ type Scope string
 
 const toolScopePrefix = "tool:"
 
-// ToolScope identifies a ragx tool and requires a KB claim.
+// ToolScope identifies a ragx tool and requires a KB claim. The prefix is ragx's TOOL_SCOPE_PREFIX; change both together.
 func ToolScope(name string) Scope { return Scope(toolScopePrefix + name) }
 
 const (

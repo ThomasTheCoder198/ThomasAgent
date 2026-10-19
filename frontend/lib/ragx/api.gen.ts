@@ -472,6 +472,8 @@ export interface components {
             /** Format: uuid */
             fileId: string;
             fileName: string;
+            /** @description kb_files.version the blocks belong to */
+            fileVersion: number;
             /** Format: uuid */
             nodeId: string;
             section: string[];

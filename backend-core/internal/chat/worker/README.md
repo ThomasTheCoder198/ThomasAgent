@@ -3,7 +3,7 @@
 ## Purpose
 The `chat.runs` consumer handler of `core worker` (amendment W5). It claims a run under a lease so a run executes at
 most once, runs the `Executor`, relays its events into the run stream and writes the terminal event after the run's
-end is stored. It does not implement the run loop (2b-4 implements `Executor`) and never retries a run: a failed run
+end is stored. It does not implement the run loop (`chat/service` implements `Executor`) and never retries a run: a failed run
 is ended, not re-executed.
 
 ## Entry points
@@ -14,8 +14,7 @@ is ended, not re-executed.
   - `HeldElsewhere`: an initial duplicate is acked and dropped; a redelivery stays pending until the old lease lapses, so a failed settlement remains recoverable. `NotRunning`: ack and drop;
   - `Expired`: `FailRun(RUN_INTERRUPTED, onlyIfExpired)` and, if the row changed, the terminal error;
   - `QueuedPastDeadline`: `FailRun(RUN_DEADLINE_EXCEEDED)` and the terminal error.
-- `Executor`, `ExecuteInput`, `CauseCode` (`executor.go`): the contract 2b-4 implements.
-- `PlaceholderExecutor` (`placeholder_executor.go`): TEMPORARY, replaced by 2b-4; ends every run `failed RUN_INTERRUPTED` and logs one warning per run; no run reaches it in production before the chat endpoint (2b-5) exists.
+- `Executor`, `ExecuteInput`, `CauseCode` (`executor.go`): the contract the run loop (`chat/service.RunService`) implements.
 
 ## Dependencies
 - Uses: `chat/control` (stop subscription), `chat/runstream` (event codec, writer), `chat/model`,
@@ -46,8 +45,8 @@ and `TESTCONTAINERS_RYUK_DISABLED=true`.
   terminal events, which only the handler writes.
 - If `Emit` exceeds a stream cap and the executor returns a success terminal without settling the row, the handler
   rejects that terminal and fails the still-running row with `RUN_OUTPUT_TOO_LARGE`. The handler cannot undo an
-  executor's already-committed `completed` row. The 2b-4 executor must check the cap cause before `FinishRun` and
-  never commit completed after an `Emit` error (ruling F2bW2-6).
+  executor's already-committed `completed` row, so the executor checks the cap cause before `FinishRun` and never
+  commits completed after an `Emit` error (ruling F2bW2-6; `chat/service` does and tests it).
 - A panic or an error that leaves the run unfinished fails it once (`FailRun`) and writes one terminal error after a
   successful database transition.
 - Logs: `chat run claimed|finished|interrupted|dropped`, each with `run_id`; `finished` and `interrupted` carry

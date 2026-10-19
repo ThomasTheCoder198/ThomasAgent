@@ -23,12 +23,14 @@ import (
 	convmodel "github.com/thomasthecoder198/thomastheragx/backend-core/internal/conversation/model"
 	convrepository "github.com/thomasthecoder198/thomastheragx/backend-core/internal/conversation/repository"
 	convservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/conversation/service"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apptoken"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 	platformjobs "github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/jobs"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/periodic"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/redisx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/vault"
 )
 
 const (
@@ -54,14 +56,14 @@ func workerOwner() string {
 	return fmt.Sprintf("%s-%d-%s", host, os.Getpid(), uuid.NewString()[:ownerSuffixLength])
 }
 
-// chatRunConsumer wires the chat.runs consumer to the run handler. Until 2b-4 the executor is the temporary placeholder.
-func (rt *coreRuntime) chatRunConsumer(pool *pgxpool.Pool, redisClient *redis.Client) (*platformjobs.Consumer, *chatworker.Handler) {
+// chatRunConsumer wires the chat.runs consumer to the run handler; the executor is the run loop (chat/service).
+func (rt *coreRuntime) chatRunConsumer(pool *pgxpool.Pool, redisClient *redis.Client, executor chatworker.Executor) (*platformjobs.Consumer, *chatworker.Handler) {
 	owner := workerOwner()
 	store := convservice.NewChatStore(pool, convrepository.NewConversationRepo(), convrepository.NewMessageRepo(), convrepository.NewRunRepo(), agentrepository.NewAgentRepo(), rt.cfg.Chat.FinishTimeout)
 	handler := &chatworker.Handler{
 		Store: store, Control: control.NewBus(redisClient),
 		Stream:   runstream.NewWriter(redisClient, rt.cfg.Chat.FinishTimeout, rt.cfg.Chat.RunStreamGrace),
-		Executor: chatworker.PlaceholderExecutor{Store: store, FinishTimeout: rt.cfg.Chat.FinishTimeout, Log: rt.log},
+		Executor: executor,
 		Cfg:      rt.cfg.Chat, Log: rt.log, Owner: owner,
 	}
 	consumer := &platformjobs.Consumer{
@@ -84,6 +86,14 @@ func (rt *coreRuntime) workerJobs(pool *pgxpool.Pool) []periodic.Job {
 
 func (rt *coreRuntime) runWorker(ctx context.Context) error {
 	ctx = tenant.WithID(ctx, tenant.PlatformID)
+	cipher, err := vault.NewCipher(rt.cfg.Vault.KeyID, rt.cfg.Vault.MasterKey)
+	if err != nil {
+		return fmt.Errorf("CORE_VAULT_MASTER_KEY: %w", err)
+	}
+	signingKey, err := apptoken.LoadSigningKey(rt.cfg.App, os.ReadFile)
+	if err != nil {
+		return fmt.Errorf("CORE_APP_SIGNING_KEY: %w", err)
+	}
 	pool, err := rt.openPostgres(ctx)
 	if err != nil {
 		return err
@@ -94,14 +104,18 @@ func (rt *coreRuntime) runWorker(ctx context.Context) error {
 		return err
 	}
 	defer func() { _ = redisClient.Close() }()
-	return rt.serveWorker(ctx, pool, redisClient, rt.workerJobs(pool))
+	runService, err := rt.initWorkerRunService(pool, cipher, signingKey)
+	if err != nil {
+		return err
+	}
+	return rt.serveWorker(ctx, pool, redisClient, rt.workerJobs(pool), runService)
 }
 
-// serveWorker runs the HTTP probe server, the outbox relay and the periodic jobs until ctx ends or the listener
-// fails. Either way the background loops are stopped and drained before it returns, because the caller closes the
-// database pool right after.
-func (rt *coreRuntime) serveWorker(ctx context.Context, pool *pgxpool.Pool, redisClient *redis.Client, jobs []periodic.Job) error {
-	chatConsumer, chatHandler := rt.chatRunConsumer(pool, redisClient)
+// serveWorker runs the HTTP probe server, the outbox relay, the chat.runs consumer and the periodic jobs until ctx
+// ends or the listener fails. Either way the background loops are stopped and drained before it returns, because the
+// caller closes the database pool right after.
+func (rt *coreRuntime) serveWorker(ctx context.Context, pool *pgxpool.Pool, redisClient *redis.Client, jobs []periodic.Job, executor chatworker.Executor) error {
+	chatConsumer, chatHandler := rt.chatRunConsumer(pool, redisClient, executor)
 	// The group exists before the probe server answers, so readiness means "can read chat jobs".
 	if err := chatConsumer.EnsureGroup(ctx); err != nil {
 		return err

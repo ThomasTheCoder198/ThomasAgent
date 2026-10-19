@@ -14,7 +14,7 @@ import (
 
 // B2-6: the stored parts are exactly the parts the AI SDK builds from the same chunks.
 func TestMessageBuilder_BuildsTheMessageTheAISDKBuilds(t *testing.T) {
-	builder := uistream.NewMessageBuilder(goldenMessageID)
+	builder := uistream.NewMessageBuilder()
 	for _, event := range kbRunEvents() {
 		builder.Apply(event)
 	}
@@ -29,7 +29,7 @@ func TestMessageBuilder_BuildsTheMessageTheAISDKBuilds(t *testing.T) {
 }
 
 func TestMessageBuilder_ClosesOpenTextWhenTheRunStopsMidAnswer(t *testing.T) {
-	builder := uistream.NewMessageBuilder("m")
+	builder := uistream.NewMessageBuilder()
 	builder.Apply(model.Start{MessageID: "m", RunID: uuid.New()})
 	builder.Apply(model.TextStart{ID: "t1"})
 	builder.Apply(model.TextDelta{ID: "t1", Delta: "Một nửa"})

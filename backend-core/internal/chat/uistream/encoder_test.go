@@ -13,6 +13,7 @@ import (
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/chat/model"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/chat/uistream"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
 
 const (
@@ -139,4 +140,17 @@ func TestEncoder_ToolOutputForAnUnknownCallIsAnError(t *testing.T) {
 	encoder := uistream.NewEncoder()
 	_, err := encoder.Encode(model.ToolOutputAvailable{CallID: "never-started"})
 	require.Error(t, err)
+}
+
+func TestEncoder_UnknownInputsReturnNamedCauses(t *testing.T) {
+	encoder := uistream.NewEncoder()
+	for _, event := range []model.Event{
+		model.ToolOutputAvailable{CallID: "missing", Output: json.RawMessage(`{}`)},
+		model.ToolOutputError{CallID: "missing", ErrorText: "X"},
+	} {
+		_, err := encoder.Encode(event)
+		require.ErrorIs(t, err, errors.ErrUIStreamUnknownToolCall)
+	}
+	_, err := encoder.Encode(nil)
+	require.ErrorIs(t, err, errors.ErrUIStreamUnknownEvent)
 }

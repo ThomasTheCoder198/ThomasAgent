@@ -1,6 +1,7 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"time"
 
@@ -24,6 +25,7 @@ const (
 	fieldAgentID    = "agentId"
 	fieldMessage    = "message"
 	fieldAssistant  = "assistantMessageId"
+	fieldLocale     = "locale"
 	fieldStatus     = "status"
 )
 
@@ -159,7 +161,8 @@ func (s *ChatStoreImpl) BeginRun(ctx context.Context, in model.BeginRunInput) (m
 		ctx = requestid.NewContext(ctx, requestid.NewJob())
 	}
 	run := model.Run{ID: uuid.New(), ConversationID: in.ConversationID, AssistantMessageID: in.AssistantMessageID,
-		Status: model.RunStatusRunning, DeadlineAt: in.Deadline, RequestID: requestid.FromContext(ctx)}
+		Status: model.RunStatusRunning, DeadlineAt: in.Deadline, RequestID: requestid.FromContext(ctx),
+		RequestedModelID: in.RequestedModelID, Locale: cmp.Or(in.Locale, model.LocaleVI)}
 	var outboxID string
 	err := s.locked(ctx, in.ConversationID, func(tx pgx.Tx, conversation model.Conversation) error {
 		if err := checkConversationAgent(conversation, in.AgentID); err != nil {
@@ -190,6 +193,9 @@ func validateBeginRun(in model.BeginRunInput) error {
 	}
 	if in.AssistantMessageID == "" {
 		return errors.FieldError(fieldAssistant, errors.FieldCodeRequired)
+	}
+	if in.Locale != "" && in.Locale != model.LocaleVI && in.Locale != model.LocaleEN {
+		return errors.FieldError(fieldLocale, errors.FieldCodeInvalid)
 	}
 	return nil
 }

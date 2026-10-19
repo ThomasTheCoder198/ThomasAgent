@@ -19,6 +19,7 @@ import (
 	authlimiter "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/limiter"
 	authrepository "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
 	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
+	chatservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/chat/service"
 	convcontroller "github.com/thomasthecoder198/thomastheragx/backend-core/internal/conversation/controller"
 	convrepository "github.com/thomasthecoder198/thomastheragx/backend-core/internal/conversation/repository"
 	convservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/conversation/service"
@@ -61,12 +62,9 @@ func (rt *coreRuntime) initClientContainer(signingKey ed25519.PrivateKey) (Clien
 	modelCatalog := llmclient.NewHTTPModelCatalogWithClient(retry.NewPolicy(rt.cfg.Retry), httpClient, rt.cfg.ProviderMaxResponseBytes, breaker, rt.log, rt.cfg.ProviderMaxBreakers)
 	modelCatalog.Metrics = rt.metrics
 	var recorder outbound.Recorder
-	if rt.metrics != nil { // a nil *Metrics inside the interface would panic on the first call
-		recorder = rt.metrics
-	}
 	var llmRecorder calllog.LLMRecorder
-	if rt.metrics != nil {
-		llmRecorder = rt.metrics
+	if rt.metrics != nil { // a nil *Metrics inside an interface would panic on the first call
+		recorder, llmRecorder = rt.metrics, rt.metrics
 	}
 	llmHTTP := *httpClient
 	llmHTTP.Timeout = 0
@@ -118,8 +116,10 @@ type ServiceContainer struct {
 	AgentService        agentservice.AgentService
 	ConversationService convservice.ConversationService
 	RetentionService    convservice.RetentionService
-	// ChatStore is the persistence port of the M2b run loop.
+	// ChatStore is the persistence port of the chat run; RunService is its loop and pre-run checks (the chat endpoint,
+	// 2b-5, calls Validate and CheckModel before BeginRun; `core worker` runs Execute).
 	ChatStore         convservice.ChatStore
+	RunService        chatservice.RunService
 	AuthService       authservice.AuthService
 	ProviderService   llmservice.ProviderService
 	LLMModelService   llmservice.LLMModelService
@@ -133,25 +133,59 @@ type ServiceContainer struct {
 	AppProxyService     appservice.AppProxyService
 }
 
+// newModelServices builds the provider vault service and the role resolver; `core serve` and `core worker` share them.
+func newModelServices(pool *pgxpool.Pool, cipher *vault.Cipher, clients ClientContainer, repositories RepositoryContainer) (llmservice.ProviderService, llmservice.ResolveService) {
+	providerService := llmservice.NewProviderService(pool, vault.NewStore(cipher), repositories.ProviderRepo, clients.ModelCatalog)
+	return providerService, llmservice.NewResolveService(pool, providerService, repositories.LLMModelRepo, repositories.RoleRepo)
+}
+
+// newRunService is the one place the run loop is assembled, so the API's pre-run checks and the worker's executor use
+// the same model resolution and ragx caller.
+func (rt *coreRuntime) newRunService(store convservice.ChatStore, agents agentservice.AgentService, resolve llmservice.ResolveService, clients ClientContainer) (chatservice.RunService, error) {
+	return chatservice.NewRunService(chatservice.RunDeps{
+		Store: store, Agents: agents, Models: resolve, Registry: clients.ModelRegistry, Tools: clients.Ragx, Calls: clients.CallLog,
+		Config: rt.cfg.Chat, ToolTimeout: rt.cfg.Ragx.ToolTimeout, Log: rt.log,
+	})
+}
+
+// initWorkerRunService builds the run loop for `core worker` without the API's owner bootstrap.
+func (rt *coreRuntime) initWorkerRunService(pool *pgxpool.Pool, cipher *vault.Cipher, signingKey ed25519.PrivateKey) (chatservice.RunService, error) {
+	clients, err := rt.initClientContainer(signingKey)
+	if err != nil {
+		return nil, err
+	}
+	repositories := rt.initRepositoryContainer(pool)
+	_, resolveService := newModelServices(pool, cipher, clients, repositories)
+	agentService := agentservice.NewAgentService(pool, repositories.AgentRepo, clients.Ragx, resolveService, rt.log)
+	chatStore := convservice.NewChatStore(pool, repositories.ConversationRepo, repositories.MessageRepo, repositories.RunRepo, repositories.AgentRepo, rt.cfg.Chat.FinishTimeout)
+	return rt.newRunService(chatStore, agentService, resolveService, clients)
+}
+
 // initServiceContainer also bootstraps the owner account, so startup fails before serving if it cannot.
 func (rt *coreRuntime) initServiceContainer(ctx context.Context, pool *pgxpool.Pool, cipher *vault.Cipher, clients ClientContainer, repositories RepositoryContainer) (ServiceContainer, error) {
 	authService := authservice.NewAuthService(repositories.UserRepo, repositories.SessionRepo, pool, rt.cfg.Auth, time.Now)
 	if err := authService.EnsureOwner(tenant.WithID(ctx, tenant.PlatformID)); err != nil {
 		return ServiceContainer{}, err
 	}
-	providerService := llmservice.NewProviderService(pool, vault.NewStore(cipher), repositories.ProviderRepo, clients.ModelCatalog)
+	providerService, resolveService := newModelServices(pool, cipher, clients, repositories)
 	// CORE_RAGX_PROVISION_ATTEMPTS, not cfg.Retry.MaxAttempts: the config checks this budget against the request timeout.
 	provisionPolicy := retry.NewPolicy(config.RetryConfig{
 		MaxAttempts: rt.cfg.Ragx.ProvisionAttempts, BaseDelay: rt.cfg.Retry.BaseDelay, MaxDelay: rt.cfg.Retry.MaxDelay,
 	})
-	resolveService := llmservice.NewResolveService(pool, providerService, repositories.LLMModelRepo, repositories.RoleRepo)
 	organizationService := orgservice.NewOrganizationService(pool, repositories.OrganizationRepo, clients.Ragx, provisionPolicy, uuid.NewString)
+	agentService := agentservice.NewAgentService(pool, repositories.AgentRepo, clients.Ragx, resolveService, rt.log)
+	chatStore := convservice.NewChatStore(pool, repositories.ConversationRepo, repositories.MessageRepo, repositories.RunRepo, repositories.AgentRepo, rt.cfg.Chat.FinishTimeout)
+	runService, err := rt.newRunService(chatStore, agentService, resolveService, clients)
+	if err != nil {
+		return ServiceContainer{}, err
+	}
 	return ServiceContainer{
-		AgentService: agentservice.NewAgentService(pool, repositories.AgentRepo, clients.Ragx, resolveService, rt.log),
+		AgentService: agentService,
 		ConversationService: convservice.NewConversationService(pool, repositories.ConversationRepo, repositories.MessageRepo, repositories.RunRepo,
 			repositories.AgentRepo, clients.Ragx, rt.cfg.Conversation, rt.log),
 		RetentionService:  convservice.NewRetentionService(pool, repositories.ConversationRepo, rt.cfg.Conversation, time.Now),
-		ChatStore:         convservice.NewChatStore(pool, repositories.ConversationRepo, repositories.MessageRepo, repositories.RunRepo, repositories.AgentRepo, rt.cfg.Chat.FinishTimeout),
+		ChatStore:         chatStore,
+		RunService:        runService,
 		AuthService:       authService,
 		ProviderService:   providerService,
 		LLMModelService:   llmservice.NewLLMModelService(pool, repositories.LLMModelRepo, repositories.RoleRepo),

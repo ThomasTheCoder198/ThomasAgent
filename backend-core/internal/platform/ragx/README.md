@@ -12,8 +12,8 @@ The only way core calls ragx: the generated client (`client_gen.go`, oapi-codege
 - The generated model `Org` is used as it is.
 
 ## Dependencies
-- Uses: `apptoken`, `outbound.Instrument` (`outbound_*` metrics with `target="ragx"`), `config.RagxConfig`, `requestid`, `tenant`, the shared error catalog.
-- Used by: `organization/service`, `appproxy/service`.
+- Uses: `apptoken`, `calllog` (`ToolLogger`), `outbound.Instrument` (`outbound_*` metrics with `target="ragx"`), `config.RagxConfig`, `requestid`, `tenant`, the shared error catalog.
+- Used by: `organization/service`, `appproxy/service`, `agent/service` (KB check) and the chat run loop (`CallTool`).
 
 ## Run & test
 ```bash
@@ -25,7 +25,7 @@ go test ./internal/platform/ragx/... -count=1
 ## Conventions
 - `oid` is `tenant.ID(ctx)`; a context without a trusted tenant fails with `ErrMissingTenant` before any request.
 - `rid` equals the `X-Request-Id` sent: both come from one context value, and a context without a valid id gets a `job_` id first.
-- `CallTool` signs the caller's KB as `kb` with `scp=tool:<name>`, strips scope keys from the input, and uses `CORE_RAGX_TOOL_TIMEOUT`. Each call writes a `ragx call` line and a `tool.call` event. Tool POSTs carry the repeatable marker (R-EOF).
+- `CallTool` signs the caller's KB as `kb` with `scp=tool:<name>`, strips scope keys from the input, and uses `CORE_RAGX_TOOL_TIMEOUT`. A response without a `data` member, or with `data: null`, is `RAGX_UNAVAILABLE` (`ErrRagxResponseNoData`). Each call writes a `ragx call` line and a `tool.call` event. Tool POSTs carry the repeatable marker (R-EOF).
 - ragx 4xx catalog codes pass through with their details, provided the code's catalog status matches the response status.
 - Typed calls: 5xx, timeouts, unreachable ragx, 401/403 (a rejected App token or scope is core misconfiguration) and unknown codes or statuses become `RAGX_UNAVAILABLE`.
 - `Forward`: 2xx and catalog 4xx pass through verbatim; 401 becomes `RAGX_UNAVAILABLE`; 403 becomes `NOT_FOUND` (the route needs a scope the UI never gets); a HEAD answer (which never has a body) with any other 4xx passes through as a bare status; everything else, including a body over the cap, becomes `RAGX_UNAVAILABLE`.

@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/chat/model"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
 )
 
 const (
@@ -147,22 +148,17 @@ type steerData struct {
 	Text string `json:"text"`
 }
 
-type toolCall struct {
-	name string
-	meta toolMetadata
-}
-
 // Encoder is per stream: it remembers the run id (for data part ids) and each tool call's metadata (the output
 // chunks repeat it, as the mock does).
 type Encoder struct {
 	runID    string
-	tools    map[string]toolCall
+	tools    map[string]toolMetadata
 	statuses int
 	steers   int
 }
 
 func NewEncoder() *Encoder {
-	return &Encoder{tools: map[string]toolCall{}}
+	return &Encoder{tools: map[string]toolMetadata{}}
 }
 
 // Encode returns the JSON payload of each chunk the event becomes, in order.
@@ -196,26 +192,26 @@ func (e *Encoder) chunks(event model.Event) ([]any, error) {
 			ProviderMetadata: map[string]durationMeta{metadataNamespace: {DurationMS: ev.DurationMS}}}}, nil
 	case model.ToolInputAvailable:
 		meta := toolMetadata{Line: ev.Line, Source: ev.Source}
-		e.tools[ev.CallID] = toolCall{name: ev.Tool, meta: meta}
+		e.tools[ev.CallID] = meta
 		return []any{
 			toolInputChunk{Type: chunkToolInputStart, ToolCallID: ev.CallID, ToolName: ev.Tool, Dynamic: true, ToolMetadata: meta},
 			toolInputChunk{Type: chunkToolInputAvailable, ToolCallID: ev.CallID, ToolName: ev.Tool, Dynamic: true,
 				ToolMetadata: meta, Input: ev.Input},
 		}, nil
 	case model.ToolOutputAvailable:
-		call, ok := e.tools[ev.CallID]
+		meta, ok := e.tools[ev.CallID]
 		if !ok {
-			return nil, fmt.Errorf("tool output for unknown call %q", ev.CallID)
+			return nil, fmt.Errorf("%w: output of %q", errors.ErrUIStreamUnknownToolCall, ev.CallID)
 		}
 		return []any{toolOutputChunk{Type: chunkToolOutputAvailable, ToolCallID: ev.CallID, Output: ev.Output, Dynamic: true,
-			ToolMetadata: withDuration(call.meta, ev.DurationMS)}}, nil
+			ToolMetadata: withDuration(meta, ev.DurationMS)}}, nil
 	case model.ToolOutputError:
-		call, ok := e.tools[ev.CallID]
+		meta, ok := e.tools[ev.CallID]
 		if !ok {
-			return nil, fmt.Errorf("tool error for unknown call %q", ev.CallID)
+			return nil, fmt.Errorf("%w: error of %q", errors.ErrUIStreamUnknownToolCall, ev.CallID)
 		}
 		return []any{toolErrorChunk{Type: chunkToolOutputError, ToolCallID: ev.CallID, ErrorText: ev.ErrorText, Dynamic: true,
-			ToolMetadata: withDuration(call.meta, ev.DurationMS)}}, nil
+			ToolMetadata: withDuration(meta, ev.DurationMS)}}, nil
 	default:
 		return e.remainingChunks(event)
 	}
@@ -258,7 +254,7 @@ func (e *Encoder) finalChunks(event model.Event) ([]any, error) {
 	case model.Finish:
 		return []any{typeChunk{Type: chunkFinish}}, nil
 	default:
-		return nil, fmt.Errorf("unknown chat event %T", event)
+		return nil, fmt.Errorf("%w: %T", errors.ErrUIStreamUnknownEvent, event)
 	}
 }
 

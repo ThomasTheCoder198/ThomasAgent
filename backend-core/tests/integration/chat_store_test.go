@@ -440,6 +440,54 @@ func TestChatStore_BeginRunWritesMessageRunAndOutboxInOneTransaction(t *testing.
 	require.Equal(t, convmodel.ChatRunJob{RunID: run.ID, ConversationID: conv, UserID: user}, job)
 }
 
+// F2b4-1: the request's model choice and language ride on the run row, so the worker keeps B2-8 and B2-9.
+func TestChatStore_BeginRunCarriesTheRequestedModelAndLocale(t *testing.T) {
+	pool := pgtest.Start(t)
+	seedReadyOrg(t, pool, "org-a")
+	user := seedUser(t, pool, "owner@test.local")
+	agent := seedAgent(t, pool, "org-a", "A")
+	store := newChatStore(pool)
+	ctx, _ := withRequestID(conversationContext("org-a", user))
+	conv := uuid.New()
+	_, _, err := store.EnsureConversation(ctx, conv, agent, user)
+	require.NoError(t, err)
+
+	bad := submitInput(conv, agent, "u0", "x", "a0")
+	bad.Locale = "fr"
+	_, _, err = store.BeginRun(ctx, bad)
+	require.ErrorIs(t, err, errors.ErrValidationFailed, "an unknown locale is refused before any write")
+	require.Zero(t, countRows(t, pool, `SELECT count(*) FROM runs`))
+
+	modelID := uuid.New()
+	in := submitInput(conv, agent, "u1", "Giá gói Pro?", "a1")
+	in.RequestedModelID, in.Locale = &modelID, convmodel.LocaleEN
+	run, _, err := store.BeginRun(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, convmodel.LocaleEN, run.Locale)
+	claimed, _, result, err := store.ClaimRun(ctx, run.ID, testWorkerOwner, testRunLease)
+	require.NoError(t, err)
+	require.Equal(t, convmodel.ClaimResultClaimed, result)
+	require.NotNil(t, claimed.RequestedModelID)
+	require.Equal(t, modelID, *claimed.RequestedModelID)
+	require.Equal(t, convmodel.LocaleEN, claimed.Locale)
+
+	lease := convmodel.Lease{RunID: run.ID, Token: claimedLeaseToken(t, pool, run.ID), Owner: testWorkerOwner}
+	run.Status = convmodel.RunStatusCompleted
+	require.NoError(t, store.FinishRun(ctx, lease, run, convmodel.Message{}))
+	second := submitInput(conv, agent, "u2", "Tiếp", "a2")
+	next, _, err := store.BeginRun(ctx, second)
+	require.NoError(t, err)
+	require.Equal(t, convmodel.LocaleVI, next.Locale, "an empty locale defaults to vi")
+	require.Nil(t, next.RequestedModelID)
+}
+
+func claimedLeaseToken(t *testing.T, pool *pgxpool.Pool, runID uuid.UUID) uuid.UUID {
+	t.Helper()
+	var token uuid.UUID
+	require.NoError(t, pool.QueryRow(context.Background(), `SELECT lease_token FROM runs WHERE id = $1`, runID).Scan(&token))
+	return token
+}
+
 func TestChatStore_BeginRunWithoutRequestIDStillStoresMatchingIDs(t *testing.T) {
 	pool := pgtest.Start(t)
 	seedReadyOrg(t, pool, "org-a")

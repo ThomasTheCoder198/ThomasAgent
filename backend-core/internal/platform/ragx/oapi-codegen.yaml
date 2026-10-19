@@ -4,5 +4,6 @@ output: client_gen.go
 generate:
   client: true
   models: true
+  embedded-spec: true
 output-options:
   resolve-type-name-collisions: true

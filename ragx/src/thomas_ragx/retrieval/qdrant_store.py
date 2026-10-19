@@ -34,6 +34,7 @@ SPARSE_VECTOR: Final = "bm25"
 FIELD_ORG: Final = "org_id"
 FIELD_KB: Final = "kb_id"
 FIELD_FILE: Final = "file_id"
+FIELD_VERSION: Final = "version"
 TENANT_FIELDS: Final = (FIELD_ORG, FIELD_KB)
 HTTP_CONFLICT: Final = 409
 log = structlog.get_logger(__name__)
@@ -82,7 +83,7 @@ def build_point(
             FIELD_ORG: owner.org_id,
             FIELD_KB: str(owner.kb_id),
             FIELD_FILE: str(owner.file_id),
-            "version": owner.version,
+            FIELD_VERSION: owner.version,
             "chunk_id": chunk.chunk_id,
             "chunk_index": chunk.index,
             "node_id": str(chunk.node_id),

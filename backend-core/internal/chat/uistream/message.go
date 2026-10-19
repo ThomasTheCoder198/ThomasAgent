@@ -11,48 +11,52 @@ import (
 // duration); data parts retain ids and replace prior data with the same type and id.
 
 const (
-	partText         = "text"
-	partReasoning    = "reasoning"
-	partDynamicTool  = "dynamic-tool"
-	stateStreaming   = "streaming"
-	stateDone        = "done"
-	stateInput       = "input-available"
-	stateOutput      = "output-available"
-	stateOutputError = "output-error"
-	keyType          = "type"
-	keyText          = "text"
-	keyState         = "state"
-	keyProviderMeta  = "providerMetadata"
-	keyToolName      = "toolName"
-	keyToolCallID    = "toolCallId"
-	keyInput         = "input"
-	keyOutput        = "output"
-	keyErrorText     = "errorText"
-	keyToolMetadata  = "toolMetadata"
-	keyID            = "id"
-	keyData          = "data"
-	keySourceID      = "sourceId"
-	keyMediaType     = "mediaType"
-	keyTitle         = "title"
-	keyFilename      = "filename"
+	partText            = "text"
+	partReasoning       = "reasoning"
+	partDynamicTool     = "dynamic-tool"
+	stateStreaming      = "streaming"
+	stateInputStreaming = "input-streaming"
+	stateDone           = "done"
+	stateInput          = "input-available"
+	stateOutput         = "output-available"
+	stateOutputError    = "output-error"
+	keyType             = "type"
+	keyText             = "text"
+	keyState            = "state"
+	keyProviderMeta     = "providerMetadata"
+	keyToolName         = "toolName"
+	keyToolCallID       = "toolCallId"
+	keyInput            = "input"
+	keyOutput           = "output"
+	keyErrorText        = "errorText"
+	keyToolMetadata     = "toolMetadata"
+	keyID               = "id"
+	keyData             = "data"
+	keySourceID         = "sourceId"
+	keyMediaType        = "mediaType"
+	keyTitle            = "title"
+	keyFilename         = "filename"
+
+	// dataKeySeparator joins a data part's type and id into one map key; NUL cannot appear in either.
+	dataKeySeparator = "\x00"
+	emptyParts       = "[]"
 )
 
 // MessageBuilder applies run events the way the AI SDK applies chunks, so the stored message is what the browser
 // showed (B2-6). It is not safe for concurrent use; the run loop owns it.
 type MessageBuilder struct {
-	messageID string
-	runID     string
-	parts     []map[string]any
-	byText    map[string]int
-	byReason  map[string]int
-	byTool    map[string]int
-	byData    map[string]int
-	encoder   *Encoder // reuses the encoder's data ids and tool metadata
+	runID    string
+	parts    []map[string]any
+	byText   map[string]int
+	byReason map[string]int
+	byTool   map[string]int
+	byData   map[string]int
+	encoder  *Encoder // reuses the encoder's data ids and tool metadata
 }
 
-func NewMessageBuilder(messageID string) *MessageBuilder {
+func NewMessageBuilder() *MessageBuilder {
 	return &MessageBuilder{
-		messageID: messageID, byText: map[string]int{}, byReason: map[string]int{}, byTool: map[string]int{},
+		byText: map[string]int{}, byReason: map[string]int{}, byTool: map[string]int{},
 		byData: map[string]int{}, encoder: NewEncoder(),
 	}
 }
@@ -118,7 +122,7 @@ func (b *MessageBuilder) applyResultChunk(chunk any) {
 		b.add(part)
 	case dataChunk:
 		part := map[string]any{keyType: c.Type, keyID: c.ID, keyData: c.Data}
-		key := c.Type + "\x00" + c.ID
+		key := c.Type + dataKeySeparator + c.ID
 		if i, ok := b.byData[key]; ok { // same type and id replaces, as the SDK does
 			b.parts[i] = part
 			return
@@ -151,7 +155,7 @@ func (b *MessageBuilder) applyToolInput(c toolInputChunk) {
 		b.parts[i][keyState] = stateInput
 		b.parts[i][keyInput] = c.Input
 	} else {
-		b.parts[i][keyState] = "input-streaming"
+		b.parts[i][keyState] = stateInputStreaming
 	}
 }
 
@@ -168,10 +172,13 @@ func (b *MessageBuilder) Parts() (json.RawMessage, error) {
 		}
 	}
 	if b.parts == nil {
-		return json.RawMessage("[]"), nil
+		return json.RawMessage(emptyParts), nil
 	}
 	return json.Marshal(b.parts)
 }
+
+// Empty reports whether no part was built yet, so a run that streamed nothing stores no assistant message.
+func (b *MessageBuilder) Empty() bool { return len(b.parts) == 0 }
 
 func (b *MessageBuilder) Metadata() json.RawMessage {
 	raw, _ := json.Marshal(runMetadata{RunID: b.runID})

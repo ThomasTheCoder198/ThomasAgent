@@ -165,6 +165,14 @@ errors:
     status: 504
     retryable: true
     message: { vi: "Lượt trả lời quá thời gian cho phép.", en: "The run took too long." }
+  - code: RUN_STEP_LIMIT
+    status: 422
+    retryable: false
+    message: { vi: "Lượt trả lời vượt số bước cho phép.", en: "The run used too many steps." }
+  - code: STEER_QUEUE_FULL
+    status: 429
+    retryable: true
+    message: { vi: "Đã gửi quá nhiều chỉ dẫn cho lượt này.", en: "Too many steer messages for this run." }
   - code: RUN_INTERRUPTED
     status: 503
     retryable: true

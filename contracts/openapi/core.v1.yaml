@@ -1067,6 +1067,43 @@ components:
         status: { type: string, enum: [running, completed, failed, cancelled] }
         errorCode: { type: string, description: Catalog code of a failed run; empty otherwise }
         requestId: { type: string, description: The X-Request-Id of the chat request that started the run; empty for runs created before it was stored }
+    CitationLocator:
+      type: object
+      description: providerMetadata.thomas of a source-document stream part. Locators are ragx's Locator objects passed through as they came.
+      additionalProperties: false
+      required: [fileId, kbId, fileName, kbName, section, pageStart, pageEnd, blockIds, score, locators]
+      properties:
+        fileId: { type: string, format: uuid }
+        kbId: { type: string, format: uuid }
+        fileName: { type: string }
+        fileVersion: { type: integer, minimum: 1, description: The ingested version the cited blocks belong to; absent when unknown }
+        kbName: { type: string }
+        section: { type: array, items: { type: string } }
+        pageStart: { type: [integer, "null"] }
+        pageEnd: { type: [integer, "null"] }
+        blockIds: { type: array, items: { type: string } }
+        score: { type: number }
+        locators:
+          type: array
+          items:
+            type: object
+            required: [kind]
+            additionalProperties: true
+            properties:
+              kind: { type: string, description: "ragx Locator kind: pdf_bbox, sheet_range, text_lines or docx_paragraph" }
+    RunUsage:
+      type: object
+      description: The data-usage stream part, sent once at the end of a completed run.
+      additionalProperties: false
+      required: [runId, inputTokens, outputTokens, costUsd, ttftMs, durationMs, contextWindow]
+      properties:
+        runId: { type: string, format: uuid }
+        inputTokens: { type: integer, format: int64 }
+        outputTokens: { type: integer, format: int64 }
+        costUsd: { type: [number, "null"], description: Null when the provider reports no cost }
+        ttftMs: { type: integer, format: int64 }
+        durationMs: { type: integer, format: int64 }
+        contextWindow: { type: integer, description: Effective context window of the chat model; the configured default when the provider reports none }
     Meta:
       type: object
       required: [requestId]

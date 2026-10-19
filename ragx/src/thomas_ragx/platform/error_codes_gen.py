@@ -45,7 +45,9 @@ class ErrorCode(StrEnum):
     RUN_INTERRUPTED = "RUN_INTERRUPTED"
     RUN_NOT_ACTIVE = "RUN_NOT_ACTIVE"
     RUN_OUTPUT_TOO_LARGE = "RUN_OUTPUT_TOO_LARGE"
+    RUN_STEP_LIMIT = "RUN_STEP_LIMIT"
     RUN_STREAM_INCOMPLETE = "RUN_STREAM_INCOMPLETE"
+    STEER_QUEUE_FULL = "STEER_QUEUE_FULL"
     UNAUTHENTICATED = "UNAUTHENTICATED"
     UNSUPPORTED_MEDIA_TYPE = "UNSUPPORTED_MEDIA_TYPE"
     VALIDATION_FAILED = "VALIDATION_FAILED"
@@ -100,7 +102,9 @@ ERROR_DEFINITIONS: Final[dict[ErrorCode, ErrorDefinition]] = {
     ErrorCode.RUN_INTERRUPTED: ErrorDefinition(http_status=503, retryable=True, message_vi="Lượt trả lời bị gián đoạn. Vui lòng thử lại.", message_en="The run was interrupted. Please try again."),
     ErrorCode.RUN_NOT_ACTIVE: ErrorDefinition(http_status=409, retryable=False, message_vi="Lượt trả lời đã kết thúc.", message_en="The run has already finished."),
     ErrorCode.RUN_OUTPUT_TOO_LARGE: ErrorDefinition(http_status=422, retryable=False, message_vi="Câu trả lời vượt quá giới hạn cho phép.", message_en="The answer exceeded the allowed size."),
+    ErrorCode.RUN_STEP_LIMIT: ErrorDefinition(http_status=422, retryable=False, message_vi="Lượt trả lời vượt số bước cho phép.", message_en="The run used too many steps."),
     ErrorCode.RUN_STREAM_INCOMPLETE: ErrorDefinition(http_status=503, retryable=True, message_vi="Kết nối bị gián đoạn — tải lại để xem câu trả lời", message_en="The connection was interrupted — reload to see the answer"),
+    ErrorCode.STEER_QUEUE_FULL: ErrorDefinition(http_status=429, retryable=True, message_vi="Đã gửi quá nhiều chỉ dẫn cho lượt này.", message_en="Too many steer messages for this run."),
     ErrorCode.UNAUTHENTICATED: ErrorDefinition(http_status=401, retryable=False, message_vi="Bạn cần đăng nhập.", message_en="You need to sign in."),
     ErrorCode.UNSUPPORTED_MEDIA_TYPE: ErrorDefinition(http_status=415, retryable=False, message_vi="Kiểu nội dung yêu cầu không được hỗ trợ.", message_en="The request content type is not supported."),
     ErrorCode.VALIDATION_FAILED: ErrorDefinition(http_status=400, retryable=False, message_vi="Dữ liệu gửi lên không hợp lệ.", message_en="The request data is invalid."),

@@ -71,6 +71,12 @@ services:
       CORE_DATABASE_URL: ${CORE_DATABASE_URL:-postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable}
       CORE_REDIS_URL: ${CORE_REDIS_URL:-redis://redis:6379/0}
       CORE_LOGS_OTLP_ENDPOINT: ${CORE_LOGS_OTLP_ENDPOINT-http://victorialogs:9428/insert/opentelemetry/v1/logs}
+      # The chat run loop calls ragx tools, so the worker signs App tokens like core does.
+      CORE_RAGX_URL: ${CORE_RAGX_URL:-http://host.docker.internal:8090}
+      CORE_APP_SIGNING_KEY_FILE: /run/secrets/app-signing-key.pem
+    volumes:
+      - ${CORE_APP_SIGNING_KEY_HOST_FILE:-../ragx/dev-app-signing-key.pem}:/run/secrets/app-signing-key.pem:ro
+    extra_hosts: ["host.docker.internal:host-gateway"]
     healthcheck:
       test: ["CMD", "/usr/local/bin/core", "healthcheck", "--target", "worker"]
       interval: 5s

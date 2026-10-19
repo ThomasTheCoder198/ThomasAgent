@@ -650,12 +650,13 @@ components:
         locator: { $ref: "#/components/schemas/Locator" }
     SearchResult:
       type: object
-      required: [source, chunkId, fileId, fileName, nodeId, section, pageStart, pageEnd, score, blocks]
+      required: [source, chunkId, fileId, fileName, fileVersion, nodeId, section, pageStart, pageEnd, score, blocks]
       properties:
         source: { type: integer, minimum: 1 }
         chunkId: { type: string }
         fileId: { type: string, format: uuid }
         fileName: { type: string }
+        fileVersion: { type: integer, minimum: 1, description: "kb_files.version the blocks belong to" }
         nodeId: { type: string, format: uuid }
         section: { type: array, items: { type: string } }
         pageStart: { type: [integer, "null"] }

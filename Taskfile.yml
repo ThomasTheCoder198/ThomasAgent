@@ -2,7 +2,22 @@ version: "3"
 
 vars:
   COMPOSE: docker compose --env-file deploy/core/.env -f deploy/core/compose.yaml
-  RAGX_COMPOSE: docker compose --env-file deploy/ragx/.env -f deploy/ragx/compose.yaml
+  # An explicit -f overrides COMPOSE_FILE from the env file, so the files listed there (e.g. compose.dev-ports.yaml,
+  # which publishes ragx Postgres/Redis for the MCP servers) become -f flags; without COMPOSE_FILE only compose.yaml.
+  # Shell builtins only: Task evaluates this for every task, also from PowerShell where sed/tr are missing.
+  RAGX_COMPOSE:
+    sh: |
+      files=compose.yaml
+      if [ -f deploy/ragx/.env ]; then
+        while IFS= read -r line || [ -n "$line" ]; do
+          case "$line" in COMPOSE_FILE=*) files=${line#COMPOSE_FILE=} ;; esac
+        done < deploy/ragx/.env
+      fi
+      files=${files%$'\r'}
+      args=""
+      IFS=':;'
+      for file in $files; do args="$args -f deploy/ragx/$file"; done
+      echo "docker compose --env-file deploy/ragx/.env$args"
 
 tasks:
   gen:
@@ -13,6 +28,7 @@ tasks:
       - npm run lint:openapi
       - npm run gen:postman
       - npm run gen:ragx-types
+      - npm run gen:core-types
       - task: gen:ragx-client
     dir: contracts
 

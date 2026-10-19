@@ -28,34 +28,34 @@ function core(routes: Record<string, Reply>) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("agents server loaders", () => {
-  it("lets only the agent list fall back to empty on 404", async () => {
-    core({ "/api/v1/agents": fail(404, "NOT_FOUND", "x") });
+  it("reads the org's agents and reports a failure instead of an empty list", async () => {
+    core({ "/api/v1/orgs/o1/agents": fail(500, "INTERNAL_ERROR", "Lỗi máy chủ") });
     const { listAgents } = await import("./server");
-    await expect(listAgents()).resolves.toEqual([]);
+    await expect(listAgents("o1")).resolves.toEqual({ ok: false, message: "Lỗi máy chủ" });
   });
 
-  it("surfaces knowledge-base, model and role failures instead of treating them as empty", async () => {
+  it("lists the org's KBs through the ragx app proxy and carries failures to their tab", async () => {
     core({
-      "/api/v1/agents/a1": ok({ id: "a1", kbId: "kb-1" }),
-      "/api/v1/knowledge-bases": fail(404, "NOT_FOUND", "Không tìm thấy"),
+      "/api/v1/orgs/o1/agents/a1": ok({ id: "a1", kbId: "kb-1" }),
+      "/api/v1/orgs/o1/apps/ragx/knowledge-bases": fail(503, "RAGX_UNAVAILABLE", "Ragx tạm ngưng"),
       "/api/v1/models": fail(500, "INTERNAL_ERROR", "Lỗi máy chủ"),
-      "/api/v1/model-roles": ok([]),
+      "/api/v1/orgs/o1/model-roles": ok([]),
     });
     const { getAgentPage } = await import("./server");
-    const page = await getAgentPage("a1");
-    expect(page?.knowledgeBases).toEqual({ ok: false, message: "Không tìm thấy" });
+    const page = await getAgentPage("o1", "a1");
+    expect(page?.knowledgeBases).toEqual({ ok: false, message: "Ragx tạm ngưng" });
     expect(page?.models).toEqual({ ok: false, message: "Lỗi máy chủ" });
     expect(page?.roles).toEqual({ ok: true, data: [] });
   });
 
-  it("returns null only when the agent itself is missing", async () => {
+  it("returns null when core says the agent does not exist", async () => {
     core({
-      "/api/v1/agents/a1": fail(404, "NOT_FOUND", "x"),
-      "/api/v1/knowledge-bases": ok([]),
+      "/api/v1/orgs/o1/agents/a1": fail(404, "AGENT_NOT_FOUND", "x"),
+      "/api/v1/orgs/o1/apps/ragx/knowledge-bases": ok([]),
       "/api/v1/models": ok([]),
-      "/api/v1/model-roles": ok([]),
+      "/api/v1/orgs/o1/model-roles": ok([]),
     });
     const { getAgentPage } = await import("./server");
-    await expect(getAgentPage("a1")).resolves.toBeNull();
+    await expect(getAgentPage("o1", "a1")).resolves.toBeNull();
   });
 });

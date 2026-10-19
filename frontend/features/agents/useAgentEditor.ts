@@ -8,19 +8,21 @@ import type { Locale } from "@/i18n/config";
 import { apiFetch } from "@/lib/api/client";
 import { useNotify } from "@/lib/useNotify";
 
-import { AGENT_PATHS, type AgentDetail } from "./contract";
+import type { Agent } from "@/lib/core/types";
+
+import { AGENT_PATHS } from "./contract";
 import {
   canSave as canSaveDraft,
   diffDraft,
   draftErrors,
-  fromDetail,
+  fromAgent,
   isDirty,
   type AgentDraft,
 } from "./draft";
 
 /** Sends only what changed; the server answers with the stored Agent. */
-function patchAgent(agent: AgentDetail, draft: AgentDraft, locale: Locale) {
-  return apiFetch<AgentDetail>(AGENT_PATHS.agent(agent.id), {
+function patchAgent(orgId: string, agent: Agent, draft: AgentDraft, locale: Locale) {
+  return apiFetch<Agent>(AGENT_PATHS.agent(orgId, agent.id), {
     method: "PATCH",
     locale,
     body: JSON.stringify(diffDraft(agent, draft)),
@@ -33,13 +35,13 @@ function patchAgent(agent: AgentDetail, draft: AgentDraft, locale: Locale) {
  * draft without dropping anything typed after the snapshot was sent. The outcome is reported by toast; a
  * failed save keeps the draft, so the owner can retry without retyping.
  */
-export function useAgentEditor(initial: AgentDetail) {
+export function useAgentEditor(orgId: string, initial: Agent) {
   const locale = useLocale() as Locale;
   const t = useTranslations("agents");
   const notify = useNotify();
   const router = useRouter();
   const [agent, setAgent] = useState(initial);
-  const [draft, setDraft] = useState<AgentDraft>(() => fromDetail(initial));
+  const [draft, setDraft] = useState<AgentDraft>(() => fromAgent(initial));
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
 
@@ -50,7 +52,7 @@ export function useAgentEditor(initial: AgentDetail) {
 
   function discard() {
     if (savingRef.current) return;
-    setDraft(fromDetail(agent));
+    setDraft(fromAgent(agent));
   }
 
   async function persist() {
@@ -58,9 +60,9 @@ export function useAgentEditor(initial: AgentDetail) {
     savingRef.current = true;
     setSaving(true);
     try {
-      const saved = await patchAgent(agent, draft, locale);
+      const saved = await patchAgent(orgId, agent, draft, locale);
       setAgent(saved);
-      setDraft(fromDetail(saved));
+      setDraft(fromAgent(saved));
       notify.success(t("saved"));
       router.refresh();
     } catch (err) {

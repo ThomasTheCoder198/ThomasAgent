@@ -8,10 +8,18 @@ import { join } from "node:path";
 
 import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from "ai";
 
-const OUT = join(import.meta.dirname, "../../backend-core/internal/chat/uistream/testdata");
+const OUT =
+  process.env.UI_STREAM_GOLDENS_OUT ??
+  join(import.meta.dirname, "../../backend-core/internal/chat/uistream/testdata");
 const RUN_ID = "11111111-2222-4333-8444-555555555555";
 const MESSAGE_ID = "msg-golden";
 const KB = { line: "kb", source: "Knowledge Base" } as const;
+const PDF_BBOX_LEFT = 10;
+const PDF_BBOX_TOP = 20;
+const PDF_BBOX_RIGHT = 300;
+const PDF_BBOX_BOTTOM = 80;
+const PDF_BBOX = [PDF_BBOX_LEFT, PDF_BBOX_TOP, PDF_BBOX_RIGHT, PDF_BBOX_BOTTOM];
+const JSON_INDENT = 2;
 /** A kb_search tool part's output is ragx's data after core's run-wide renumbering (index amendment 7). */
 const SEARCH_OUTPUT = {
   results: [
@@ -30,7 +38,7 @@ const SEARCH_OUTPUT = {
           label: "[1.1]",
           blockId: "b-1",
           text: "Khách được hoàn tiền trong 7 ngày.",
-          locator: { kind: "pdf_bbox", page: 3, bbox: [10, 20, 300, 80] },
+          locator: { kind: "pdf_bbox", page: 3, bbox: PDF_BBOX },
         },
       ],
     },
@@ -65,7 +73,13 @@ const kbRun: Chunk[] = [
     dynamic: true,
     toolMetadata: { ...KB, durationMs: 640 },
   },
-  { type: "tool-input-start", toolCallId: "call-2", toolName: "kb_read_section", dynamic: true, toolMetadata: KB },
+  {
+    type: "tool-input-start",
+    toolCallId: "call-2",
+    toolName: "kb_read_section",
+    dynamic: true,
+    toolMetadata: KB,
+  },
   {
     type: "tool-input-available",
     toolCallId: "call-2",
@@ -99,7 +113,7 @@ const kbRun: Chunk[] = [
         pageEnd: 3,
         blockIds: ["b-1"],
         score: 0.91,
-        locators: [{ kind: "pdf_bbox", page: 3, bbox: [10, 20, 300, 80] }],
+        locators: [{ kind: "pdf_bbox", page: 3, bbox: PDF_BBOX }],
       },
     },
   },
@@ -148,7 +162,8 @@ async function capture(name: string, chunks: Chunk[], withMessage: boolean) {
   });
   const sse = await createUIMessageStreamResponse({ stream }).text();
   writeFileSync(join(OUT, `${name}.sse`), sse);
-  if (withMessage) writeFileSync(join(OUT, `${name}.message.json`), `${JSON.stringify(message, null, 2)}\n`);
+  if (withMessage)
+    writeFileSync(join(OUT, `${name}.message.json`), `${JSON.stringify(message, null, JSON_INDENT)}\n`);
 }
 
 mkdirSync(OUT, { recursive: true });

@@ -44,7 +44,7 @@ const ICONS = {
   loading: <Loader2Icon aria-hidden className="size-4 animate-spin" />,
 };
 
-/** Bottom right on desktop, top centre on phones; mounted once in the root layout. */
+/** Bottom right on desktop, above a visible SaveBar; top centre on phones. */
 export function Toaster(props: ToasterProps) {
   const t = useTranslations("common");
   const { resolvedTheme } = useTheme();
@@ -53,6 +53,7 @@ export function Toaster(props: ToasterProps) {
     <Sonner
       theme={resolvedTheme === "dark" ? "dark" : "light"}
       position={belowMd ? "top-center" : "bottom-right"}
+      offset={{ bottom: "var(--toast-bottom-offset)" }}
       visibleToasts={MAX_VISIBLE_TOASTS}
       closeButton
       containerAriaLabel={t("notifications")}

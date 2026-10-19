@@ -10,6 +10,7 @@ const labels = {
   searchSoon: "Tìm kiếm có ở M2",
   recents: "Gần đây",
   recentsEmpty: "Hội thoại gần đây sẽ hiện ở đây.",
+  recentsRetention: "Hội thoại tự xoá sau 30 ngày không hoạt động",
   tenant: "Self-hosted · 1 tenant",
   nav: "Điều hướng chính",
 };
@@ -31,6 +32,7 @@ describe("Sidebar", () => {
     );
     expect(screen.getByRole("link", { name: /Tools/ })).toHaveAttribute("aria-current", "page");
     expect(screen.getByText("Hội thoại gần đây sẽ hiện ở đây.")).toBeInTheDocument();
+    expect(screen.getByText(labels.recentsRetention)).toBeInTheDocument();
   });
 
   it("truncates long recent titles", () => {

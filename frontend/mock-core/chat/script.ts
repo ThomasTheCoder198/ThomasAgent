@@ -17,7 +17,13 @@ import {
  */
 const KB_META = { line: "kb", source: KB.name } as const;
 const LINEAR_META = { line: "mcp", source: refundScript.linear.source } as const;
-const USAGE = { inputTokens: 2_914, outputTokens: 568, costUsd: 0.0061, ttftMs: 820 } as const;
+const USAGE = {
+  inputTokens: 2_914,
+  outputTokens: 568,
+  costUsd: 0.0061,
+  ttftMs: 820,
+  contextWindow: 200_000,
+} as const;
 const RUN_DURATION_MS = 4_100;
 const SEARCH_CHUNKS = 8;
 const READ_BLOCKS = 4;

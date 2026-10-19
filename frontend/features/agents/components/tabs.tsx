@@ -1,31 +1,34 @@
 "use client";
 
-import { FileText } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { SettingsSection } from "@/components/ui/SettingsSection";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
-import { formatBytes, formatTokens } from "@/lib/format";
+import type { Agent } from "@/lib/core/types";
+import { formatTokens } from "@/lib/format";
 
-import type { AgentDetail } from "../contract";
 import type { AgentDraft, DraftErrors } from "../draft";
+import { DeleteAgentSection } from "./DeleteAgentSection";
 
 export type TabProps = {
-  agent: AgentDetail;
+  orgId: string;
+  agent: Agent;
   draft: AgentDraft;
   update: (patch: Partial<AgentDraft>) => void;
   errors: DraftErrors;
 };
 
-export function OverviewTab({ agent, draft, update, errors }: TabProps) {
+export function OverviewTab({ orgId, agent, draft, update, errors }: TabProps) {
   const t = useTranslations("agents");
-  const locale = useLocale();
   return (
     <>
       <SettingsSection index={0} title={t("name")}>
-        <Field label={t("name")} error={errors.name ? t("nameRequired") : undefined}>
+        <Field
+          label={t("name")}
+          error={errors.name ? t(errors.name === "tooLong" ? "nameTooLong" : "nameRequired") : undefined}
+        >
           {(control) => (
             <Input
               {...control}
@@ -37,7 +40,11 @@ export function OverviewTab({ agent, draft, update, errors }: TabProps) {
         </Field>
       </SettingsSection>
       <SettingsSection index={1} title={t("description")}>
-        <Field label={t("description")} hideLabel>
+        <Field
+          label={t("description")}
+          hideLabel
+          error={errors.description ? t("descriptionTooLong") : undefined}
+        >
           {(control) => (
             <Textarea
               {...control}
@@ -53,28 +60,12 @@ export function OverviewTab({ agent, draft, update, errors }: TabProps) {
           {agent.id}
         </code>
       </SettingsSection>
-      <SettingsSection index={3} title={t("contextFiles")} hint={t("contextFilesHint")}>
-        {agent.contextFiles.length === 0 ? (
-          <p className="text-muted-foreground text-sm">{t("noContextFiles")}</p>
-        ) : (
-          <ul className="flex flex-col gap-1.5">
-            {agent.contextFiles.map((file) => (
-              <li key={file.id} className="flex items-center gap-2.5 text-sm">
-                <FileText aria-hidden className="text-muted-foreground size-4" />
-                <span className="min-w-0 flex-1 truncate">{file.name}</span>
-                <span className="tabular text-muted-foreground text-xs">
-                  {formatBytes(file.sizeBytes, locale)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </SettingsSection>
+      <DeleteAgentSection orgId={orgId} id={agent.id} name={agent.name} index={3} />
     </>
   );
 }
 
-export function InstructionsTab({ draft, update }: TabProps) {
+export function InstructionsTab({ draft, update, errors }: TabProps) {
   const t = useTranslations("agents");
   const locale = useLocale();
   return (
@@ -82,6 +73,7 @@ export function InstructionsTab({ draft, update }: TabProps) {
       <Field
         label={t("tabInstructions")}
         hideLabel
+        error={errors.instructions ? t("instructionsTooLong") : undefined}
         footer={t("chars", { count: formatTokens(draft.instructions.length, locale) })}
       >
         {(control) => (

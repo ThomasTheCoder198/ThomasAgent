@@ -63,4 +63,24 @@ describe("Composer", () => {
     await userEvent.click(screen.getByRole("button", { name: "Stop" }));
     expect(onStop).toHaveBeenCalledOnce();
   });
+
+  it("waits for an explicit model when the org has no default", async () => {
+    const { onSend } = renderComposer({
+      models: [
+        {
+          id: "m1",
+          providerId: "p1",
+          modelRef: "one",
+          displayName: "One",
+          capabilities: ["chat"],
+          contextWindow: 1,
+          source: "manual",
+        },
+      ],
+    });
+    await userEvent.type(screen.getByRole("textbox", { name: "Message" }), "Xin chào");
+    expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
+    expect(screen.getByText("Choose a model to send")).toBeInTheDocument();
+    expect(onSend).not.toHaveBeenCalled();
+  });
 });

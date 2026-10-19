@@ -7,7 +7,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { REQUEST_ID_PATTERN } from "./request-id";
-import { serverFetch } from "./server";
+import { serverFetch, serverFetchResult } from "./server";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -40,4 +40,33 @@ describe("serverFetch", () => {
       expect(ids[0]).not.toBe(ids[1]);
     },
   );
+});
+
+describe("serverFetchResult", () => {
+  it("turns a rejected fetch (core unreachable) into a failed load, not a thrown error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("fetch failed");
+      }),
+    );
+    const loaded = await serverFetchResult("/api/v1/orgs");
+    expect(loaded.ok).toBe(false);
+    if (!loaded.ok) expect(loaded.message).toBe("Could not reach the server.");
+  });
+
+  it("keeps the request id of a catalog 5xx", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ error: { code: "INTERNAL_ERROR", message: "x", requestId: "req_kept" } }),
+            { status: 500 },
+          ),
+      ),
+    );
+    const loaded = await serverFetchResult("/api/v1/orgs");
+    expect(loaded).toEqual({ ok: false, message: "x", requestId: "req_kept" });
+  });
 });

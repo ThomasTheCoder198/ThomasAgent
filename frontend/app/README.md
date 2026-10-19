@@ -7,6 +7,7 @@ Next.js routes and route boundaries for the ThomasAgent frontend. The root layou
 ## Entry points
 
 - `layout.tsx` — root document and providers.
+- `globals.css` — shared theme tokens and the desktop toast clearance while the shared SaveBar is visible.
 - `loading.tsx`, `error.tsx`, `not-found.tsx` — full-viewport states while a layout loads, when it fails, and for unknown URLs.
 - `login/` — the sign-in hero: a centred column with a Newsreader title (`features/auth`).
 - `(workspace)/` — authenticated workspace shell and its route states.

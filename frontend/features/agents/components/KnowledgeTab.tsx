@@ -7,11 +7,11 @@ import { InlineAlert } from "@/components/ui/InlineAlert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { SettingsSection } from "@/components/ui/SettingsSection";
 import type { Loaded } from "@/lib/api/loaded";
+import type { KnowledgeBase } from "@/lib/ragx/types";
 
-import type { KnowledgeBaseSummary } from "../contract";
 import type { TabProps } from "./tabs";
 
-type Props = TabProps & { knowledgeBases: Loaded<KnowledgeBaseSummary[]> };
+type Props = TabProps & { knowledgeBases: Loaded<KnowledgeBase[]> };
 
 /**
  * Exactly one KB per Agent. A load failure is shown as an error, never as an empty list; a binding to a KB the
@@ -42,7 +42,7 @@ export function KnowledgeTab({ agent, draft, update, knowledgeBases }: Props) {
                 {!storedIsKnown && <SelectItem value={agent.kbId}>{t("kbUnknown")}</SelectItem>}
                 {list.map((kb) => (
                   <SelectItem key={kb.id} value={kb.id}>
-                    {kb.name} · {t("documents", { count: kb.documents })}
+                    {kb.name} · {t("documents", { count: kb.fileCount })}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -50,7 +50,10 @@ export function KnowledgeTab({ agent, draft, update, knowledgeBases }: Props) {
           )}
         </Field>
         {unknownSelected && (
-          <InlineAlert title={t("kbUnknown")} detail={t("kbUnknownHint", { id: agent.kbId })} />
+          <InlineAlert
+            title={agent.kbMissing ? t("kbDeleted") : t("kbUnknown")}
+            detail={t("kbUnknownHint", { id: agent.kbId })}
+          />
         )}
       </div>
     </SettingsSection>

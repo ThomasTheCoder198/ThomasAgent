@@ -65,7 +65,14 @@
   /* Vertical travel of an entrance (`rise`); reduced motion keeps the fade and drops the travel. */
   --rise-y: 8px;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --toast-bottom-offset: 1.5rem;
   color-scheme: light;
+}
+
+@media (min-width: 768px) {
+  :root:has([data-save-bar-visible]) {
+    --toast-bottom-offset: 7rem;
+  }
 }
 
 [data-theme="dark"] {

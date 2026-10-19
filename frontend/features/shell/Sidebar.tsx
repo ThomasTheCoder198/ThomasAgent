@@ -28,6 +28,8 @@ export type SidebarLabels = {
   searchSoon: string;
   recents: string;
   recentsEmpty: string;
+  /** Conversations are deleted after 30 days without activity (core job, Task 2a-7). */
+  recentsRetention: string;
   tenant: string;
   nav: string;
 };
@@ -84,6 +86,7 @@ function Recents({ recents, labels, activeHref }: Pick<Props, "recents" | "label
           );
         })}
       </ul>
+      <p className="text-muted-foreground px-3 pt-2 text-xs leading-snug">{labels.recentsRetention}</p>
     </>
   );
 }

@@ -1,15 +1,34 @@
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 
+import { listAgents } from "@/features/agents/server";
+import { ServiceUnavailable } from "@/features/knowledge-bases/components/LoadFailure";
+import { NoOrgState } from "@/features/orgs/NoOrgState";
+import { getCurrentOrg } from "@/features/orgs/server";
+import type { Agent } from "@/lib/core/types";
+
 import { ChatSurface } from "./ChatSurface";
 import type { ConversationDetail } from "./contract";
-import { getConversation, getModelChoice, getScope } from "./server";
+import { scopeOfAgent } from "./scope";
+import { getConversation, getModelChoice } from "./server";
 
-function requireConversation(conversation: ConversationDetail | null, required: boolean) {
-  if (required && !conversation) notFound();
+/**
+ * What the surface starts from. A stored conversation is bound to its Agent (R12) and offers no Agent picker; a new
+ * one starts on the org's first Agent.
+ */
+function startOf(conversation: ConversationDetail | null, agents: Agent[], newTitle: string) {
+  if (conversation) {
+    return {
+      initialMessages: conversation.messages,
+      title: conversation.title,
+      scope: conversation.scope,
+      agents: [],
+    };
+  }
+  return { initialMessages: [], title: newTitle, scope: agents[0] ? scopeOfAgent(agents[0]) : null, agents };
 }
 
-/** Server half of a chat route: loads what core knows about the conversation, then hands over to the stream. */
+/** Server half of a chat route: resolves the org, loads what core knows, then hands over to the stream. */
 export async function ChatPage({
   chatId,
   requireExisting = false,
@@ -17,21 +36,24 @@ export async function ChatPage({
   chatId: string;
   requireExisting?: boolean;
 }) {
-  const [t, conversation, scope, modelChoice] = await Promise.all([
+  const { org, failed, requestId } = await getCurrentOrg();
+  if (failed) return <ServiceUnavailable requestId={requestId} />; // a 5xx is not "no organization" (frontend rule 9)
+  if (!org) return <NoOrgState />;
+  const [t, conversation, agents, modelChoice] = await Promise.all([
     getTranslations("shell"),
-    getConversation(chatId),
-    getScope(),
-    getModelChoice(),
+    getConversation(org.id, chatId),
+    listAgents(org.id),
+    getModelChoice(org.id),
   ]);
-  requireConversation(conversation, requireExisting);
+  if (requireExisting && !conversation) notFound();
+  if (!agents.ok) return <ServiceUnavailable requestId={agents.requestId} />;
+  const start = startOf(conversation, agents.data, t("newChat"));
   return (
     <ChatSurface
       key={chatId}
+      orgId={org.id}
       chatId={chatId}
-      initialMessages={conversation?.messages ?? []}
-      title={conversation?.title ?? t("newChat")}
-      folder={conversation?.folder}
-      scope={conversation?.scope ?? scope}
+      {...start}
       modelChoice={modelChoice}
       conversationPath={`/chat/${encodeURIComponent(chatId)}`}
     />

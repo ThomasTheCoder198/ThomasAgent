@@ -10,16 +10,19 @@ type Props = {
   lines: readonly ToolLine[];
   toolCount: number;
   model?: string;
+  /** The KB was deleted in ragx: the badge says so instead of naming it. */
+  kbMissing?: boolean;
 };
 
 /** What defines an Agent at a glance: its Knowledge Base, its tools and the model; shared by the list rows and the settings header. */
-export function AgentMeta({ kbName, lines, toolCount, model }: Props) {
+export function AgentMeta({ kbName, lines, toolCount, model, kbMissing }: Props) {
   const t = useTranslations("agents");
   return (
     <span className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-      <Badge className="max-w-full min-w-0">
-        <span aria-hidden className="bg-kb size-1.5 shrink-0 rounded-full" />
-        <span className="truncate">{kbName}</span>
+      <Badge variant={kbMissing ? "destructive" : undefined} className="max-w-full min-w-0">
+        {/* The destructive Badge draws its own dot. */}
+        {!kbMissing && <span aria-hidden className="bg-kb size-1.5 shrink-0 rounded-full" />}
+        <span className="truncate">{kbMissing ? t("kbDeletedShort") : kbName}</span>
       </Badge>
       <span className="text-muted-foreground inline-flex items-center gap-2 text-sm">
         <LineDots lines={lines} size="md" />

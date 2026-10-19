@@ -6,10 +6,12 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 
-import { KB_TOOLS, type KbReadInput, type KbSearchInput, type KbSearchOutput } from "../contract";
+import { KB_TOOLS } from "../contract";
 import type { ReasoningStation, ToolStation } from "../run-view";
 
 const FILE_TAIL = 18;
+
+const text = (value: unknown) => (typeof value === "string" ? value : undefined);
 
 /** Long file names keep their distinguishing tail: "…hoan-tien-2026.pdf". */
 function tail(fileName: string) {
@@ -41,19 +43,25 @@ export function ReasoningBody({ station }: { station: ReasoningStation }) {
 
 function KbSearchBody({ station }: { station: ToolStation }) {
   const t = useTranslations("chat");
-  const input = station.input as Partial<KbSearchInput>;
-  const output = station.output as KbSearchOutput | undefined;
+  // Until Task 2c-3 types the real ragx payloads, the output is read defensively.
+  const input = (station.input ?? {}) as Record<string, unknown>;
+  const output = station.output as Record<string, unknown> | undefined;
+  const query = text(input.query);
+  const chunks = typeof output?.chunks === "number" ? output.chunks : 0;
+  const documents = Array.isArray(output?.documents)
+    ? output.documents.filter((doc): doc is string => typeof doc === "string")
+    : [];
   return (
     <div className="mt-1 text-sm">
-      {input.query && (
+      {query && (
         <span className="bg-kb-tint text-foreground inline-block rounded-sm px-2 py-1 text-[0.8125rem]">
-          “{input.query}”
+          “{query}”
         </span>
       )}
       {output && (
         <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-2 text-[0.8125rem]">
-          {t("chunks", { chunks: output.chunks, docs: output.documents.length })}
-          {output.documents.map((doc) => (
+          {t("chunks", { chunks, docs: documents.length })}
+          {documents.map((doc) => (
             <span
               key={doc}
               title={doc}
@@ -125,8 +133,8 @@ export function ToolLabel({ station }: { station: ToolStation }) {
   const b = (chunks: ReactNode) => <b className="font-semibold">{chunks}</b>;
   if (station.name === KB_TOOLS.search) return t.rich("toolKbSearch", { source: station.source, b });
   if (station.name === KB_TOOLS.readSection) {
-    const input = station.input as Partial<KbReadInput>;
-    return t.rich("toolKbRead", { section: input.section ?? "", file: input.fileName ?? "", b });
+    const input = (station.input ?? {}) as Record<string, unknown>;
+    return t.rich("toolKbRead", { section: text(input.section) ?? "", file: text(input.fileName) ?? "", b });
   }
   return t.rich("toolGeneric", { source: station.source, title: station.title, b });
 }

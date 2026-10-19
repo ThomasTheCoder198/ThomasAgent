@@ -4,10 +4,9 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
-import type { Model, RoleAssignment } from "@/features/registry/types";
-import { loadedOr, type Loaded } from "@/lib/api/loaded";
+import { KB_TOOL_NAMES } from "@/features/chat/contract";
+import { loadedOr } from "@/lib/api/loaded";
 
-import type { AgentDetail, KnowledgeBaseSummary } from "./contract";
 import { AgentHeader } from "./components/AgentHeader";
 import { ModelsTab } from "./components/ModelsTab";
 import { SaveBar } from "./components/SaveBar";
@@ -16,6 +15,7 @@ import { KnowledgeTab } from "./components/KnowledgeTab";
 import { InstructionsTab, OverviewTab, type TabProps } from "./components/tabs";
 import type { AgentDraft } from "./draft";
 import { ToolsTab } from "./components/ToolsTab";
+import type { AgentPageData } from "./server";
 import { useAgentEditor } from "./useAgentEditor";
 
 const tabKey = {
@@ -26,32 +26,35 @@ const tabKey = {
   models: "tabModels",
 } as const;
 
-type Props = {
-  agent: AgentDetail;
-  knowledgeBases: Loaded<KnowledgeBaseSummary[]>;
-  models: Loaded<Model[]>;
-  roles: Loaded<RoleAssignment[]>;
-  initialTab: AgentTab;
-};
+type Props = AgentPageData & { initialTab: AgentTab };
+
+type HeaderInput = Omit<Props, "initialTab"> & { draft: AgentDraft };
+
+/** The KB list's name for the draft's KB; the stored name while the draft still has the stored KB; else its id. */
+function kbNameOf({ agent, draft, knowledgeBases }: HeaderInput): string {
+  const listed = loadedOr(knowledgeBases, []).find((k) => k.id === draft.kbId)?.name;
+  if (listed) return listed;
+  return draft.kbId === agent.kbId && agent.kbName ? agent.kbName : draft.kbId;
+}
+
+/** The model the Agent's `chat.default` resolves to: its own override, else what the org's role resolves to. */
+function chatModelIdOf({ draft, roles }: HeaderInput): string | undefined {
+  const inherited = loadedOr(roles, []).find((r) => r.role === "chat.default")?.effectiveModelId;
+  return draft.overrides["chat.default"] ?? inherited ?? undefined;
+}
 
 /** What the header shows, computed from the draft so it updates live while the owner edits. */
-function headerFacts({
-  agent,
-  draft,
-  knowledgeBases,
-  models,
-  roles,
-}: Omit<Props, "initialTab"> & { draft: AgentDraft }) {
-  const chatModelId =
-    draft.overrides["chat.default"] ?? loadedOr(roles, []).find((r) => r.role === "chat.default")?.modelId;
+function headerFacts(input: HeaderInput) {
+  const { agent, draft, models } = input;
+  const chatModelId = chatModelIdOf(input);
   return {
     // A blank draft name keeps the stored name in the header; the field itself shows the error.
     name: draft.name.trim() || agent.name,
     description: draft.description,
-    // An unloaded or unknown KB shows its raw id rather than pretending there is no binding.
-    kbName: loadedOr(knowledgeBases, []).find((k) => k.id === draft.kbId)?.name ?? draft.kbId,
-    lines: agent.toolSources.map((s) => s.line),
-    toolCount: Object.values(draft.policies).filter((p) => p !== "off").length,
+    kbName: kbNameOf(input),
+    lines: ["kb"] as const,
+    toolCount: KB_TOOL_NAMES.length,
+    kbMissing: agent.kbMissing === true,
     model: loadedOr(models, []).find((m) => m.id === chatModelId)?.displayName ?? "",
   };
 }
@@ -67,9 +70,9 @@ function TabBody({ tab, knowledgeBases, models, roles, ...tabProps }: BodyProps)
 }
 
 /** The Agent's header, its settings tabs, and the save bar; edits stay local until one PATCH saves them. */
-export function AgentSettings({ agent: initial, knowledgeBases, models, roles, initialTab }: Props) {
+export function AgentSettings({ orgId, agent: initial, knowledgeBases, models, roles, initialTab }: Props) {
   const t = useTranslations("agents");
-  const editor = useAgentEditor(initial);
+  const editor = useAgentEditor(orgId, initial);
   const { agent, draft, update } = editor;
   const [tab, setTab] = useState<AgentTab>(initialTab);
 
@@ -82,7 +85,7 @@ export function AgentSettings({ agent: initial, knowledgeBases, models, roles, i
 
   return (
     <Tabs value={tab} onValueChange={selectTab} className="min-h-full gap-0">
-      <AgentHeader {...headerFacts({ agent, draft, knowledgeBases, models, roles })} />
+      <AgentHeader {...headerFacts({ orgId, agent, draft, knowledgeBases, models, roles })} />
       <div className="bg-background sticky top-0 z-10">
         <div className="mx-auto w-full max-w-5xl px-4 md:px-6 lg:px-8">
           <TabsList aria-label={t("tabsLabel")}>
@@ -103,6 +106,7 @@ export function AgentSettings({ agent: initial, knowledgeBases, models, roles, i
         <fieldset disabled={editor.saving} className="contents">
           <TabBody
             tab={tab}
+            orgId={orgId}
             agent={agent}
             draft={draft}
             update={update}

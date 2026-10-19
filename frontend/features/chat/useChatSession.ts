@@ -12,11 +12,13 @@ import { useNotify } from "@/lib/useNotify";
 import type { ApprovalDecision } from "./components/ApprovalSign";
 import type { ChatMessage } from "./contract";
 import { toRunView, type RunView } from "./run-view";
-import { createChatTransport } from "./transport";
+import { createChatTransport, type ChatSendOptions } from "./transport";
 
 const ALWAYS_ALLOW_REASON = "always-allow";
 
 type Options = {
+  orgId: string;
+  agentId: string | undefined;
   chatId: string;
   initialMessages: ChatMessage[];
   modelChoice: ModelChoice;
@@ -24,11 +26,18 @@ type Options = {
 };
 
 /** AI SDK `useChat` wired to core's stream, plus the model choice and the approval answer. */
-export function useChatSession({ chatId, initialMessages, modelChoice, conversationPath }: Options) {
+export function useChatSession({
+  orgId,
+  agentId,
+  chatId,
+  initialMessages,
+  modelChoice,
+  conversationPath,
+}: Options) {
   const locale = useLocale() as Locale;
   const notify = useNotify();
   const [modelId, setModelId] = useState(modelChoice.defaultModelId);
-  const transport = useMemo(() => createChatTransport(locale), [locale]);
+  const transport = useMemo(() => createChatTransport(orgId, locale), [orgId, locale]);
   const chat = useChat<ChatMessage>({
     id: chatId,
     messages: initialMessages,
@@ -42,7 +51,8 @@ export function useChatSession({ chatId, initialMessages, modelChoice, conversat
     () => new Map<string, RunView>(chat.messages.map((m) => [m.id, toRunView(m)])),
     [chat.messages],
   );
-  const requestOptions = { body: { modelId } };
+  // agentId only matters on the first send of a new conversation; core ignores it for a stored one (R12).
+  const requestOptions = { body: { modelId, agentId } satisfies ChatSendOptions };
 
   function send(text: string) {
     // The URL follows the conversation without remounting the stream (Next syncs native history calls).

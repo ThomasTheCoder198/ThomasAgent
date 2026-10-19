@@ -1,24 +1,39 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
-import { CHAT_PATHS } from "../features/chat/contract.ts";
 import { ErrorCode } from "../lib/errors/codes.gen.ts";
-import { getAgent, listAgents, listKnowledgeBases, patchAgent, resetAgents } from "./agents.ts";
+import { createAgent, deleteAgent, getAgent, listAgents, patchAgent, resetAgents } from "./agents.ts";
 import { guard, login, logout, me } from "./auth.ts";
-import { models, roles } from "./catalog.ts";
-import { chat } from "./chat/handler.ts";
+import { resetCatalog, roles } from "./catalog.ts";
+import { chat, resetRuns, stopRun } from "./chat/handler.ts";
 import { mockConfig } from "./config.ts";
 import { getObjectResponse, postObject, preflight } from "./fake-s3.ts";
-import { defaultScope, getConversation, listConversations, seedConversations } from "./conversations.ts";
+import { getConversation, listConversations, resetConversations } from "./conversations.ts";
 import { documentPages } from "./fixtures/refund-policy.ts";
 import { sendData, sendError } from "./http.ts";
 import { ragxProxy, resetKnowledgeBases } from "./knowledge-bases.ts";
 import { createOrg, getOrg, listOrgs, patchOrg, provisionOrg, resetOrgs } from "./orgs.ts";
+import {
+  createProvider,
+  deleteProvider,
+  deleteRole,
+  listModels,
+  listOrgRoles,
+  listProviders,
+  patchModel,
+  patchProvider,
+  putRole,
+  syncProvider,
+  testModel,
+} from "./registry.ts";
 
 type Handler = (req: IncomingMessage, res: ServerResponse, params: string[]) => unknown;
 type Route = { method: string; pattern: RegExp; handler: Handler; public?: boolean };
 
 const PROXY_METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"] as const;
 const RAGX_PROXY_PATTERN = /^\/api\/v1\/orgs\/([^/]+)\/apps\/ragx\/(.+)$/;
+const ORG = "/api/v1/orgs/([^/]+)";
+const orgOf = (raw: string | undefined) => decodeURIComponent(raw ?? "");
+const idOf = (raw: string | undefined) => decodeURIComponent(raw ?? "");
 
 const routes: Route[] = [
   { method: "POST", pattern: /^\/api\/v1\/auth\/login$/, handler: login, public: true },
@@ -27,13 +42,19 @@ const routes: Route[] = [
     method: "POST",
     pattern: /^\/__mock\/reset$/,
     handler: (req, res) => {
-      const agent = new URL(req.url ?? "/", "http://mock-core").searchParams.get("agent") ?? undefined;
-      // A reset scoped to one Agent (the Agents e2e, per test) leaves orgs and KBs alone: other specs run in parallel.
-      if (!agent) {
+      const params = new URL(req.url ?? "/", "http://mock-core").searchParams;
+      const agent = params.get("agent") ?? undefined;
+      // Scoped resets (one seeded Agent by name; the model catalog) leave everything else alone: other specs
+      // run in parallel against the same fake, and the full reset does not touch the catalog for the same reason.
+      if (params.has("catalog")) resetCatalog();
+      else if (agent) resetAgents(agent);
+      else {
         resetOrgs();
         resetKnowledgeBases();
+        resetAgents();
+        resetConversations();
+        resetRuns();
       }
-      resetAgents(agent);
       sendData(res, { status: "reset" });
     },
     public: true,
@@ -49,21 +70,45 @@ const routes: Route[] = [
   },
   { method: "GET", pattern: /^\/api\/v1\/auth\/me$/, handler: me },
   { method: "POST", pattern: /^\/api\/v1\/auth\/logout$/, handler: logout },
-  { method: "GET", pattern: /^\/api\/v1\/models$/, handler: (_q, res) => sendData(res, models) },
-  { method: "GET", pattern: /^\/api\/v1\/model-roles$/, handler: (_q, res) => sendData(res, roles) },
-  { method: "GET", pattern: /^\/api\/v1\/chat\/scope$/, handler: (_q, res) => sendData(res, defaultScope) },
-  { method: "GET", pattern: /^\/api\/v1\/agents$/, handler: listAgents },
-  {
-    method: "GET",
-    pattern: /^\/api\/v1\/agents\/([^/]+)$/,
-    handler: (req, res, [id]) => getAgent(req, res, id ?? ""),
-  },
+  { method: "GET", pattern: /^\/api\/v1\/models$/, handler: listModels },
   {
     method: "PATCH",
-    pattern: /^\/api\/v1\/agents\/([^/]+)$/,
-    handler: (req, res, [id]) => patchAgent(req, res, id ?? ""),
+    pattern: /^\/api\/v1\/models\/([^/]+)$/,
+    handler: (q, r, [id]) => patchModel(q, r, idOf(id)),
   },
-  { method: "GET", pattern: /^\/api\/v1\/knowledge-bases$/, handler: listKnowledgeBases },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/models\/([^/]+)\/test$/,
+    handler: (q, r, [id]) => testModel({ req: q, res: r }, idOf(id)),
+  },
+  { method: "GET", pattern: /^\/api\/v1\/providers$/, handler: listProviders },
+  { method: "POST", pattern: /^\/api\/v1\/providers$/, handler: createProvider },
+  {
+    method: "PATCH",
+    pattern: /^\/api\/v1\/providers\/([^/]+)$/,
+    handler: (q, r, [id]) => patchProvider(q, r, idOf(id)),
+  },
+  {
+    method: "DELETE",
+    pattern: /^\/api\/v1\/providers\/([^/]+)$/,
+    handler: (q, r, [id]) => deleteProvider({ req: q, res: r }, idOf(id)),
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/providers\/([^/]+)\/sync$/,
+    handler: (q, r, [id]) => syncProvider({ req: q, res: r }, idOf(id)),
+  },
+  { method: "GET", pattern: /^\/api\/v1\/model-roles$/, handler: (_q, res) => sendData(res, roles) },
+  {
+    method: "PUT",
+    pattern: /^\/api\/v1\/model-roles\/([^/]+)$/,
+    handler: (q, r, [role]) => putRole(q, r, idOf(role)),
+  },
+  {
+    method: "DELETE",
+    pattern: /^\/api\/v1\/model-roles\/([^/]+)$/,
+    handler: (q, r, [role]) => deleteRole({ req: q, res: r }, idOf(role)),
+  },
   { method: "GET", pattern: /^\/api\/v1\/orgs$/, handler: listOrgs },
   { method: "POST", pattern: /^\/api\/v1\/orgs$/, handler: createOrg },
   {
@@ -83,19 +128,64 @@ const routes: Route[] = [
   },
   // Core's generic app proxy to ragx: every method, one pattern, dispatched like ragx would.
   ...PROXY_METHODS.map((method): Route => ({ method, pattern: RAGX_PROXY_PATTERN, handler: ragxProxy })),
-  { method: "POST", pattern: new RegExp(`^${CHAT_PATHS.chat}$`), handler: chat },
   {
     method: "GET",
-    pattern: /^\/api\/v1\/conversations$/,
-    handler: (_q, res) => sendData(res, listConversations()),
+    pattern: new RegExp(`^${ORG}/agents$`),
+    handler: (q, r, [o]) => listAgents(q, r, orgOf(o)),
+  },
+  {
+    method: "POST",
+    pattern: new RegExp(`^${ORG}/agents$`),
+    handler: (q, r, [o]) => createAgent(q, r, orgOf(o)),
   },
   {
     method: "GET",
-    pattern: /^\/api\/v1\/conversations\/([^/]+)$/,
-    handler: (req, res, [id]) => {
-      const found = getConversation(decodeURIComponent(id ?? ""));
-      return found ? sendData(res, found) : sendError(req, res, ErrorCode.NOT_FOUND);
+    pattern: new RegExp(`^${ORG}/agents/([^/]+)$`),
+    handler: (q, r, [o, id]) => getAgent(q, r, orgOf(o), idOf(id)),
+  },
+  {
+    method: "PATCH",
+    pattern: new RegExp(`^${ORG}/agents/([^/]+)$`),
+    handler: (q, r, [o, id]) => patchAgent(q, r, orgOf(o), idOf(id)),
+  },
+  {
+    method: "DELETE",
+    pattern: new RegExp(`^${ORG}/agents/([^/]+)$`),
+    handler: (q, r, [o, id]) => deleteAgent(q, r, orgOf(o), idOf(id)),
+  },
+  {
+    method: "GET",
+    pattern: new RegExp(`^${ORG}/conversations$`),
+    handler: (_q, r, [o]) => sendData(r, listConversations(orgOf(o))),
+  },
+  {
+    method: "GET",
+    pattern: new RegExp(`^${ORG}/conversations/([^/]+)$`),
+    handler: (q, r, [o, id]) => {
+      const found = getConversation(orgOf(o), idOf(id));
+      return found ? sendData(r, found) : sendError(q, r, ErrorCode.CONVERSATION_NOT_FOUND);
     },
+  },
+  { method: "POST", pattern: new RegExp(`^${ORG}/chat$`), handler: (q, r, [o]) => chat(q, r, orgOf(o)) },
+  {
+    method: "POST",
+    pattern: new RegExp(`^${ORG}/runs/([^/]+)/stop$`),
+    handler: (q, r, [o, id]) => stopRun(q, r, orgOf(o), idOf(id)),
+  },
+  {
+    method: "GET",
+    pattern: new RegExp(`^${ORG}/model-roles$`),
+    handler: (q, r, [o]) => listOrgRoles({ req: q, res: r }, orgOf(o)),
+  },
+  {
+    method: "PUT",
+    pattern: new RegExp(`^${ORG}/model-roles/([^/]+)$`),
+    handler: (q, r, [o, role]) => putRole(q, r, idOf(role), orgOf(o)),
+  },
+  {
+    method: "DELETE",
+    pattern: new RegExp(`^${ORG}/model-roles/([^/]+)$`),
+    handler: (q, r, [o, role]) => deleteRole({ req: q, res: r }, idOf(role), orgOf(o)),
   },
   {
     method: "GET",
@@ -118,8 +208,6 @@ async function dispatch(req: IncomingMessage, res: ServerResponse) {
   }
   sendError(req, res, ErrorCode.NOT_FOUND);
 }
-
-await seedConversations();
 
 createServer((req, res) => {
   dispatch(req, res).catch((err: unknown) => {

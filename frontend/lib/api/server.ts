@@ -7,7 +7,7 @@ import { env } from "@/lib/env";
 
 import { ErrorCode } from "@/lib/errors/codes.gen";
 
-import { ApiError, parseEnvelope, parseResponse, type Page } from "./client";
+import { ApiError, networkError, parseEnvelope, parseResponse, type Page } from "./client";
 import type { Loaded } from "./loaded";
 import { REQUEST_ID_HEADER, newRequestId } from "./request-id";
 
@@ -23,11 +23,18 @@ async function serverRequest(path: string, init?: RequestInit): Promise<{ res: R
   outgoingHeaders.set("Cookie", cookieHeader);
   outgoingHeaders.set("Accept-Language", lang);
   outgoingHeaders.set(REQUEST_ID_HEADER, newRequestId());
-  const res = await fetch(`${env.WEB_CORE_URL}${path}`, {
-    ...init,
-    cache: "no-store",
-    headers: outgoingHeaders,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${env.WEB_CORE_URL}${path}`, {
+      ...init,
+      cache: "no-store",
+      headers: outgoingHeaders,
+    });
+  } catch {
+    // A refused or reset connection rejects fetch with a TypeError; callers see the same catalog error the
+    // browser client uses, so serverFetchResult renders the retryable service state (frontend rule 9).
+    throw networkError(lang);
+  }
   return { res, lang };
 }
 
@@ -53,17 +60,23 @@ export async function serverFetchResult<T>(path: string): Promise<Loaded<T>> {
   try {
     return { ok: true, data: await serverFetch<T>(path) };
   } catch (err) {
-    if (err instanceof ApiError) return { ok: false, message: err.message };
+    if (err instanceof ApiError) return { ok: false, message: err.message, requestId: err.requestId };
     throw err;
   }
 }
 
-/** For endpoints core may not serve yet (provisional M2 routes): a 404 means "nothing there", not a failure. */
+const MISSING_CODES = new Set<string>([
+  ErrorCode.NOT_FOUND,
+  ErrorCode.AGENT_NOT_FOUND,
+  ErrorCode.CONVERSATION_NOT_FOUND,
+]);
+
+/** For data a page renders as not-found when core says it does not exist (the 404 family). */
 export async function serverFetchOptional<T>(path: string, fallback: T): Promise<T> {
   try {
     return await serverFetch<T>(path);
   } catch (err) {
-    if (err instanceof ApiError && err.code === ErrorCode.NOT_FOUND) return fallback;
+    if (err instanceof ApiError && MISSING_CODES.has(err.code)) return fallback;
     throw err;
   }
 }

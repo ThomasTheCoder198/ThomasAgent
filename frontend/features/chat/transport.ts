@@ -5,22 +5,47 @@ import { mutationHeaders } from "@/lib/api/client";
 
 import { CHAT_PATHS, type ChatMessage, type ChatRequestBody } from "./contract";
 
-/**
- * Real HTTP transport to core's chat stream (through the same-origin `/api/v1` rewrite). It sends only the
- * newest message plus approval answers; core rebuilds history from its database (spec §7.1).
- */
-export function createChatTransport(locale: Locale) {
+/** Per-request options passed to sendMessage / regenerate (`body`). */
+export type ChatSendOptions = { modelId?: string; agentId?: string };
+
+type BodyArgs = {
+  id: string;
+  trigger: ChatRequestBody["trigger"];
+  messageId: string | undefined;
+  messages: ChatMessage[];
+  options: Record<string, unknown> | undefined;
+};
+
+const text = (value: unknown) => (typeof value === "string" ? value : undefined);
+
+/** Only the newest message goes up; core rebuilds history itself (spec §7.1) and binds a new chat to `agentId` (R12). */
+export function toChatBody({ id, trigger, messageId, messages, options }: BodyArgs): ChatRequestBody {
+  const message = messages.at(-1);
+  if (!message) throw new Error("chat transport: nothing to send");
+  return {
+    id,
+    trigger,
+    messageId,
+    message,
+    modelId: text(options?.modelId),
+    agentId: text(options?.agentId),
+  };
+}
+
+/** Real HTTP transport to core's chat stream, through the same-origin `/api/v1` rewrite. */
+export function createChatTransport(orgId: string, locale: Locale) {
   return new DefaultChatTransport<ChatMessage>({
-    api: CHAT_PATHS.chat,
+    api: CHAT_PATHS.chat(orgId),
     credentials: "same-origin",
     headers: () => mutationHeaders(locale),
-    // `body` carries per-request options (the chosen model) passed to sendMessage / addToolApprovalResponse.
-    prepareSendMessagesRequest: ({ id, messages, trigger, messageId, body: options }) => {
-      const message = messages.at(-1);
-      if (!message) throw new Error("chat transport: nothing to send");
-      const modelId = typeof options?.modelId === "string" ? options.modelId : undefined;
-      const body: ChatRequestBody = { id, trigger, messageId, message, modelId };
-      return { body };
-    },
+    prepareSendMessagesRequest: ({ id, messages, trigger, messageId, body }) => ({
+      body: toChatBody({
+        id,
+        trigger,
+        messageId,
+        messages,
+        options: body as Record<string, unknown> | undefined,
+      }),
+    }),
   });
 }

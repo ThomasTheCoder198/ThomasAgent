@@ -42,7 +42,12 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label={t("shell.settings")} title={t("shell.settings")}>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t("shell.preferences")}
+          title={t("shell.preferences")}
+        >
           <Settings aria-hidden />
         </Button>
       </DropdownMenuTrigger>

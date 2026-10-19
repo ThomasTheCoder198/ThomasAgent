@@ -6,22 +6,23 @@ import { EmptyState } from "@/features/shell/EmptyState";
 import { staggerStyle } from "@/lib/stagger";
 
 import { AgentMeta } from "./components/AgentMeta";
-import type { AgentSummary } from "./contract";
+import { agentPage, type AgentRow } from "./contract";
+import { KB_TOOL_NAMES } from "@/features/chat/contract";
 
 /**
  * Ruled rows, one per Agent, the whole row a link. Wide screens put the name beside what the Agent is built
  * from; on phones the facts stack under the name so nothing is squeezed.
  */
-export async function AgentList({ agents }: { agents: AgentSummary[] }) {
+export async function AgentList({ rows }: { rows: AgentRow[] }) {
   const t = await getTranslations("agents");
-  if (agents.length === 0)
-    return <EmptyState level="h2" line="model" title={t("empty")} body={t("subtitle")} />;
+  if (rows.length === 0)
+    return <EmptyState level="h2" line="model" title={t("empty")} body={t("emptyCreate")} />;
   return (
     <ul aria-label={t("title")} className="-mx-3">
-      {agents.map((agent, index) => (
+      {rows.map(({ agent, chatModel }, index) => (
         <li key={agent.id} style={staggerStyle(index)} className="animate-rise">
           <Link
-            href={`/agents/${encodeURIComponent(agent.id)}`}
+            href={agentPage(agent.id)}
             className="group border-border hover:bg-accent/50 flex min-h-11 items-center gap-4 border-b px-3 py-3 transition-colors md:py-4"
           >
             <span className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center md:gap-6">
@@ -33,10 +34,11 @@ export async function AgentList({ agents }: { agents: AgentSummary[] }) {
               </span>
               <span className="min-w-0 md:max-w-[55%] md:shrink-0">
                 <AgentMeta
-                  kbName={agent.kb.name}
-                  lines={agent.lines}
-                  toolCount={agent.toolCount}
-                  model={agent.chatModel}
+                  kbName={agent.kbName}
+                  lines={["kb"]}
+                  toolCount={KB_TOOL_NAMES.length}
+                  model={chatModel}
+                  kbMissing={agent.kbMissing === true}
                 />
               </span>
             </span>

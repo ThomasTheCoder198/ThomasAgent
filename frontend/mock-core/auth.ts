@@ -23,6 +23,10 @@ function currentSession(req: IncomingMessage): Session | undefined {
   return undefined;
 }
 
+export function currentUserId(req: IncomingMessage): string | undefined {
+  return currentSession(req) ? owner.id : undefined;
+}
+
 function clearedSessionCookies(): string[] {
   return [
     cookie(SESSION_COOKIE, "", { maxAge: 0, httpOnly: true }),

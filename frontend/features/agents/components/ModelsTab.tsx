@@ -7,7 +7,8 @@ import { InlineAlert } from "@/components/ui/InlineAlert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { SettingsSection } from "@/components/ui/SettingsSection";
 import type { Loaded } from "@/lib/api/loaded";
-import type { Capability, Model, RoleAssignment } from "@/features/registry/types";
+import type { Capability, Model } from "@/features/registry/types";
+import type { OrgModelRole } from "@/lib/core/types";
 
 import { agentRoles, type AgentRole } from "../contract";
 import { INHERIT_VALUE, toSelectValue, withOverride } from "../model-choice";
@@ -23,7 +24,7 @@ const roleKeys = {
   "chat.fast": { label: "roleChatFast", hint: "roleChatFastHint" },
   vision: { label: "roleVision", hint: "roleVisionHint" },
 } as const;
-type Props = TabProps & { models: Loaded<Model[]>; roles: Loaded<RoleAssignment[]> };
+type Props = TabProps & { models: Loaded<Model[]>; roles: Loaded<OrgModelRole[]> };
 
 export function ModelsTab({ draft, update, models: loadedModels, roles: loadedRoles }: Props) {
   const t = useTranslations("agents");
@@ -42,7 +43,9 @@ export function ModelsTab({ draft, update, models: loadedModels, roles: loadedRo
       <p className="text-muted-foreground max-w-[70ch] text-sm">{t("modelsHint")}</p>
       {agentRoles.map((role, index) => {
         const keys = roleKeys[role];
-        const platformModel = models.find((m) => m.id === roles.find((r) => r.role === role)?.modelId);
+        const platformModel = models.find(
+          (m) => m.id === roles.find((r) => r.role === role)?.effectiveModelId,
+        );
         const choices = models.filter((m) => m.capabilities.includes(roleCapability[role]));
         return (
           <SettingsSection key={role} index={index + 1} title={t(keys.label)} hint={t(keys.hint)}>

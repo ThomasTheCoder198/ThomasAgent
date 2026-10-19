@@ -1,29 +1,33 @@
 import "server-only";
 
-import { REGISTRY_PATHS, type Model, type RoleAssignment } from "@/features/registry/types";
+import { RAGX_PATHS } from "@/features/knowledge-bases/contract";
+import { REGISTRY_PATHS, type Model } from "@/features/registry/types";
+import { ORG_ROLE_PATHS } from "@/features/settings/contract";
 import { serverFetchOptional, serverFetchResult, type Loaded } from "@/lib/api/server";
+import type { Agent, OrgModelRole } from "@/lib/core/types";
+import type { KnowledgeBase } from "@/lib/ragx/types";
 
-import { AGENT_PATHS, type AgentDetail, type AgentSummary, type KnowledgeBaseSummary } from "./contract";
+import { AGENT_PATHS } from "./contract";
 
-/** The list may be empty before core serves Agents (M2): a 404 there reads as "no agents yet". */
-export function listAgents(): Promise<AgentSummary[]> {
-  return serverFetchOptional(AGENT_PATHS.agents, []);
+export function listAgents(orgId: string): Promise<Loaded<Agent[]>> {
+  return serverFetchResult<Agent[]>(AGENT_PATHS.agents(orgId));
 }
 
 export type AgentPageData = {
-  agent: AgentDetail;
-  knowledgeBases: Loaded<KnowledgeBaseSummary[]>;
+  orgId: string;
+  agent: Agent;
+  knowledgeBases: Loaded<KnowledgeBase[]>;
   models: Loaded<Model[]>;
-  roles: Loaded<RoleAssignment[]>;
+  roles: Loaded<OrgModelRole[]>;
 };
 
 /** Supporting lists never silently become empty: a failure is carried to the tab that needs it. */
-export async function getAgentPage(id: string): Promise<AgentPageData | null> {
+export async function getAgentPage(orgId: string, id: string): Promise<AgentPageData | null> {
   const [agent, knowledgeBases, models, roles] = await Promise.all([
-    serverFetchOptional<AgentDetail | null>(AGENT_PATHS.agent(id), null),
-    serverFetchResult<KnowledgeBaseSummary[]>(AGENT_PATHS.knowledgeBases),
+    serverFetchOptional<Agent | null>(AGENT_PATHS.agent(orgId, id), null),
+    serverFetchResult<KnowledgeBase[]>(RAGX_PATHS.knowledgeBases(orgId)),
     serverFetchResult<Model[]>(REGISTRY_PATHS.models),
-    serverFetchResult<RoleAssignment[]>(REGISTRY_PATHS.roles),
+    serverFetchResult<OrgModelRole[]>(ORG_ROLE_PATHS.roles(orgId)),
   ]);
-  return agent ? { agent, knowledgeBases, models, roles } : null;
+  return agent ? { orgId, agent, knowledgeBases, models, roles } : null;
 }

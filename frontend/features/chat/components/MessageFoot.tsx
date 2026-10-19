@@ -71,7 +71,7 @@ export function MessageFoot({ text, usage, onInspect, onRegenerate }: Props) {
         <p className="tabular ml-2 flex flex-wrap gap-x-4 text-xs">
           <span>{usage.runId}</span>
           <span>{t("tokens", { count: formatTokens(usage.inputTokens + usage.outputTokens, locale) })}</span>
-          <span>{formatCost(usage.costUsd, locale)}</span>
+          {usage.costUsd !== null && <span>{formatCost(usage.costUsd, locale)}</span>}
           <span>{t("ttft", { seconds: formatSeconds(usage.ttftMs, locale) })}</span>
         </p>
       )}

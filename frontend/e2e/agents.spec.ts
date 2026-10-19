@@ -2,57 +2,63 @@ import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
 import { signIn } from "./helpers";
 
-/** The fake core is shared by the desktop and mobile workers, so each project edits its own Agent. */
-const AGENT_BY_PROJECT: Record<string, string> = { desktop: "agent-phap-che", mobile: "agent-cskh" };
+// The tests of one project share one Agent and reset it before each test, so they run in order.
+test.describe.configure({ mode: "serial" });
+
+/** The fake core is shared by the desktop and mobile workers, so each project edits its own seeded Agent. */
+const AGENT_BY_PROJECT: Record<string, string> = { desktop: "Trợ lý pháp chế", mobile: "CSKH đơn hàng" };
 const MOCK_CORE_URL = process.env.MOCK_CORE_URL ?? "http://localhost:8787";
-const UNKNOWN_KB_AGENT = "agent-nhap-khau";
+const UNKNOWN_KB_ID = "00000000-0000-4000-8000-000000000001";
 
 function agentFor(testInfo: TestInfo) {
-  return AGENT_BY_PROJECT[testInfo.project.name] ?? "agent-phap-che";
+  return AGENT_BY_PROJECT[testInfo.project.name] ?? "Trợ lý pháp chế";
 }
 
-async function openAgent(page: Page, agentId: string, tab: string) {
+/** Seeded Agent ids are not fixed, so the tests open an Agent the way the owner does: from the list. */
+async function openAgent(page: Page, name: string, tab: string) {
   await signIn(page, "/agents");
-  await page.goto(`/agents/${agentId}?tab=${tab}`);
+  await page.getByRole("link", { name: new RegExp(name) }).click();
+  await expect(page).toHaveURL(/\/agents\/[^/?]+$/);
+  await page.goto(`${new URL(page.url()).pathname}?tab=${tab}`);
 }
 
 function saveButton(page: Page) {
   return page.getByRole("button", { name: /Lưu thay đổi|Save changes/ });
 }
 
+// Scoped to this project's Agent: the other project and the other specs use the same fake in parallel.
 test.beforeEach(async ({ request }, testInfo) => {
-  await request.post(`${MOCK_CORE_URL}/__mock/reset?agent=${agentFor(testInfo)}`);
+  await request.post(`${MOCK_CORE_URL}/__mock/reset?agent=${encodeURIComponent(agentFor(testInfo))}`);
 });
 
 test("opens an Agent from its row in the list", async ({ page }, testInfo) => {
-  const agentId = agentFor(testInfo);
   await signIn(page, "/agents");
-  await page.locator(`a[href="/agents/${agentId}"]`).click();
-  await expect(page).toHaveURL(new RegExp(`/agents/${agentId}$`));
+  await page.getByRole("link", { name: new RegExp(agentFor(testInfo)) }).click();
+  await expect(page).toHaveURL(/\/agents\/[^/?]+$/);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Tổng quan" })).toHaveAttribute("aria-selected", "true");
 });
 
-test("edits a tool policy, saves it, and the change survives a reload", async ({ page }, testInfo) => {
+test("lists the read-only KB tools as automatic, with nothing to edit", async ({ page }, testInfo) => {
   await openAgent(page, agentFor(testInfo), "tools");
-  const policy = page.getByRole("radiogroup", { name: /Gửi email/ });
-  await policy.getByRole("radio", { name: "Tự động" }).click();
-  await saveButton(page).click();
-  await expect(page.getByText("Đã lưu")).toBeVisible();
-  await page.reload();
-  await expect(
-    page.getByRole("radiogroup", { name: /Gửi email/ }).getByRole("radio", { name: "Tự động" }),
-  ).toBeChecked();
+  const tools = page.getByRole("list").filter({ hasText: "kb_search" });
+  await expect(tools.getByRole("listitem")).toHaveCount(4);
+  await expect(tools.getByText("Tự động")).toHaveCount(4);
+  await expect(page.getByRole("radiogroup")).toHaveCount(0);
 });
 
 test("changes the Knowledge Base binding and keeps it", async ({ page }, testInfo) => {
   await openAgent(page, agentFor(testInfo), "knowledge");
-  await page.getByRole("combobox", { name: "Knowledge" }).click();
-  await page.getByRole("option", { name: /Hợp đồng nhà cung cấp/ }).click();
+  const picker = page.getByRole("combobox", { name: "Knowledge" });
+  // Seeded Agents are bound to different KBs; pick the one this Agent does not have (once the picker shows its KB).
+  await expect(picker).toContainText(/Mặc định|Chính sách/);
+  const other = (await picker.textContent())?.includes("Chính sách") ? /Mặc định/ : /Chính sách/;
+  await picker.click();
+  await page.getByRole("option", { name: other }).click();
   await saveButton(page).click();
   await expect(page.getByText("Đã lưu")).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("combobox", { name: "Knowledge" })).toHaveText(/Hợp đồng nhà cung cấp/);
+  await expect(page.getByRole("combobox", { name: "Knowledge" })).toHaveText(other);
 });
 
 test("overrides the chat model and keeps it after reload", async ({ page }, testInfo) => {
@@ -83,7 +89,7 @@ test("discarding restores the stored instructions", async ({ page }, testInfo) =
 });
 
 test("shows the server's refusal when core rejects the save", async ({ page }, testInfo) => {
-  await page.route("**/api/v1/agents/*", async (route) => {
+  await page.route("**/api/v1/orgs/*/agents/*", async (route) => {
     if (route.request().method() !== "PATCH") return route.fallback();
     await route.fulfill({
       status: 403,
@@ -99,21 +105,91 @@ test("shows the server's refusal when core rejects the save", async ({ page }, t
   await expect(page.getByText("Bạn không có quyền thực hiện thao tác này.")).toBeVisible();
 });
 
-test("core refuses to bind an Agent to another org's Knowledge Base", async ({ page }, testInfo) => {
+test("core refuses to bind an Agent to another org's real Knowledge Base", async ({ page }, testInfo) => {
   await signIn(page, "/agents");
+  const orgs = await (await page.request.get("/api/v1/orgs")).json();
+  const orgId = orgs.data[0].id as string;
+  const agents = await (await page.request.get(`/api/v1/orgs/${orgId}/agents`)).json();
+  const agent = (agents.data as { id: string; name: string }[]).find((a) => a.name === agentFor(testInfo));
   const csrf = (await page.context().cookies()).find((c) => c.name === "thomas_csrf")?.value ?? "";
-  const res = await page.request.patch(`/api/v1/agents/${agentFor(testInfo)}`, {
-    headers: { "X-CSRF-Token": csrf, "Content-Type": "application/json" },
-    data: { kbId: "kb-org-khac" },
+  const headers = { "X-CSRF-Token": csrf, "Content-Type": "application/json" };
+  const suffix = `${testInfo.project.name}-${Date.now()}`;
+  const created = await page.request.post("/api/v1/orgs", {
+    headers,
+    data: { name: `Foreign KB ${suffix}`, externalParsing: false },
   });
-  expect(res.status()).toBe(403);
-  expect((await res.json()).error.code).toBe("FORBIDDEN");
+  expect(created.status()).toBe(201);
+  const foreignOrgId = (await created.json()).data.id as string;
+  const kbCreated = await page.request.post(`/api/v1/orgs/${foreignOrgId}/apps/ragx/knowledge-bases`, {
+    headers,
+    data: { name: `KB ${suffix}` },
+  });
+  expect(kbCreated.status()).toBe(201);
+  const foreignKbId = (await kbCreated.json()).data.id as string;
+  const res = await page.request.patch(`/api/v1/orgs/${orgId}/agents/${agent?.id}`, {
+    headers,
+    data: { kbId: foreignKbId },
+  });
+  expect(res.status()).toBe(422);
+  expect((await res.json()).error.code).toBe("AGENT_KB_INVALID");
 });
 
-test("marks a binding to a Knowledge Base outside this org as unknown", async ({ page }) => {
-  await openAgent(page, UNKNOWN_KB_AGENT, "knowledge");
+test("core refuses to bind an Agent to an unknown Knowledge Base", async ({ page }, testInfo) => {
+  await signIn(page, "/agents");
+  const orgs = await (await page.request.get("/api/v1/orgs")).json();
+  const orgId = orgs.data[0].id as string;
+  const agents = await (await page.request.get(`/api/v1/orgs/${orgId}/agents`)).json();
+  const agent = (agents.data as { id: string; name: string }[]).find((a) => a.name === agentFor(testInfo));
+  const csrf = (await page.context().cookies()).find((c) => c.name === "thomas_csrf")?.value ?? "";
+  const res = await page.request.patch(`/api/v1/orgs/${orgId}/agents/${agent?.id}`, {
+    headers: { "X-CSRF-Token": csrf, "Content-Type": "application/json" },
+    data: { kbId: UNKNOWN_KB_ID },
+  });
+  expect(res.status()).toBe(422);
+  expect((await res.json()).error.code).toBe("AGENT_KB_INVALID");
+});
+
+test("marks a binding to a deleted Knowledge Base as unknown", async ({ page }, testInfo) => {
+  await signIn(page, "/agents");
+  // A private org keeps the shared fake's other orgs and KBs out of this test.
+  const suffix = `${testInfo.project.name}-${Date.now()}`;
+  const csrf = (await page.context().cookies()).find((c) => c.name === "thomas_csrf")?.value ?? "";
+  const headers = { "X-CSRF-Token": csrf, "Content-Type": "application/json" };
+  const created = await page.request.post("/api/v1/orgs", {
+    headers,
+    data: { name: `KB gone ${suffix}`, externalParsing: false },
+  });
+  const orgId = (await created.json()).data.id as string;
+  const kbs = `/api/v1/orgs/${orgId}/apps/ragx/knowledge-bases`;
+  const kb = (await (await page.request.post(kbs, { headers, data: { name: "Tạm" } })).json()).data;
+  const made = await page.request.post(`/api/v1/orgs/${orgId}/agents`, {
+    headers,
+    data: { name: `Agent ${suffix}`, kbId: kb.id },
+  });
+  const agentId = (await made.json()).data.id as string;
+  expect((await page.request.delete(`${kbs}/${kb.id}`, { headers })).status()).toBe(204);
+
+  // Opening the org's page makes it the current org for /agents.
+  await page.goto(`/orgs/${orgId}/knowledge-bases`);
+  await page.goto(`/agents/${agentId}?tab=knowledge`);
   await expect(page.getByRole("combobox", { name: "Knowledge" })).toHaveText(/Knowledge Base không xác định/);
-  await expect(page.getByRole("alert").filter({ hasText: "kb-org-khac" })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "đã bị xoá" })).toBeVisible();
+});
+
+test("creates an agent on a KB and deletes it again", async ({ page }, testInfo) => {
+  // One name per project: the desktop and mobile workers share the fake core's org.
+  const name = `Agent e2e ${testInfo.project.name}`;
+  await signIn(page, "/agents");
+  await page.getByRole("button", { name: "Tạo agent" }).click();
+  const dialog = page.getByRole("dialog", { name: "Tạo agent mới" });
+  await dialog.getByRole("textbox", { name: "Tên" }).fill(name);
+  await dialog.getByRole("button", { name: "Tạo", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+
+  await page.getByRole("button", { name: "Xoá agent" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Xoá", exact: true }).click();
+  await expect(page).toHaveURL(/\/agents$/);
+  await expect(page.getByRole("link", { name: new RegExp(name) })).toHaveCount(0);
 });
 
 test("collapses the desktop sidebar to an icon rail and keeps it", async ({ page }, testInfo) => {

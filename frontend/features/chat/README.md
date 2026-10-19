@@ -9,11 +9,14 @@ anything; core owns history.
 
 ## Entry points
 
-- `ChatPage.tsx` — server half for `/chat` and `/chat/[id]`; loads conversation, scope and model choice.
-- `ChatSurface.tsx` — client orchestrator; `useChatSession.ts` wires AI SDK `useChat` to `transport.ts` and reports failures with `useNotify().error`.
+- `ChatPage.tsx` — server half for `/chat` and `/chat/[id]`; resolves the current org (`getCurrentOrg`, a failed org list is the retryable service error, no org is `NoOrgState`), then loads the conversation, the org's Agents and the model choice. A failed Agent list shows the service error with its request ID. A stored conversation brings its own scope; a new one starts on the org's first Agent (`scope.ts` `scopeOfAgent`).
+- `ChatSurface.tsx` — client orchestrator; keeps the chosen Agent in state and derives the live scope from it (`scopeOfAgent`) for a new chat, while a stored conversation keeps core's scope (R12). A new chat in an org without Agents gets an `EmptyState` linking to `/agents` instead of the composer; `useChatSession.ts` wires AI SDK `useChat` to `transport.ts` and reports failures with `useNotify().error`.
 - `run-view.ts` — the only module that knows the UI Message Stream parts; maps a message to stations, text, citations, usage.
-- `contract.ts` — PROVISIONAL M2 shapes and endpoints shared with `mock-core/`.
+- `contract.ts` — org-scoped paths (`CHAT_PATHS`), constants (`KB_TOOL_NAMES`, `SOURCE_ID_PATTERN`, `MESSAGE_MAX_RUNES`, `STEER_MAX_RUNES`) and the AI SDK message typing. Wire types are aliases of core's generated ones in `lib/core/types.ts`; the page-based `CitationLocator`/`DocumentPage` stay PROVISIONAL until Task 2c-4.
+- `transport.ts` — `toChatBody` (pure: newest message only, `modelId` and `agentId` kept only when strings) and `createChatTransport`.
+- `server.ts` — `listRecents(orgId)`, `getConversation(orgId, id)` (another org's id answers not-found) and `getModelChoice(orgId)` (default model = the org's effective `chat.default`; never the first listed model).
 - `components/` — ChatHeader, ChatHero (`HeroIntro`, `HeroSources`), Composer, AssistantMessage (+ `PendingReply`, `UserMessage`), RunLine, StationMarker, StationContent, ApprovalSign, SummaryRow + MiniLine, Answer (+ `remark-citations.ts`), CitationRoundel, MessageFoot, SourceBadge.
+- `components/AgentPicker.tsx` — Select of the org's Agents (name + KB name, or "KB deleted"), shown only on an empty new chat with two or more Agents; the thread, a stored conversation and a single Agent never show it.
 - `components/AgentOrb.tsx` + `OrbNote.tsx` — the only places a Thinking Orb is mounted; `useCssColor.ts` resolves the theme token the orb needs as a hex.
 - `evidence/` — EvidencePanel (docked column from xl, right Sheet md–xl, bottom Sheet 85dvh on phones), DocumentPageView, SourceList, RunInspector.
 
@@ -39,7 +42,9 @@ npm run e2e -- e2e/chat.spec.ts
 ## Conventions
 
 - Tool line colour and name plate come from `toolMetadata` (`{ line, source, durationMs }`), reasoning timing from `providerMetadata.thomas.durationMs`, citation locators from `source-document.providerMetadata.thomas`. Never infer a line from a tool name.
-- The transport sends only the newest message (`ChatRequestBody`); the chosen model rides in the request `body`.
+- The transport posts to `/api/v1/orgs/{orgId}/chat` and sends only the newest message (`ChatRequestBody`); the chosen model and, for a new conversation, the Agent (`agentId`, R12) ride in the request `body`.
+- `ChatHeader` shows the Agent's name (Bot icon); the Composer's KB pill reads "KB deleted" in destructive text when `scope.kb.missing`. The run still works without the KB (R8).
+- When models exist but none is chosen (the org has no `chat.default`), the composer waits for an explicit pick.
 - `[n]` markers become roundels only when a source numbered `n` exists in the same message.
 - Tool colours come only from `components/lines.ts`; an approval card uses its own station's line colour and icon.
 - `ChatHeader` renders the shell's menu button only when `pageOwnsHeader(pathname)` says chat owns the mobile bar, so phones never get two bars.

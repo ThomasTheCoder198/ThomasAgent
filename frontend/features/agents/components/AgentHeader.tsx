@@ -15,6 +15,7 @@ type Props = {
   lines: readonly ToolLine[];
   toolCount: number;
   model: string;
+  kbMissing: boolean;
 };
 
 /** The Agent's page header: way back, its name as the page title, then what it is built from. */

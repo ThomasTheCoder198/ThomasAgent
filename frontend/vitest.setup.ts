@@ -28,6 +28,9 @@ if (typeof window !== "undefined") {
   Element.prototype.releasePointerCapture ??= () => undefined;
   Element.prototype.hasPointerCapture ??= () => false;
 
+  // jsdom has no scrollIntoView; Radix's Select scrolls the chosen item into view when its list opens.
+  Element.prototype.scrollIntoView ??= () => undefined;
+
   // jsdom has no ResizeObserver; Radix's Switch measures its control with one.
   globalThis.ResizeObserver ??= class {
     observe() {}

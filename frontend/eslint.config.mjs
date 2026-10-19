@@ -8,6 +8,7 @@ export default tseslint.config(
       "node_modules/**",
       "lib/errors/codes.gen.ts",
       "lib/ragx/api.gen.ts",
+      "lib/core/api.gen.ts",
       "playwright-report/**",
       "test-results/**",
       "next-env.d.ts",

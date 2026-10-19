@@ -4,7 +4,7 @@ import { ArrowUp, Paperclip, Square } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 
-import { lineBg } from "@/components/lines";
+import { isToolLine, lineBg } from "@/components/lines";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
@@ -47,7 +47,7 @@ function ModelPicker({
           "border-border text-muted-foreground max-w-48 min-w-0 rounded-full bg-transparent",
         )}
       >
-        <SelectValue />
+        <SelectValue placeholder={t("chooseModel")} />
       </SelectTrigger>
       <SelectContent>
         {models.map((m) => (
@@ -64,9 +64,16 @@ function ScopePills({ scope }: { scope: ChatScope }) {
   const t = useTranslations("chat");
   return (
     <>
-      <Badge variant="outline" className={cn(PILL, "hidden max-w-44 sm:inline-flex")} title={scope.kb.name}>
-        <span className="bg-kb size-2 shrink-0 rounded-full" aria-hidden />
-        <span className="truncate">{scope.kb.name}</span>
+      <Badge
+        variant="outline"
+        className={cn(PILL, "hidden max-w-44 sm:inline-flex", scope.kb.missing && "text-destructive")}
+        title={scope.kb.missing ? t("kbDeletedShort") : scope.kb.name}
+      >
+        <span
+          className={cn("size-2 shrink-0 rounded-full", scope.kb.missing ? "bg-destructive" : "bg-kb")}
+          aria-hidden
+        />
+        <span className="truncate">{scope.kb.missing ? t("kbDeletedShort") : scope.kb.name}</span>
       </Badge>
       <Badge
         variant="outline"
@@ -77,7 +84,7 @@ function ScopePills({ scope }: { scope: ChatScope }) {
           {scope.toolSources.map((source) => (
             <span
               key={`${source.line}-${source.name}`}
-              className={cn("size-2 rounded-full", lineBg[source.line])}
+              className={cn("size-2 rounded-full", lineBg[isToolLine(source.line) ? source.line : "model"])}
             />
           ))}
         </span>
@@ -127,7 +134,9 @@ export function Composer({
   // The tool hint does not fit a phone's line, and a wrapped placeholder leaves one word stranded.
   const compact = useIsBelowMd();
   const [text, setText] = useState("");
-  const canSend = text.trim().length > 0 && !busy;
+  // Models exist but none is chosen (no `chat.default` for this org): sending waits for an explicit pick.
+  const needsModel = models.length > 0 && modelId === undefined;
+  const canSend = text.trim().length > 0 && !busy && !needsModel;
 
   function submit(event?: FormEvent) {
     event?.preventDefault();

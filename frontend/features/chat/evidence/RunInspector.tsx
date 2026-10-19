@@ -58,7 +58,7 @@ export function RunInspector({ stations, usage, runId }: Props) {
                 {tChat("tokens", { count: formatTokens(usage.inputTokens + usage.outputTokens, locale) })}
               </td>
               <td className="pt-1 text-right">
-                {t("cost")} {formatCost(usage.costUsd, locale)}
+                {usage.costUsd !== null && `${t("cost")} ${formatCost(usage.costUsd, locale)}`}
               </td>
             </tr>
           )}

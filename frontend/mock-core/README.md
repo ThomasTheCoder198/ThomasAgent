@@ -14,19 +14,20 @@ Error responses echo a valid `X-Request-Id` in both the header and `error.reques
 
 - `server.ts` — `node:http` router; run with `npm run mock-core` (Node 24 strips the TypeScript types).
 - `auth.ts` — login / me / logout, in-memory sessions.
-- `catalog.ts` — models and role assignments in the documented M0.2 shapes.
-- `conversations.ts` — in-memory conversation store; the seeded refund conversation is replayed from the same script the live chat streams.
-- `chat/` — `POST /api/v1/chat`: phase one (reasoning → KB search → read → sources → answer → Linear approval request), phase two after the owner approves or denies.
-- `agents.ts` — `GET /api/v1/agents`, `GET|PATCH /api/v1/agents/{id}`, `GET /api/v1/knowledge-bases` (in-memory). Patches are checked like core must: another org's KB → `FORBIDDEN`, unknown KB or model id → `VALIDATION_FAILED`.
+- `catalog.ts` — providers, models and role assignments (platform and per org) in the documented M0.2 shapes; four models (two chat, one decision-only Jev, one with unknown capabilities) so Settings shows every case. Mutable; `resetCatalog()` restores the seed.
+- `registry.ts` — the Settings routes: `GET /models` (honours `capability` and `providerId`), `PATCH /models/{id}` (capabilities; `LLM_MODEL_CAPABILITY_MISMATCH` when a pinned role would break), `POST /models/{id}/test` (`{ok, latencyMs: 412}`, or `LLM_MODEL_NOT_FOUND`), providers (`GET|POST /providers`, `PATCH|DELETE /providers/{id}`: a missing address is `VALIDATION_FAILED` `baseUrl`/`REQUIRED`, a duplicate name `LLM_NAME_TAKEN`, a provider whose model a role uses `LLM_MODEL_IN_USE`; `POST /providers/{id}/sync`), and roles (`PUT|DELETE /model-roles/{role}` and `/orgs/{orgId}/model-roles/{role}`, role checked against the model's capabilities; org list resolves override, platform, then the decision fallback to `chat.fast`).
+- `conversations.ts` — in-memory conversation store per org (seeded on first read, bound to the org's first Agent); the seeded refund conversation is replayed from the same script the live chat streams. `ConversationDetail` carries `lastRun` (`RunSummary`).
+- `chat/` — `POST /api/v1/orgs/{orgId}/chat` (a new conversation needs `agentId` of one of the org's Agents, else `AGENT_NOT_FOUND`) and `POST /api/v1/orgs/{orgId}/runs/{runId}/stop` (idempotent `202 {runId, status}` for the run's org and user; unknown or foreign runs return `RUN_NOT_ACTIVE`): phase one (reasoning → KB search → read → sources → answer → Linear approval request), phase two after the owner approves or denies.
+- `agents.ts` — `GET|POST /api/v1/orgs/{orgId}/agents`, `GET|PATCH|DELETE /api/v1/orgs/{orgId}/agents/{id}` (in-memory, per org; three seeded Agents bound to the org's KBs by index, with ids that stay the same across a reset). The KB name is read from the org's KBs at read time and `kbMissing` is set when the KB is gone. A KB the org does not have → `AGENT_KB_INVALID`, a duplicate name → `CONFLICT`.
 - `orgs.ts` — `GET|POST /api/v1/orgs`, `GET|PATCH /api/v1/orgs/{id}`, `POST /api/v1/orgs/{id}/provision`, in memory and synchronous like core: create answers 201 `ready` at once (a name ending `!fail` answers 201 `failed` with `RAGX_UNAVAILABLE`; one ending `!role` answers 201 `failed` with `LLM_ROLE_NOT_ASSIGNED`, and Retry then succeeds; one ending `!down` stays `ready` but every ragx proxy route answers 503 with body `INTERNAL_ERROR` + requestId, like core with ragx down); a duplicate name (ignoring case) → 409 `CONFLICT` with `details.fields`; PATCH only changes the row; provision answers 200 `ready`. Seeds **Công ty Demo** (ready), **Beta** (failed, `LLM_ROLE_NOT_ASSIGNED`) and **Gamma** (a stuck `pending`). Exports `findOrg(id)` for the Knowledge Base proxy routes.
 - `knowledge-bases.ts` — core's app proxy to ragx, `/api/v1/orgs/{orgId}/apps/ragx/<ragx path>` for GET, HEAD, POST, PUT, PATCH and DELETE, dispatched like ragx would: KBs (`GET|POST knowledge-bases`, `GET|PATCH|DELETE knowledge-bases/{kb}`; deleting the default KB is `CONFLICT`, deletes answer **204**), files (`GET .../files?cursor&limit`, `POST .../files/{id}/retry`, `DELETE .../files/{id}`) and the upload flow (`POST .../uploads` presigns, `POST .../files/{id}/confirm` is idempotent and answers `VALIDATION_FAILED` `file`/`MISSING` without the bytes, `GET .../files/{id}/download-url`). An unknown org is `NOT_FOUND`, an org that is not ready `ORG_NOT_PROVISIONED`, a KB `KB_NOT_FOUND`, and a rest starting with `orgs/` stands for core's 403 to 404 mapping. The demo org seeds a second KB and three files (ready, parsing, failed `INGEST_PARSE_FAILED`); each list call moves an in-progress file one step. Handlers are named `ragx...`.
 - `fake-s3.ts` — a public fake of MinIO's `kb-raw` bucket outside `/api/v1`: `OPTIONS` and `POST /__mock/s3/kb-raw` (CORS for `MOCK_CORE_WEB_ORIGIN`, the policy's `content-length-range` is checked: `EntityTooLarge` / `EntityTooSmall` as XML) and `GET /__mock/s3/kb-raw/<key>` (the bytes as an attachment with `application/octet-stream`). Ticket and download URLs point at `MOCK_CORE_PUBLIC_URL` (default `http://localhost:<port>`).
-- `POST /__mock/reset[?agent=id]` — fake-core only (outside `/api/v1`, so the web app cannot reach it). Unscoped, it restores every Agent, the org fixtures, the KBs, files and stored objects. With `?agent=id` (the Agents e2e, per test) it restores only that Agent, because other specs run in parallel against the same fake.
-- `fixtures/` — the synthetic refund-policy documents and citations, and three synthetic Agents with their KBs and tool sources.
+- `POST /__mock/reset[?agent=name|?catalog=1]` — fake-core only (outside `/api/v1`, so the web app cannot reach it). `?catalog=1` restores only the providers, models and roles (the Settings e2e); the unscoped reset leaves them alone for the same parallel-spec reason. Unscoped, it restores every Agent, conversation and run, the org fixtures, the KBs, files and stored objects. With `?agent=name` (the Agents e2e, per test) it restores only the seeded Agent of that name, because other specs run in parallel against the same fake.
+- `fixtures/` — the synthetic refund-policy documents and citations, and the three synthetic Agent seeds.
 
 ## Dependencies
 
-- Uses: `ai` (stream helpers), `frontend/features/chat/contract.ts` (provisional M2 shapes), `frontend/lib/errors/codes.gen.ts`.
+- Uses: `ai` (stream helpers), `frontend/features/chat/{contract,scope}.ts`, `frontend/lib/core/types.ts` (core's generated types) and `frontend/lib/errors/codes.gen.ts`.
 - Used by: `npm run dev:mock`, Playwright e2e in mock mode. Excluded from the Docker image.
 
 ## Run & test
@@ -42,11 +43,9 @@ Sign in with `owner@thomas.local` / `metro-wayfinding` (override with `MOCK_CORE
 ## Switching to real core
 
 Nothing in `app/`, `features/` or `lib/` knows this module exists. Point `WEB_CORE_URL` at core
-(`http://localhost:8080`, or `http://core:8080` in compose) and run `npm run dev`. The provisional
-endpoints (`/api/v1/chat`, `/chat/scope`, `/conversations`, `/documents/{id}/pages/{n}`, `/agents`,
-`/knowledge-bases`) must be
-specified in `contracts/openapi/core.v1.yaml` during M2; update `features/chat/contract.ts` to the
-generated types and delete this module when core serves them.
+(`http://localhost:8080`, or `http://core:8080` in compose) and run `npm run dev`. The org-scoped Agents, conversations and
+model-roles routes are real core routes; the chat, stop and `/documents/{id}/pages/{n}` routes are still only here until
+the M2b tasks land (they are being specified in `contracts/openapi/core.v1.yaml`).
 
 ## Conventions
 

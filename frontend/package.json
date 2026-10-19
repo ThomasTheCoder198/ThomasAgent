@@ -21,6 +21,7 @@
     "ai": "7.0.127",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
+    "cmdk": "1.1.1",
     "lucide-react": "1.51.0",
     "motion": "12.43.0",
     "next": "16.3.8",

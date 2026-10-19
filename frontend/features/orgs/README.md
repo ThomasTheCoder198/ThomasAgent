@@ -9,7 +9,8 @@ create / settings dialogs. Core owns the data; ragx is provisioned by core, neve
 
 - `contract.ts` — `Organization`, `RagxStatus`, `ORG_PATHS`, `CURRENT_ORG_COOKIE` (`thomas_org`), `ORG_NAME_MAX_LENGTH`, `orgHome(id)` and `validateOrgName(raw)` (mirrors core: trimmed, 1-200 characters, no control characters).
 - `current.ts` — `resolveCurrentOrg(orgs, pathOrgId, cookieOrgId)` and `orgIdFromPath(path)`.
-- `server.ts` — `listOrganizations()` and `getOrganization(id)` for server components (`server-only`).
+- `server.ts` — `listOrganizations()`, `getOrganization(id)` and `getCurrentOrg()` for server components (`server-only`). `getCurrentOrg()` resolves the org the business pages (`/chat`, `/agents`, later `/settings`) talk to and returns `{ org, orgs, failed, requestId? }`: `failed` is a 5xx or an unreachable core, never "no org".
+- `NoOrgState.tsx` — what a business page shows when the operator has no org yet, with a link to `/orgs`.
 - `api.ts` — `createOrganization`, `updateOrganization`, `retryOrganization` (each resolves to the org's state).
 - `OrgPlate.tsx` — the org switcher (a `DropdownMenu`) and its menu; `OrgDialog.tsx` — `mode="create" | "edit"`; a save always ends with `router.refresh()` (create also pushes to the new org), because the workspace layout that lists the orgs stays mounted across navigations; `useLiveOrgId.ts` — the one hook the plate and the Knowledge Base nav link share (URL org, else last seen, else server org); `OrgStatusDot.tsx`.
 

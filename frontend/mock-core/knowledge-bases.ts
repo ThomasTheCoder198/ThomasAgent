@@ -121,6 +121,15 @@ const withCount = (data: OrgData, kb: KnowledgeBase): KnowledgeBase => ({
   fileCount: data.files.filter((f) => f.kbId === kb.id).length,
 });
 
+/** What `GET .../knowledge-bases` lists for one org. */
+const listedKnowledgeBases = (data: OrgData): KnowledgeBase[] => data.kbs.map((k) => withCount(data, k));
+
+/** The org's KBs as ragx would list them; the Agents mock binds its fixtures to these ids. */
+export function knowledgeBasesOf(orgId: string): KnowledgeBase[] {
+  const org = findOrg(orgId);
+  return org ? listedKnowledgeBases(dataFor(orgId, org)) : [];
+}
+
 function findKb(ctx: Ctx, kbId: string): KnowledgeBase | undefined {
   return ctx.data.kbs.find((k) => k.id === kbId);
 }
@@ -309,11 +318,7 @@ const ragxRoutes: RagxRoute[] = [
   {
     method: "GET",
     pattern: new RegExp(`^${KB}$`),
-    handler: (c) =>
-      sendData(
-        c.res,
-        c.data.kbs.map((k) => withCount(c.data, k)),
-      ),
+    handler: (c) => sendData(c.res, listedKnowledgeBases(c.data)),
   },
   { method: "POST", pattern: new RegExp(`^${KB}$`), handler: ragxCreateKb },
   {

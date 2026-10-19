@@ -31,7 +31,7 @@ function renderMenu() {
   );
 }
 
-const openMenu = () => userEvent.click(screen.getByRole("button", { name: messages.shell.settings }));
+const openMenu = () => userEvent.click(screen.getByRole("button", { name: messages.shell.preferences }));
 const reply = (status: number, body: unknown) =>
   vi.fn(async () => new Response(JSON.stringify(body), { status }));
 

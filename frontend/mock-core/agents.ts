@@ -1,121 +1,172 @@
+import { createHash, randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import {
-  agentRoles,
-  toolPolicies,
-  type AgentDetail,
-  type AgentPatch,
-  type AgentSummary,
-} from "../features/agents/contract.ts";
+import type { Agent, AgentCreate, AgentPatch } from "../lib/core/types.ts";
 import { ErrorCode } from "../lib/errors/codes.gen.ts";
-import { models, roles } from "./catalog.ts";
-import { agents, foreignKnowledgeBases, knowledgeBases } from "./fixtures/agents.ts";
-import { readJson, sendData, sendError } from "./http.ts";
+import { agentSeeds } from "./fixtures/agents.ts";
+import { readJson, sendData, sendError, sendFieldError, sendNoContent } from "./http.ts";
+import { knowledgeBasesOf } from "./knowledge-bases.ts";
 
-/** The fixture uses "fast" as a stand-in for "whatever chat.fast points at"; resolve it to a real model id. */
-const ROLE_ALIAS = "fast";
+const HOUR_MS = 3_600_000;
+const HTTP_CREATED = 201;
+const stores = new Map<string, Map<string, Agent>>();
 
-function resolveOverrides(agent: AgentDetail): AgentDetail {
-  const overrides = { ...agent.modelOverrides };
-  for (const role of agentRoles) {
-    if (overrides[role] === ROLE_ALIAS) overrides[role] = roles.find((r) => r.role === "chat.fast")?.modelId;
-  }
-  return { ...agent, modelOverrides: overrides };
+const UUID_HEX_DIGITS = 32;
+const UUID_GROUPS = /^(.{8})(.{4})(.{4})(.{4})(.{12})$/;
+
+/** A seeded Agent keeps its id across `/__mock/reset`, so a page opened before a reset still finds it. */
+function seedId(orgId: string, index: number): string {
+  const hex = createHash("sha256").update(`${orgId}:agent:${index}`).digest("hex");
+  return hex.slice(0, UUID_HEX_DIGITS).replace(UUID_GROUPS, "$1-$2-$3-$4-$5");
 }
 
-const store = new Map<string, AgentDetail>();
-
-/**
- * Restores seeded Agents — all of them, or just `id` so parallel e2e workers each reset only the Agent they
- * edit. Called through `POST /__mock/reset[?agent=id]`.
- */
-export function resetAgents(id?: string) {
-  if (!id) store.clear();
-  for (const agent of agents) {
-    if (!id || agent.id === id) store.set(agent.id, resolveOverrides(agent));
-  }
-}
-
-resetAgents();
-
-function summarize(agent: AgentDetail): AgentSummary {
-  const kb = knowledgeBases.find((k) => k.id === agent.kbId);
-  const chatModelId =
-    agent.modelOverrides["chat.default"] ?? roles.find((r) => r.role === "chat.default")?.modelId;
-  const enabled = agent.toolSources.filter((s) => s.tools.some((t) => t.policy !== "off"));
+/** One seeded Agent of an org, or undefined when the org has no KB to bind it to. */
+function seedAgent(orgId: string, index: number): Agent | undefined {
+  const seed = agentSeeds[index];
+  const kbs = knowledgeBasesOf(orgId);
+  const kb = kbs[seed?.kbIndex ?? 0] ?? kbs[0];
+  if (!seed || !kb) return undefined;
+  const at = new Date(Date.now() - seed.hoursAgo * HOUR_MS).toISOString();
   return {
-    id: agent.id,
-    name: agent.name,
-    description: agent.description,
-    kb: { id: agent.kbId, name: kb?.name ?? agent.kbId },
-    lines: [...new Set(enabled.map((s) => s.line))],
-    toolCount: agent.toolSources.flatMap((s) => s.tools).filter((t) => t.policy !== "off").length,
-    chatModel: models.find((m) => m.id === chatModelId)?.displayName ?? "",
-    updatedAt: agent.updatedAt,
+    id: seedId(orgId, index),
+    name: seed.name,
+    description: seed.description,
+    instructions: seed.instructions,
+    kbId: kb.id,
+    kbName: kb.name,
+    kbMissing: false,
+    modelOverrides: {},
+    createdAt: at,
+    updatedAt: at,
   };
 }
 
-export function listAgents(_req: IncomingMessage, res: ServerResponse) {
-  sendData(res, [...store.values()].map(summarize));
+function seeded(orgId: string): Map<string, Agent> {
+  const existing = stores.get(orgId);
+  if (existing) return existing;
+  const store = new Map<string, Agent>();
+  for (const index of agentSeeds.keys()) {
+    const agent = seedAgent(orgId, index);
+    if (agent) store.set(agent.id, agent);
+  }
+  stores.set(orgId, store);
+  return store;
 }
-
-export function listKnowledgeBases(_req: IncomingMessage, res: ServerResponse) {
-  sendData(res, knowledgeBases);
-}
-
-export function getAgent(req: IncomingMessage, res: ServerResponse, id: string) {
-  const agent = store.get(id);
-  return agent ? sendData(res, agent) : sendError(req, res, ErrorCode.NOT_FOUND);
-}
-
-type PatchVerdict = "ok" | "invalid" | "forbidden";
 
 /**
- * Mirrors what core must do (AGENTS rule 11): the client's kbId and model ids are never trusted. A KB that
- * belongs to another tenant is forbidden; an id that does not exist at all is invalid.
+ * `POST /__mock/reset`: forget every org's Agents (they reseed on the next read), or with `name` restore only the
+ * seeded Agent of that name in every org. The Agents e2e resets per test through the scoped form, because the
+ * desktop and mobile projects edit different Agents and other specs use the same fake in parallel.
  */
-function checkPatch(patch: AgentPatch): PatchVerdict {
-  if (patch.name !== undefined && patch.name.trim().length === 0) return "invalid";
-  if (patch.kbId !== undefined && !knowledgeBases.some((k) => k.id === patch.kbId)) {
-    return foreignKnowledgeBases.some((k) => k.id === patch.kbId) ? "forbidden" : "invalid";
+export function resetAgents(name?: string) {
+  if (!name) return stores.clear();
+  for (const [orgId, store] of stores) {
+    const index = agentSeeds.findIndex((seed) => seed.name === name);
+    const agent = seedAgent(orgId, index);
+    if (agent) store.set(agent.id, agent);
   }
-  const unknownModel = Object.values(patch.modelOverrides ?? {}).some(
-    (id) => id !== null && !models.some((m) => m.id === id),
-  );
-  if (unknownModel) return "invalid";
-  const policies = Object.values(patch.toolPolicies ?? {});
-  return policies.every((p) => toolPolicies.includes(p)) ? "ok" : "invalid";
 }
 
-function applyPatch(agent: AgentDetail, patch: AgentPatch): AgentDetail {
-  const merged = { ...agent.modelOverrides, ...patch.modelOverrides };
-  // `null` in the patch clears an override, so drop those roles instead of storing null.
-  const modelOverrides = Object.fromEntries(Object.entries(merged).filter(([, modelId]) => modelId !== null));
-  const toolSources = agent.toolSources.map((source) => ({
-    ...source,
-    tools: source.tools.map((tool) => ({ ...tool, policy: patch.toolPolicies?.[tool.id] ?? tool.policy })),
-  }));
-  const { name, description, instructions, kbId } = patch;
+/** Like core: the KB name is read from ragx at read time, and a KB ragx no longer has is `kbMissing`. */
+function withKb(orgId: string, agent: Agent): Agent {
+  const kb = knowledgeBasesOf(orgId).find((k) => k.id === agent.kbId);
+  return { ...agent, kbName: kb?.name ?? "", kbMissing: !kb };
+}
+
+export function listAgentsOf(orgId: string): Agent[] {
+  return [...seeded(orgId).values()]
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .map((a) => withKb(orgId, a));
+}
+
+export function listAgents(_req: IncomingMessage, res: ServerResponse, orgId: string) {
+  sendData(res, listAgentsOf(orgId));
+}
+
+export function getAgent(req: IncomingMessage, res: ServerResponse, orgId: string, id: string) {
+  const agent = seeded(orgId).get(id);
+  return agent ? sendData(res, withKb(orgId, agent)) : sendError(req, res, ErrorCode.AGENT_NOT_FOUND);
+}
+
+const kbIsTheOrgs = (orgId: string, kbId: string | undefined) =>
+  !!kbId && knowledgeBasesOf(orgId).some((k) => k.id === kbId);
+
+/** Core's create checks, in its order; answers the refusal itself and returns nothing for a refused body. */
+function acceptedCreate(
+  req: IncomingMessage,
+  res: ServerResponse,
+  orgId: string,
+  body: AgentCreate | undefined,
+): AgentCreate | undefined {
+  const name = body?.name?.trim() ?? "";
+  if (!body || !name) {
+    sendFieldError(req, res, ErrorCode.VALIDATION_FAILED, [{ field: "name", code: "REQUIRED" }]);
+    return undefined;
+  }
+  if (!kbIsTheOrgs(orgId, body.kbId)) {
+    sendError(req, res, ErrorCode.AGENT_KB_INVALID);
+    return undefined;
+  }
+  if ([...seeded(orgId).values()].some((a) => a.name === name)) {
+    sendFieldError(req, res, ErrorCode.CONFLICT, [{ field: "name", code: "TAKEN" }]);
+    return undefined;
+  }
+  return { ...body, name };
+}
+
+export async function createAgent(req: IncomingMessage, res: ServerResponse, orgId: string) {
+  const input = acceptedCreate(req, res, orgId, await readJson<AgentCreate>(req));
+  if (!input) return;
+  const now = new Date().toISOString();
+  const agent: Agent = {
+    id: randomUUID(),
+    name: input.name,
+    description: input.description ?? "",
+    instructions: input.instructions ?? "",
+    kbId: input.kbId,
+    kbName: "",
+    kbMissing: false,
+    modelOverrides: {},
+    createdAt: now,
+    updatedAt: now,
+  };
+  seeded(orgId).set(agent.id, agent);
+  sendData(res, withKb(orgId, agent), HTTP_CREATED);
+}
+
+/** `null` clears a role's pin, a model id sets it, an absent role keeps what is stored. */
+function mergeOverrides(stored: Agent["modelOverrides"], change: AgentPatch["modelOverrides"]) {
+  const merged: Record<string, string | null | undefined> = { ...stored, ...change };
+  return Object.fromEntries(
+    Object.entries(merged).filter(([, modelId]) => typeof modelId === "string"),
+  ) as Agent["modelOverrides"];
+}
+
+function applyPatch(current: Agent, patch: AgentPatch): Agent {
   return {
-    ...agent,
-    ...(name !== undefined && { name: name.trim() }),
-    ...(description !== undefined && { description }),
-    ...(instructions !== undefined && { instructions }),
-    ...(kbId !== undefined && { kbId }),
-    toolSources,
-    modelOverrides,
+    ...current,
+    ...(patch.name !== undefined && { name: patch.name }),
+    ...(patch.description !== undefined && { description: patch.description }),
+    ...(patch.instructions !== undefined && { instructions: patch.instructions }),
+    ...(patch.kbId !== undefined && { kbId: patch.kbId }),
+    modelOverrides: mergeOverrides(current.modelOverrides, patch.modelOverrides),
     updatedAt: new Date().toISOString(),
   };
 }
 
-export async function patchAgent(req: IncomingMessage, res: ServerResponse, id: string) {
-  const agent = store.get(id);
-  if (!agent) return sendError(req, res, ErrorCode.NOT_FOUND);
-  const patch = await readJson<AgentPatch>(req);
-  const verdict = patch ? checkPatch(patch) : "invalid";
-  if (verdict === "forbidden") return sendError(req, res, ErrorCode.FORBIDDEN);
-  if (!patch || verdict === "invalid") return sendError(req, res, ErrorCode.VALIDATION_FAILED);
-  const next = applyPatch(agent, patch);
+export async function patchAgent(req: IncomingMessage, res: ServerResponse, orgId: string, id: string) {
+  const store = seeded(orgId);
+  const current = store.get(id);
+  if (!current) return sendError(req, res, ErrorCode.AGENT_NOT_FOUND);
+  const patch = (await readJson<AgentPatch>(req)) ?? {};
+  if (patch.kbId !== undefined && !kbIsTheOrgs(orgId, patch.kbId))
+    return sendError(req, res, ErrorCode.AGENT_KB_INVALID);
+  const next = applyPatch(current, patch);
   store.set(id, next);
-  return sendData(res, next);
+  sendData(res, withKb(orgId, next));
+}
+
+export function deleteAgent(req: IncomingMessage, res: ServerResponse, orgId: string, id: string) {
+  if (!seeded(orgId).delete(id)) return sendError(req, res, ErrorCode.AGENT_NOT_FOUND);
+  sendNoContent(res);
 }

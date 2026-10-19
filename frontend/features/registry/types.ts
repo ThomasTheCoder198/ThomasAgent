@@ -8,7 +8,8 @@ export type Model = {
   modelRef: string;
   displayName: string;
   capabilities: Capability[];
-  contextWindow: number;
+  /** O8 leaves most windows unknown, so null is a normal value. */
+  contextWindow: number | null;
   embeddingDims?: number;
   inputPricePerMTok?: number;
   outputPricePerMTok?: number;
@@ -27,3 +28,46 @@ export const REGISTRY_PATHS = {
 } as const;
 
 export const DEFAULT_CHAT_ROLE: Role = "chat.default";
+
+export type ProviderKind =
+  | "openrouter"
+  | "openai"
+  | "anthropic"
+  | "google"
+  | "azure"
+  | "ollama"
+  | "openai_compatible"
+  | "cohere"
+  | "voyage"
+  | "jina"
+  | "typesafe";
+
+/** Mirrors `Provider` in core.v1.yaml (hand-written like the other M0.2 registry types, C2-2). */
+export type Provider = {
+  id: string;
+  kind: ProviderKind;
+  name: string;
+  baseUrl: string;
+  hasApiKey: boolean;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** `apiKey`: absent = unchanged (cleared when `baseUrl` changes), empty string = remove. */
+export type ProviderInput = {
+  kind?: ProviderKind;
+  name?: string;
+  baseUrl?: string;
+  apiKey?: string | null;
+  enabled?: boolean;
+};
+
+export const PROVIDER_PATHS = {
+  providers: "/api/v1/providers",
+  provider: (id: string) => `/api/v1/providers/${encodeURIComponent(id)}`,
+  sync: (id: string) => `/api/v1/providers/${encodeURIComponent(id)}/sync`,
+  role: (role: Role) => `/api/v1/model-roles/${encodeURIComponent(role)}`,
+  modelTest: (id: string) => `/api/v1/models/${encodeURIComponent(id)}/test`,
+  model: (id: string) => `/api/v1/models/${encodeURIComponent(id)}`,
+} as const;

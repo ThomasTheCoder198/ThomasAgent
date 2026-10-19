@@ -27,6 +27,7 @@ export function SaveBar({ dirty, canSave, errors, saving, onSave, onDiscard }: P
     <div
       inert={!dirty}
       aria-hidden={!dirty || undefined}
+      data-save-bar-visible={dirty || undefined}
       className={cn(
         "ease-out-expo pointer-events-none sticky bottom-0 z-10 px-4 pb-4 transition-[transform,opacity] duration-300 md:px-6 lg:px-8",
         dirty ? "translate-y-0 opacity-100" : "translate-y-full opacity-0",

@@ -1,7 +1,8 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AgentDetail } from "./contract";
+import type { Agent } from "@/lib/core/types";
+
 import { useAgentEditor } from "./useAgentEditor";
 
 const { apiFetch, refresh, notify } = vi.hoisted(() => ({
@@ -14,15 +15,16 @@ vi.mock("@/lib/useNotify", () => ({ useNotify: () => notify }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("next-intl", () => ({ useLocale: () => "vi", useTranslations: () => (key: string) => key }));
 
-const agent: AgentDetail = {
+const agent: Agent = {
   id: "a1",
   name: "Pháp chế",
   description: "",
   instructions: "Cũ",
   kbId: "kb-1",
-  toolSources: [],
+  kbName: "KB",
+  kbMissing: false,
   modelOverrides: {},
-  contextFiles: [],
+  createdAt: "",
   updatedAt: "",
 };
 
@@ -43,9 +45,9 @@ beforeEach(() => {
 
 describe("useAgentEditor", () => {
   it("freezes edits while a save is in flight so nothing typed meanwhile is lost", async () => {
-    const response = deferred<AgentDetail>();
+    const response = deferred<Agent>();
     apiFetch.mockReturnValueOnce(response.promise);
-    const { result } = renderHook(() => useAgentEditor(agent));
+    const { result } = renderHook(() => useAgentEditor("o1", agent));
 
     act(() => result.current.update({ instructions: "Mới" }));
     let saving!: Promise<void>;
@@ -65,13 +67,13 @@ describe("useAgentEditor", () => {
     expect(result.current.draft.instructions).toBe("Mới");
     expect(result.current.dirty).toBe(false);
     expect(apiFetch).toHaveBeenCalledWith(
-      "/api/v1/agents/a1",
+      "/api/v1/orgs/o1/agents/a1",
       expect.objectContaining({ body: '{"instructions":"Mới"}' }),
     );
   });
 
   it("never sends a draft with an empty name", async () => {
-    const { result } = renderHook(() => useAgentEditor(agent));
+    const { result } = renderHook(() => useAgentEditor("o1", agent));
     act(() => result.current.update({ name: "  " }));
     expect(result.current.canSave).toBe(false);
     await act(() => result.current.persist());
@@ -80,7 +82,7 @@ describe("useAgentEditor", () => {
 
   it("confirms a successful save with a success toast and refreshes the page data", async () => {
     apiFetch.mockResolvedValueOnce({ ...agent, instructions: "Mới" });
-    const { result } = renderHook(() => useAgentEditor(agent));
+    const { result } = renderHook(() => useAgentEditor("o1", agent));
     act(() => result.current.update({ instructions: "Mới" }));
     await act(() => result.current.persist());
     expect(notify.success).toHaveBeenCalledWith("saved");
@@ -91,7 +93,7 @@ describe("useAgentEditor", () => {
   it("reports a failed save by toast and keeps the draft so the owner can retry", async () => {
     const failure = new Error("boom");
     apiFetch.mockRejectedValueOnce(failure);
-    const { result } = renderHook(() => useAgentEditor(agent));
+    const { result } = renderHook(() => useAgentEditor("o1", agent));
     act(() => result.current.update({ instructions: "Mới" }));
     await act(() => result.current.persist());
     expect(notify.error).toHaveBeenCalledWith(failure);

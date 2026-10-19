@@ -1,13 +1,13 @@
 # Prometheus
 
 ## Purpose
-Scrapes core and outbox-relay `/metrics` on port 9464, using OpenMetrics with request-id exemplars.
+Scrapes core and core-worker `/metrics` on ports 9464 and 9465, using OpenMetrics with request-id exemplars.
 
 ## Entry points
 - `prometheus.yml` configures the two scrape targets.
 
 ## Dependencies
-- Uses: core and outbox-relay internal metrics listeners.
+- Uses: core and core-worker internal metrics listeners.
 - Used by: Grafana's Prometheus datasource and alerts.
 
 ## Run & test

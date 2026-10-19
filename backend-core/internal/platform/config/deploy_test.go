@@ -92,7 +92,7 @@ func TestCompose_EnvFileProvidesRuntimeValuesWithoutRepeatingDefaults(t *testing
 		} `json:"services"`
 	}
 	require.NoError(t, json.Unmarshal(output, &resolved))
-	for _, service := range []string{"core", "migrate", "outbox-relay"} {
+	for _, service := range []string{"core", "migrate", "core-worker"} {
 		environment := resolved.Services[service].Environment
 		require.NotContains(t, environment, "CORE_SERVICE_TOKEN", "the service token was removed (R-ST)")
 		require.Contains(t, environment["CORE_DATABASE_URL"], "@postgres:5432/")
@@ -107,7 +107,7 @@ func TestCompose_CoreStackHasNoLegacyObservability(t *testing.T) {
 	for _, legacy := range []string{"otel-collector", "loki", "langfuse", "clickhouse", "web:"} {
 		require.NotContains(t, string(raw), legacy)
 	}
-	for _, service := range []string{"core:", "migrate:", "outbox-relay:", "postgres:", "redis:", "prometheus:", "grafana:", "victorialogs:"} {
+	for _, service := range []string{"core:", "migrate:", "core-worker:", "postgres:", "redis:", "prometheus:", "grafana:", "victorialogs:"} {
 		require.Contains(t, string(raw), service)
 	}
 }

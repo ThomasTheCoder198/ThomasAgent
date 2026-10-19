@@ -32,6 +32,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/apptoken"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/calllog"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/genkitx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/outbound"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/ragx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/retry"
@@ -45,9 +46,10 @@ import (
 const providerCatalogBreaker = "provider-catalog"
 
 type ClientContainer struct {
-	ModelCatalog *llmclient.HTTPModelCatalog
-	Ragx         *ragx.Caller
-	CallLog      *calllog.Logger
+	ModelCatalog  *llmclient.HTTPModelCatalog
+	Ragx          *ragx.Caller
+	CallLog       *calllog.Logger
+	ModelRegistry *genkitx.Registry
 }
 
 func (rt *coreRuntime) initClientContainer(signingKey ed25519.PrivateKey) (ClientContainer, error) {
@@ -66,13 +68,19 @@ func (rt *coreRuntime) initClientContainer(signingKey ed25519.PrivateKey) (Clien
 	if rt.metrics != nil {
 		llmRecorder = rt.metrics
 	}
+	llmHTTP := *httpClient
+	llmHTTP.Timeout = 0
+	llmHTTP.Transport = outbound.Instrument(httpClient.Transport, outbound.TargetLLM, recorder, false)
+	modelRegistry := genkitx.NewModelRegistry(genkitx.Config{
+		CacheSize: rt.cfg.LLM.GenkitCacheSize, HTTPClient: &llmHTTP, MaxRetries: rt.cfg.Retry.MaxAttempts - 1,
+	})
 	callLog := calllog.New(rt.log, llmRecorder, rt.cfg.LLMLog)
 	signer := apptoken.NewAppTokenSigner(signingKey, rt.cfg.App, time.Now, uuid.NewString)
 	ragxCaller, err := ragx.NewRagxCaller(rt.cfg.Ragx, signer, recorder, rt.log, callLog)
 	if err != nil {
 		return ClientContainer{}, fmt.Errorf("ragx client: %w", err)
 	}
-	return ClientContainer{ModelCatalog: modelCatalog, Ragx: ragxCaller, CallLog: callLog}, nil
+	return ClientContainer{ModelCatalog: modelCatalog, Ragx: ragxCaller, CallLog: callLog, ModelRegistry: modelRegistry}, nil
 }
 
 type RepositoryContainer struct {
@@ -111,14 +119,15 @@ type ServiceContainer struct {
 	ConversationService convservice.ConversationService
 	RetentionService    convservice.RetentionService
 	// ChatStore is the persistence port of the M2b run loop.
-	ChatStore        convservice.ChatStore
-	AuthService      authservice.AuthService
-	ProviderService  llmservice.ProviderService
-	LLMModelService  llmservice.LLMModelService
-	ModelSyncService llmservice.ModelSyncService
-	RoleService      llmservice.RoleService
-	ResolveService   llmservice.ResolveService
-	OrgRoleService   llmservice.OrgRoleService
+	ChatStore         convservice.ChatStore
+	AuthService       authservice.AuthService
+	ProviderService   llmservice.ProviderService
+	LLMModelService   llmservice.LLMModelService
+	ModelSyncService  llmservice.ModelSyncService
+	RoleService       llmservice.RoleService
+	ResolveService    llmservice.ResolveService
+	ModelProbeService llmservice.ModelProbeService
+	OrgRoleService    llmservice.OrgRoleService
 
 	OrganizationService orgservice.OrganizationService
 	AppProxyService     appservice.AppProxyService
@@ -141,15 +150,16 @@ func (rt *coreRuntime) initServiceContainer(ctx context.Context, pool *pgxpool.P
 		AgentService: agentservice.NewAgentService(pool, repositories.AgentRepo, clients.Ragx, resolveService, rt.log),
 		ConversationService: convservice.NewConversationService(pool, repositories.ConversationRepo, repositories.MessageRepo,
 			repositories.AgentRepo, clients.Ragx, rt.cfg.Conversation, rt.log),
-		RetentionService: convservice.NewRetentionService(pool, repositories.ConversationRepo, rt.cfg.Conversation, time.Now),
-		ChatStore:        convservice.NewChatStore(pool, repositories.ConversationRepo, repositories.MessageRepo, repositories.RunRepo, repositories.AgentRepo),
-		AuthService:      authService,
-		ProviderService:  providerService,
-		LLMModelService:  llmservice.NewLLMModelService(pool, repositories.LLMModelRepo, repositories.RoleRepo),
-		ModelSyncService: llmservice.NewModelSyncService(pool, providerService, repositories.LLMModelRepo, clients.ModelCatalog, rt.cfg.ProviderMaxRemoteModels),
-		RoleService:      llmservice.NewRoleService(pool, repositories.LLMModelRepo, repositories.RoleRepo),
-		ResolveService:   resolveService,
-		OrgRoleService:   llmservice.NewOrgRoleService(pool, repositories.LLMModelRepo, repositories.RoleRepo),
+		RetentionService:  convservice.NewRetentionService(pool, repositories.ConversationRepo, rt.cfg.Conversation, time.Now),
+		ChatStore:         convservice.NewChatStore(pool, repositories.ConversationRepo, repositories.MessageRepo, repositories.RunRepo, repositories.AgentRepo),
+		AuthService:       authService,
+		ProviderService:   providerService,
+		LLMModelService:   llmservice.NewLLMModelService(pool, repositories.LLMModelRepo, repositories.RoleRepo),
+		ModelSyncService:  llmservice.NewModelSyncService(pool, providerService, repositories.LLMModelRepo, clients.ModelCatalog, rt.cfg.ProviderMaxRemoteModels),
+		RoleService:       llmservice.NewRoleService(pool, repositories.LLMModelRepo, repositories.RoleRepo),
+		ResolveService:    resolveService,
+		ModelProbeService: llmservice.NewModelProbeService(resolveService, clients.ModelRegistry, clients.CallLog, rt.cfg.LLM.ProbeTimeout),
+		OrgRoleService:    llmservice.NewOrgRoleService(pool, repositories.LLMModelRepo, repositories.RoleRepo),
 
 		OrganizationService: organizationService,
 		AppProxyService:     appservice.NewAppProxyService(clients.Ragx),
@@ -162,6 +172,7 @@ type ControllerContainer struct {
 	AuthController         *authcontroller.AuthController
 	ProviderController     *llmcontroller.ProviderController
 	LLMModelController     *llmcontroller.LLMModelController
+	ModelProbeController   *llmcontroller.ModelProbeController
 	RoleController         *llmcontroller.RoleController
 	OrgRoleController      *llmcontroller.OrgRoleController
 
@@ -186,10 +197,11 @@ func (rt *coreRuntime) initControllerContainer(services ServiceContainer, redisC
 			TrustedProxyCIDRs:  proxyNetworks,
 			Logger:             rt.log,
 		}),
-		ProviderController: llmcontroller.NewProviderController(services.ProviderService, services.ModelSyncService, maxBodyBytes),
-		LLMModelController: llmcontroller.NewLLMModelController(services.LLMModelService, maxBodyBytes),
-		RoleController:     llmcontroller.NewRoleController(services.RoleService, maxBodyBytes),
-		OrgRoleController:  llmcontroller.NewOrgRoleController(services.OrgRoleService, maxBodyBytes),
+		ProviderController:   llmcontroller.NewProviderController(services.ProviderService, services.ModelSyncService, maxBodyBytes),
+		LLMModelController:   llmcontroller.NewLLMModelController(services.LLMModelService, maxBodyBytes),
+		ModelProbeController: llmcontroller.NewModelProbeController(services.ModelProbeService),
+		RoleController:       llmcontroller.NewRoleController(services.RoleService, maxBodyBytes),
+		OrgRoleController:    llmcontroller.NewOrgRoleController(services.OrgRoleService, maxBodyBytes),
 
 		OrganizationController: orgcontroller.NewOrganizationController(services.OrganizationService, maxBodyBytes),
 		AppProxyController:     appcontroller.NewAppProxyController(services.AppProxyService, maxBodyBytes),

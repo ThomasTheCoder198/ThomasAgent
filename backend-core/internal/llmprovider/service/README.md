@@ -10,6 +10,7 @@ Business rules and transactions: provider CRUD and key rotation, manual models, 
 - `RoleService` (`role_service.go`)
 - `OrgRoleService` (`org_role_service.go`): list, assign and clear the org's chat-role overrides; audited as `model_role.assign_org` / `model_role.clear_org`
 - `ResolveService` (`resolve_service.go`): role (org → platform → decision→chat.fast) or Agent-pinned model → model with its decrypted key and `KeyVersion`, for the M2 agent runtime; no HTTP route. `RoleService.ClearRole` clears a platform role (idempotent, audited)
+- `ModelProbeService` (`model_probe_service.go`): bounded chat or decision call for the Settings Test button, logged as one `llm.call`.
 - Audit action names (`audit_events.go`)
 
 ## Dependencies

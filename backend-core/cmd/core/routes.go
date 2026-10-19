@@ -42,6 +42,7 @@ func registerRoutes(engine *gin.Engine, c ControllerContainer, mw middlewares) {
 	session.POST("/api/v1/models", c.LLMModelController.HandleCreateModel)
 	session.PATCH("/api/v1/models/:modelId", c.LLMModelController.HandleUpdateModel)
 	session.DELETE("/api/v1/models/:modelId", c.LLMModelController.HandleDeleteModel)
+	session.POST("/api/v1/models/:modelId/test", c.ModelProbeController.HandleTestModel)
 	session.GET("/api/v1/model-roles", c.RoleController.HandleListRoles)
 	session.PUT("/api/v1/model-roles/:role", c.RoleController.HandleAssignRole)
 	session.DELETE("/api/v1/model-roles/:role", c.RoleController.HandleClearRole)

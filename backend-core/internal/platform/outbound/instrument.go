@@ -11,7 +11,9 @@ import (
 )
 
 const (
-	TargetRagx        = "ragx"
+	TargetRagx = "ragx"
+	// TargetLLM labels calls to model providers; Instrument strips X-Request-Id from them.
+	TargetLLM         = "llm"
 	HeaderRagxTraceID = "X-Ragx-Trace-Id"
 )
 

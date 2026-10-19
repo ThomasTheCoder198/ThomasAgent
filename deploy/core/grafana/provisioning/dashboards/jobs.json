@@ -9,14 +9,14 @@
       "id": 1, "type": "timeseries", "title": "Outbox backlog",
       "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [{ "refId": "A", "expr": "outbox_pending{job=\"outbox-relay\"}", "legendFormat": "pending rows" }]
+      "targets": [{ "refId": "A", "expr": "outbox_pending{job=\"core-worker\"}", "legendFormat": "pending rows" }]
     },
     {
       "id": 2, "type": "timeseries", "title": "Oldest unpublished row",
       "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
-      "targets": [{ "refId": "A", "expr": "outbox_relay_lag_seconds{job=\"outbox-relay\"}", "legendFormat": "lag" }]
+      "targets": [{ "refId": "A", "expr": "outbox_relay_lag_seconds{job=\"core-worker\"}", "legendFormat": "lag" }]
     },
     {
       "id": 3, "type": "timeseries", "title": "Jobs per minute by stream and outcome",

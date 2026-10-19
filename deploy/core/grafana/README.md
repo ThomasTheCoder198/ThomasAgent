@@ -29,7 +29,7 @@ Alert query models are raw JSON and do not receive Grafana's ordinary environmen
 
 OTLP stores log levels in `severity_text`; error filters and level-color rules use that field. Exemplar Explore queries explicitly request raw logs and group volume by the same observed field.
 
-Outbox backlog and lag panels select `job="outbox-relay"`, the process that updates those gauges. The API registry also exposes their initial zero values; those series are excluded from the jobs dashboard.
+Outbox backlog and lag panels select `job="core-worker"`, the process that updates those gauges. The API registry also exposes their initial zero values; those series are excluded from the jobs dashboard.
 
 ## Common failures
 - Datasource plugin missing: check `GF_PLUGINS_PREINSTALL`, network access and pinned plugin availability.

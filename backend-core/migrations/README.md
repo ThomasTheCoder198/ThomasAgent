@@ -54,7 +54,7 @@ Keep development seeds separate from schema migrations.
 ## Common failures
 - SQL failure: the migration returns an error; inspect the unapplied SQL.
 - Missing database configuration: set the required core environment variables.
-- Down removes one migration at a time. From the latest schema, the first Down restores empty trace columns; subsequent Downs remove request id columns, AAD expansion, tenant defaults and hardening constraints. The sixth and seventh Down remove identity/registry and platform tables and their data. Use only on disposable dev data.
+- Down removes one migration at a time. From the latest schema, the first Down removes the outbox traceparent column; subsequent Downs eventually restore empty trace columns and remove request id columns, AAD expansion, tenant defaults and hardening constraints. The sixth and seventh Down remove identity/registry and platform tables and their data. Use only on disposable dev data.
 
 `20261004000001_identity_hardening.sql` upgrades already deployed identity tables with the composite session/user tenant foreign key and a vault AAD format marker. Original migrations remain unchanged. Down restores the old FK while retaining `aad_version` to prevent ciphertext misclassification; Up is safe after Down. After a secret is resealed, old application binaries require an encrypted-data backup to roll back.
 
@@ -69,3 +69,5 @@ data remains decryptable after schema Up/Down/Up, and migration-status tests
 verify the new tenant migration is applied and rolled back independently.
 
 Version 3 uses length-prefixed AAD; the new migration keeps the version 3 check on Down because narrowing it would invalidate existing rows. An older binary that only reads version 2 also needs a backup or authenticated reseal before downgrade. `TestStructuredAADMigrationUpDownUpPreservesVersionThree` checks expansion, marker/data preservation and rejection of unknown versions across Up/Down/Up.
+
+20261018000002_outbox_traceparent.sql adds the nullable W1 traceparent column to the transactional outbox. TestOutboxTraceparentMigration_UpDownUp verifies the column on a disposable Postgres testcontainer.

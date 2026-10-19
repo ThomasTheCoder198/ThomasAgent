@@ -91,7 +91,7 @@ func TestProcess_ReportsUsageBeforeLoadingConfiguration(t *testing.T) {
 }
 
 func TestRealMain_LogsDatabaseFailureOnce(t *testing.T) {
-	for _, command := range []string{"migrate", "serve", outboxRelayCommand} {
+	for _, command := range []string{"migrate", "serve", workerCommand, outboxRelayCommand} {
 		t.Run(command, func(t *testing.T) {
 			setIdentityEnv(t)
 			t.Setenv("CORE_TEST_REAL_MAIN", "1")
@@ -105,7 +105,15 @@ func TestRealMain_LogsDatabaseFailureOnce(t *testing.T) {
 			require.ErrorAs(t, err, &exitErr)
 			require.Equal(t, exitFailure, exitErr.ExitCode())
 			lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-			require.Len(t, lines, 1, string(output))
+			if command == outboxRelayCommand {
+				require.Len(t, lines, 2, string(output))
+				var warning map[string]any
+				require.NoError(t, json.Unmarshal([]byte(lines[0]), &warning))
+				require.Equal(t, "outbox-relay command is deprecated; use worker", warning["msg"])
+				lines = lines[1:]
+			} else {
+				require.Len(t, lines, 1, string(output))
+			}
 			var record map[string]any
 			require.NoError(t, json.Unmarshal([]byte(lines[0]), &record))
 			require.NotEmpty(t, record["error"])

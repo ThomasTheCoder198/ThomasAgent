@@ -4,7 +4,7 @@
 Runs independent core and ragx stacks for their separate production servers.
 
 ## Entry points
-- `core/compose.yaml`: core, migrate, outbox-relay, Postgres, Redis, Prometheus, Grafana and VictoriaLogs.
+- `core/compose.yaml`: core, migrate, core-worker, Postgres, Redis, Prometheus, Grafana and VictoriaLogs.
 - `ragx/compose.yaml`: ragx bootstrap/API/worker, Postgres, Redis, Qdrant, MinIO and authenticated Phoenix.
 - `../scripts/smoke.sh`: health, identity, log correlation and metrics probes.
 
@@ -38,7 +38,7 @@ Core sends OTLP logs directly to VictoriaLogs and exposes metrics on port 9464 i
 | MinIO API / console | 9000 / 9001 |
 | Qdrant | 6333 (`QDRANT_HOST_PORT`) |
 
-Every persistent service has a healthcheck except outbox-relay, which currently exposes only its internal metrics listener. Migration and bootstrap are one-shot gates. `task down` preserves named volumes; core reuses the existing `thomas` Postgres and Redis volumes. The new `thomas-ragx` project initializes separate Qdrant/MinIO volumes, and the old volumes remain preserved.
+Every persistent service has a healthcheck, including core-worker (`core healthcheck --target worker`). Migration and bootstrap are one-shot gates. `task down` preserves named volumes; core reuses the existing `thomas` Postgres and Redis volumes. The new `thomas-ragx` project initializes separate Qdrant/MinIO volumes, and the old volumes remain preserved.
 
 ## Common failures
 - Logs missing: check `CORE_LOGS_OTLP_ENDPOINT` and VictoriaLogs health.

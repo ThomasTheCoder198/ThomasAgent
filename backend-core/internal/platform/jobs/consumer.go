@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -31,6 +32,7 @@ type Message struct {
 	Stream        string
 	Payload       []byte
 	RequestID     string
+	TraceParent   string
 	Deliveries    int64
 }
 
@@ -53,8 +55,50 @@ type Consumer struct {
 	VisibilityTimeout time.Duration
 	BlockTimeout      time.Duration
 	BatchSize         int64
+	Concurrency       int
+	DrainTimeout      time.Duration
 	Log               *slog.Logger
 	Metrics           JobRecorder
+
+	inFlight inFlightSet
+}
+
+// inFlightSet holds the entry ids this process is running. Pollers share one consumer name, so without it a
+// sibling poller would reclaim an entry that is still running here and execute it a second time.
+type inFlightSet struct {
+	mu  sync.Mutex
+	ids map[string]struct{}
+}
+
+// claim marks the ids not yet running and returns only those.
+func (s *inFlightSet) claim(ids []string) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ids == nil {
+		s.ids = make(map[string]struct{})
+	}
+	var claimed []string
+	for _, id := range ids {
+		if _, running := s.ids[id]; !running {
+			s.ids[id] = struct{}{}
+			claimed = append(claimed, id)
+		}
+	}
+	return claimed
+}
+
+func (s *inFlightSet) release(ids ...string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, id := range ids {
+		delete(s.ids, id)
+	}
+}
+
+func (s *inFlightSet) count() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.ids)
 }
 
 func (c *Consumer) observe(outcome string) {
@@ -75,22 +119,44 @@ func (c *Consumer) EnsureGroup(ctx context.Context) error {
 }
 
 func (c *Consumer) Run(ctx context.Context, handler Handler) error {
-	for ctx.Err() == nil {
-		if err := c.PollOnce(ctx, handler); err != nil && !stderrors.Is(err, context.Canceled) {
-			c.Log.ErrorContext(ctx, "stream poll failed", "stream", c.Stream, "error_code", errors.CodeOf(err))
-		}
+	capacity := c.Concurrency
+	if capacity < 1 {
+		capacity = 1
+	}
+	var inFlight sync.WaitGroup
+	for range capacity {
+		inFlight.Add(1)
+		go func() {
+			defer inFlight.Done()
+			for ctx.Err() == nil {
+				if err := c.PollOnce(ctx, handler); err != nil && !stderrors.Is(err, context.Canceled) {
+					c.Log.ErrorContext(ctx, "stream poll failed", "stream", c.Stream, "error_code", errors.CodeOf(err))
+				}
+			}
+		}()
+	}
+	<-ctx.Done()
+	finished := make(chan struct{})
+	go func() { inFlight.Wait(); close(finished) }()
+	if c.DrainTimeout <= 0 {
+		<-finished
+		return nil
+	}
+	timer := time.NewTimer(c.DrainTimeout)
+	defer timer.Stop()
+	select {
+	case <-finished:
+	case <-timer.C:
+		// The handlers keep running detached; the caller must not close its pool as if they had stopped.
+		c.Log.WarnContext(ctx, "consumer drain timed out with handlers still running", "stream", c.Stream, "in_flight", c.inFlight.count(), "drain_timeout_ms", c.DrainTimeout.Milliseconds())
 	}
 	return nil
 }
 
 func (c *Consumer) PollOnce(ctx context.Context, handler Handler) error {
-	reclaimed, _, err := c.Redis.XAutoClaim(ctx, &redis.XAutoClaimArgs{
-		Stream: c.Stream, Group: c.GroupName, Consumer: c.ConsumerName, MinIdle: c.VisibilityTimeout, Start: autoClaimStart, Count: c.BatchSize,
-	}).Result()
-	if err != nil {
-		return errors.ToAppError(fmt.Errorf("xautoclaim: %w", err))
+	if err := c.reclaim(ctx, handler); err != nil {
+		return err
 	}
-	c.handleEntries(ctx, reclaimed, handler)
 
 	streams, err := c.Redis.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group: c.GroupName, Consumer: c.ConsumerName, Streams: []string{c.Stream, newMessagesID}, Count: c.BatchSize, Block: c.BlockTimeout,
@@ -107,14 +173,48 @@ func (c *Consumer) PollOnce(ctx context.Context, handler Handler) error {
 	return nil
 }
 
-func (c *Consumer) handleEntries(ctx context.Context, msgs []redis.XMessage, handler Handler) {
+// reclaim takes over entries idle past VisibilityTimeout. The ids come from a JUSTID claim, which leaves the
+// delivery counter alone, so skipping an entry this process is still running does not push it towards the DLQ.
+func (c *Consumer) reclaim(ctx context.Context, handler Handler) error {
+	ids, _, err := c.Redis.XAutoClaimJustID(ctx, &redis.XAutoClaimArgs{
+		Stream: c.Stream, Group: c.GroupName, Consumer: c.ConsumerName, MinIdle: c.VisibilityTimeout, Start: autoClaimStart, Count: c.BatchSize,
+	}).Result()
+	if err != nil {
+		return errors.ToAppError(fmt.Errorf("xautoclaim: %w", err))
+	}
+	claimed := c.inFlight.claim(ids)
+	if len(claimed) == 0 {
+		return nil
+	}
+	defer c.inFlight.release(claimed...)
+	// The entries are already ours and idle was reset by the claim, so no minimum idle time here; XCLAIM counts the delivery.
+	msgs, err := c.Redis.XClaim(ctx, &redis.XClaimArgs{Stream: c.Stream, Group: c.GroupName, Consumer: c.ConsumerName, Messages: claimed}).Result()
+	if err != nil {
+		return errors.ToAppError(fmt.Errorf("xclaim: %w", err))
+	}
 	for _, raw := range msgs {
 		c.handle(ctx, raw, handler)
+	}
+	return nil
+}
+
+// handleEntries marks the whole batch in flight first: entries behind a slow one wait their turn and must not be reclaimed meanwhile.
+func (c *Consumer) handleEntries(ctx context.Context, msgs []redis.XMessage, handler Handler) {
+	ids := make([]string, len(msgs))
+	for i, raw := range msgs {
+		ids[i] = raw.ID
+	}
+	c.inFlight.claim(ids)
+	for _, raw := range msgs {
+		c.handle(ctx, raw, handler)
+		c.inFlight.release(raw.ID)
 	}
 }
 
 // handle restores the originating request id and tenant, so every log line of the job can be found from the request.
 func (c *Consumer) handle(ctx context.Context, raw redis.XMessage, handler Handler) {
+	// Once delivered, a job keeps its own context while shutdown stops new reads.
+	ctx = context.WithoutCancel(ctx)
 	tenantID, _ := raw.Values[StreamFieldTenantID].(string)
 	requestID := messageRequestID(raw)
 	ctx = requestid.NewContext(tenant.WithID(ctx, tenantID), requestID)
@@ -170,7 +270,7 @@ func (c *Consumer) deadLetter(ctx context.Context, m Message, cause error, elaps
 	values := map[string]any{
 		StreamFieldPayload: string(m.Payload), StreamFieldRequestID: m.RequestID, StreamFieldError: cause.Error(),
 		StreamFieldDeliveries: m.Deliveries, StreamFieldOriginalID: m.StreamEntryID, StreamFieldOutboxID: m.OutboxID,
-		StreamFieldTenantID: m.TenantID,
+		StreamFieldTenantID: m.TenantID, StreamFieldTraceParent: m.TraceParent,
 	}
 	if err := c.Redis.XAdd(ctx, &redis.XAddArgs{Stream: c.Stream + DeadLetterSuffix, Values: values}).Err(); err != nil {
 		c.Log.ErrorContext(ctx, "dead-letter failed; leaving message pending", "id", m.StreamEntryID, "error_code", errors.CodeOf(err))
@@ -185,5 +285,6 @@ func toMessage(stream string, raw redis.XMessage, requestID string, deliveries i
 	payload, _ := raw.Values[StreamFieldPayload].(string)
 	outboxID, _ := raw.Values[StreamFieldOutboxID].(string)
 	tenantID, _ := raw.Values[StreamFieldTenantID].(string)
-	return Message{TenantID: tenantID, OutboxID: outboxID, StreamEntryID: raw.ID, Stream: stream, Payload: []byte(payload), RequestID: requestID, Deliveries: deliveries}
+	traceParent, _ := raw.Values[StreamFieldTraceParent].(string)
+	return Message{TenantID: tenantID, OutboxID: outboxID, StreamEntryID: raw.ID, Stream: stream, Payload: []byte(payload), RequestID: requestID, TraceParent: traceParent, Deliveries: deliveries}
 }

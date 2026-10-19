@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/periodic"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 )
 
@@ -22,14 +21,18 @@ func (f fakeConversationPurger) PurgeInactiveConversations(context.Context) (int
 }
 
 func TestConversationPurgeJobLogsAndStops(t *testing.T) {
-	var output bytes.Buffer
-	log, err := logging.NewLogger(&output, "info", "core-test", "test", nil)
+	output := &syncBuffer{}
+	log, err := logging.NewLogger(output, "info", "core-test", "test", nil)
 	require.NoError(t, err)
-	app := coreRuntime{cfg: config.Config{Conversation: config.ConversationConfig{RetentionPurgeInterval: time.Millisecond}}, log: log}
+	app := coreRuntime{cfg: config.Config{Conversation: config.ConversationConfig{RetentionPurgeInterval: time.Millisecond}, ConversationRetentionPurgeTimeout: time.Second}, log: log}
 	calls := make(chan struct{}, 10)
 	ctx, cancel := context.WithCancel(t.Context())
 	finished := make(chan struct{})
-	go func() { app.purgeInactiveConversations(ctx, fakeConversationPurger{calls}); close(finished) }()
+	runner := periodic.Runner{Redis: startWorkerTestRedis(t), Log: log}
+	go func() {
+		_ = runner.Run(ctx, []periodic.Job{app.conversationPurgeJob(fakeConversationPurger{calls})})
+		close(finished)
+	}()
 	select {
 	case <-calls:
 	case <-time.After(time.Second):
@@ -41,11 +44,12 @@ func TestConversationPurgeJobLogsAndStops(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("purge job did not stop")
 	}
-	var record map[string]any
-	require.NoError(t, json.Unmarshal(bytes.Split(bytes.TrimSpace(output.Bytes()), []byte("\n"))[0], &record))
-	require.Equal(t, conversationsPurgedMessage, record["msg"])
-	require.EqualValues(t, 3, record["count"])
-	require.Contains(t, record, "duration_ms")
+	records := output.find(t, "periodic job completed")
+	require.NotEmpty(t, records)
+	record := records[0]
+	require.Equal(t, conversationPurgeJob, record["job"])
+	require.EqualValues(t, 3, record[logging.FieldCount])
+	require.Contains(t, record, logging.FieldDurationMS)
 	id, _ := record["request_id"].(string)
-	require.True(t, strings.HasPrefix(id, requestid.JobPrefix))
+	require.True(t, strings.HasPrefix(id, requestid.JobPrefix), "got request_id %q", id)
 }

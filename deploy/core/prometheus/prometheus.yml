@@ -4,6 +4,6 @@ scrape_configs:
   - job_name: core
     static_configs:
       - targets: ["core:9464"]
-  - job_name: outbox-relay
+  - job_name: core-worker
     static_configs:
-      - targets: ["outbox-relay:9464"]
+      - targets: ["core-worker:9465"]

@@ -32,7 +32,7 @@ Organization routes (`GET`/`POST /api/v1/orgs`, `GET`/`PATCH /api/v1/orgs/{orgId
 The business routes (org model roles, agents and conversations) are registered in the same `RequireOrg` group. `container.go` also exposes `ServiceContainer.ChatStore`, the persistence port M2b's run loop takes from the container. `api_collection_test.go` runs the generated Postman collection against an isolated real core with a small in-process fake ragx (provisioning and the collection KB read only; other KB IDs return `KB_NOT_FOUND`), so its organization ends `ready` and the Agents folder passes `RequireOrg`.
 
 The CLI dispatches `serve` through `runProcess` ? `executeCommand` ? `serveHTTP`. Compose and the Dockerfile both invoke `core serve`. The same compiled `core` executable serves three roles in Compose: `migrate`
-exits after preparing the database, `serve` runs the API, and `outbox-relay` runs the
+exits after preparing the database, `serve` runs the API, and `worker` runs the
 outbox worker. Separate processes give the API and worker independent lifetimes;
 Compose starts them only after migration succeeds. `healthcheck` is a short
 probe launched by Docker against the API process.
@@ -40,7 +40,7 @@ probe launched by Docker against the API process.
 ## Dependencies
 
 - Uses: `internal/errors`, platform config, logging, telemetry, httpx, postgres, redisx, jobs, and embedded migrations.
-- Used by: the backend Docker image, Compose `core`/`migrate`/`outbox-relay` services, and local CLI commands.
+- Used by: the backend Docker image, Compose `core`/`migrate`/`core-worker` services, and local CLI commands.
 
 ## Run & test
 
@@ -51,7 +51,7 @@ go run ./cmd/core migrate up
 go run ./cmd/core migrate status
 go run ./cmd/core migrate down
 go run ./cmd/core serve
-go run ./cmd/core outbox-relay
+go run ./cmd/core worker
 go run ./cmd/core healthcheck
 go test ./cmd/core -count=1
 ```
@@ -63,7 +63,7 @@ Host execution still needs reachable `CORE_DATABASE_URL` and `CORE_REDIS_URL`.
 
 ## Conventions
 
-`serve` and `outbox-relay` start an internal `/metrics` listener on `CORE_METRICS_ADDR` (default `:9464`, explicitly empty disables). The public router does not expose it, and compose does not publish it to the host. A bind failure is logged while the process keeps running.
+`serve` starts an internal `/metrics` listener on `CORE_METRICS_ADDR` (default `:9464`, explicitly empty disables). `worker` serves `/healthz`, `/readyz` and `/metrics` on `CORE_WORKER_ADDR` (default `:9465`). Neither listener is published to the host by Compose.
 See the [shared naming glossary](../../../docs/glossary.md) for terms used across services.
 
 Missing or unknown commands report CLI usage before configuration or dependencies
@@ -86,7 +86,7 @@ printing a second copy. Logger creation rejects unknown log levels.
 
 - Missing required environment variables or invalid configuration values fail startup.
 - Unreachable Postgres or Redis fails startup or readiness; an occupied HTTP port fails listening.
-- Invalid migration SQL or an unknown migration direction makes `migrate` fail and blocks the Compose API/outbox-relay startup gate.
+- Invalid migration SQL or an unknown migration direction makes `migrate` fail and blocks the Compose API/worker startup gate.
 
 All commands that load configuration, including `healthcheck`, require the nonempty
 `CORE_VAULT_MASTER_KEY`. Generate a base64 32-byte key with `openssl rand -base64 32`;
@@ -104,3 +104,5 @@ disposable migrated Postgres and Redis in `TestAPI_GeneratedPostmanCollection`.
 Its fixtures never change the existing platform roles or read real credentials.
 
 Bootstrap, login and the relay process establish the platform tenant explicitly. The purge job is deliberately system-wide; request repository methods remain scoped. Authenticated business requests use the tenant stored on the session row. Configured trusted proxy networks, keyed login budgets including the IP-only budget, session touch interval, catalog size and breaker cache capacity are injected at startup.
+
+`worker` owns the outbox relay and the session and conversation cleanup schedules. `outbox-relay` remains a deprecated alias. Its health and metrics endpoints use `CORE_WORKER_ADDR`; `healthcheck --target worker` probes it. On shutdown the worker stops accepting work and drains within `CORE_WORKER_DRAIN_TIMEOUT`.

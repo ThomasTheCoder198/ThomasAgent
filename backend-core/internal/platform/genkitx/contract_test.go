@@ -2,6 +2,7 @@ package genkitx_test
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -146,6 +147,14 @@ func TestContract_ToolResponseGoesBackAsAToolMessage(t *testing.T) {
 	last := messages[len(messages)-1].(map[string]any)
 	require.Equal(t, "tool", last["role"])
 	require.Equal(t, "call_1", last["tool_call_id"])
+	assistant := messages[len(messages)-2].(map[string]any)
+	require.Equal(t, "assistant", assistant["role"])
+	calls := assistant["tool_calls"].([]any)
+	require.Equal(t, "call_1", calls[0].(map[string]any)["id"])
+	var output map[string]any
+	require.NoError(t, json.Unmarshal([]byte(last["content"].(string)), &output))
+	require.Equal(t, true, output["insufficientEvidence"])
+	require.Equal(t, []any{}, output["results"])
 }
 
 type route string

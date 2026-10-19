@@ -30,6 +30,21 @@ func TestLoad_AppliesDefaults(t *testing.T) {
 	require.Equal(t, 720*time.Hour, cfg.Conversation.Retention)
 	require.Equal(t, time.Hour, cfg.Conversation.RetentionPurgeInterval)
 	require.Equal(t, 500, cfg.Conversation.RetentionPurgeBatch)
+	require.Equal(t, ":9465", cfg.Worker.Addr)
+	require.Equal(t, 30*time.Second, cfg.Worker.DrainTimeout)
+	require.Equal(t, 2*time.Minute, cfg.SessionPurgeTimeout)
+	require.Equal(t, 10*time.Minute, cfg.ConversationRetentionPurgeTimeout)
+}
+
+func TestLoad_RejectsInvalidWorkerTimeouts(t *testing.T) {
+	for _, key := range []string{"CORE_WORKER_DRAIN_TIMEOUT", "CORE_SESSION_PURGE_TIMEOUT", "CORE_CONVERSATION_RETENTION_PURGE_TIMEOUT"} {
+		t.Run(key, func(t *testing.T) {
+			setRequired(t)
+			t.Setenv(key, "0s")
+			_, err := Load()
+			require.ErrorContains(t, err, key)
+		})
+	}
 }
 
 func TestLoad_RejectsInvalidConversationRetention(t *testing.T) {
@@ -366,4 +381,26 @@ func TestLoad_RejectsZeroToolTimeout(t *testing.T) {
 	t.Setenv("CORE_RAGX_TOOL_TIMEOUT", "0s")
 	_, err := Load()
 	require.ErrorContains(t, err, "CORE_RAGX_TOOL_TIMEOUT")
+}
+
+// loadDefaultsForTest loads config.yaml with only the required env set, for default and validate tests.
+func loadDefaultsForTest(t *testing.T) Config {
+	t.Helper()
+	setRequired(t)
+	cfg, err := Load()
+	require.NoError(t, err)
+	return cfg
+}
+
+func TestConfig_LLMDefaults(t *testing.T) {
+	cfg := loadDefaultsForTest(t)
+	require.Equal(t, 32, cfg.LLM.GenkitCacheSize)
+	require.Equal(t, 10*time.Second, cfg.LLM.DecisionTimeout)
+	require.Equal(t, 30*time.Second, cfg.LLM.ProbeTimeout)
+}
+
+func TestConfig_LLMRejectsNonPositive(t *testing.T) {
+	cfg := loadDefaultsForTest(t)
+	cfg.LLM.GenkitCacheSize = 0
+	require.ErrorContains(t, cfg.validate(), "CORE_LLM_GENKIT_CACHE_SIZE")
 }

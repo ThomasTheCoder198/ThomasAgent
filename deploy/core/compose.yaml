@@ -63,14 +63,19 @@ services:
       migrate: { condition: service_completed_successfully }
       # No dependency on victorialogs: core must start without observability (spec §1.2); the exporter retries.
 
-  outbox-relay:
+  core-worker:
     build: ../../backend-core
     env_file: [{path: .env, required: false}]
-    command: ["outbox-relay"]
+    command: ["worker"]
     environment:
       CORE_DATABASE_URL: ${CORE_DATABASE_URL:-postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable}
       CORE_REDIS_URL: ${CORE_REDIS_URL:-redis://redis:6379/0}
       CORE_LOGS_OTLP_ENDPOINT: ${CORE_LOGS_OTLP_ENDPOINT-http://victorialogs:9428/insert/opentelemetry/v1/logs}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/core", "healthcheck", "--target", "worker"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     depends_on:
       migrate: { condition: service_completed_successfully }
 

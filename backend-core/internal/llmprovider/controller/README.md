@@ -6,6 +6,7 @@ HTTP handlers only: read the request, call one service, write a DTO.
 ## Entry points
 - `ProviderController` (`provider_controller.go`)
 - `LLMModelController` (`llm_model_controller.go`): list, create, delete and `HandleUpdateModel` (capability edit)
+- `ModelProbeController` (`model_probe_controller.go`): `POST /api/v1/models/{modelId}/test`.
 - `RoleController` (`role_controller.go`)
 - `OrgRoleController` (`org_role_controller.go`): `/api/v1/orgs/{orgId}/model-roles`, mounted inside `RequireOrg`
 

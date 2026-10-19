@@ -65,7 +65,7 @@ func TestConsumer_RecordsJobOutcomes(t *testing.T) {
 func TestOutboxRelay_RecordsBacklogAfterEachBatch(t *testing.T) {
 	ctx := tenant.WithID(context.Background(), tenant.PlatformID)
 	pool, redisClient := startPool(t), startRedis(t)
-	require.NoError(t, EnqueueOutbox(ctx, pool, testStream, map[string]string{"file_id": "f1"}))
+	require.NoError(t, enqueueTestOutbox(ctx, pool, testStream, map[string]string{"file_id": "f1"}))
 	fake := &fakeJobMetrics{pending: -1}
 	relay := &OutboxRelay{Pool: pool, Redis: redisClient, BatchSize: 10, PollInterval: time.Millisecond, Log: quietLog, Metrics: fake}
 	relay.recordBacklog(ctx)

@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"log/slog"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/config"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/periodic"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres/pgtest"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
@@ -29,11 +29,12 @@ func TestSessionPurgeJobDeletesExpiredRowsAndStopsOnCancellation(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, sessions.CreateSession(tenant.WithID(t.Context(), tenant.PlatformID), user.ID, []byte("expired-job-session"), "csrf", time.Now().Add(-time.Hour)))
 	service := authservice.NewAuthService(users, sessions, pool, config.AuthConfig{}, time.Now)
-	app := coreRuntime{cfg: config.Config{Auth: config.AuthConfig{SessionPurgeInterval: 10 * time.Millisecond}}, log: slog.New(slog.NewJSONHandler(io.Discard, nil))}
+	app := coreRuntime{cfg: config.Config{Auth: config.AuthConfig{SessionPurgeInterval: 10 * time.Millisecond}, SessionPurgeTimeout: time.Second}}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	finished := make(chan struct{})
-	go func() { app.purgeExpiredSessions(ctx, service); close(finished) }()
+	runner := periodic.Runner{Redis: startWorkerTestRedis(t), Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	go func() { _ = runner.Run(ctx, []periodic.Job{app.sessionPurgeJob(service)}); close(finished) }()
 	require.Eventually(t, func() bool {
 		var count int
 		err := pool.QueryRow(t.Context(), `SELECT count(*) FROM sessions`).Scan(&count)
@@ -59,26 +60,39 @@ func TestSessionPurgeJobDeletesExpiredSessionsAcrossTenants(t *testing.T) {
 		require.NoError(t, sessions.CreateSession(ctx, user.ID, []byte(tenantID+"-active"), "csrf", time.Now().Add(time.Hour)))
 	}
 	service := authservice.NewAuthService(users, sessions, pool, config.AuthConfig{}, time.Now)
-	app := coreRuntime{log: slog.New(slog.NewJSONHandler(io.Discard, nil))}
-	app.runSessionPurge(t.Context(), service)
+	app := coreRuntime{}
+	_, err := app.sessionPurgeJob(service).Run(t.Context())
+	require.NoError(t, err)
 	var expired, active int
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FILTER (WHERE expires_at<=now()), count(*) FILTER (WHERE expires_at>now()) FROM sessions`).Scan(&expired, &active))
 	require.Zero(t, expired, "system cleanup must include every tenant")
 	require.Equal(t, 2, active, "system cleanup must preserve active sessions in both tenants")
 }
 
+func TestSessionPurgeJobHasConfiguredTimeout(t *testing.T) {
+	app := coreRuntime{cfg: config.Config{SessionPurgeTimeout: 2 * time.Minute}}
+	job := app.sessionPurgeJob(fakeSessionPurger{})
+	require.Equal(t, 2*time.Minute, job.Timeout)
+}
+
 func TestSessionPurgeLogsCarryJobRequestID(t *testing.T) {
-	pool := pgtest.Start(t)
-	service := authservice.NewAuthService(authrepository.NewUserRepo(pool), authrepository.NewSessionRepo(pool, 0), pool, config.AuthConfig{}, time.Now)
 	var output bytes.Buffer
 	log, err := logging.NewLogger(&output, "info", "core-test", "test", nil)
 	require.NoError(t, err)
-	app := coreRuntime{log: log}
-	app.runSessionPurge(t.Context(), service)
-	var record map[string]any
-	require.NoError(t, json.Unmarshal(bytes.TrimSpace(output.Bytes()), &record))
-	require.Equal(t, "expired sessions purged", record["msg"])
-	id, _ := record["request_id"].(string)
-	require.True(t, strings.HasPrefix(id, requestid.JobPrefix), id)
-	require.Contains(t, record, "duration_ms")
+	app := coreRuntime{cfg: config.Config{Auth: config.AuthConfig{SessionPurgeInterval: time.Millisecond}, SessionPurgeTimeout: time.Second}}
+	runner := periodic.Runner{Redis: startWorkerTestRedis(t), Log: log}
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() { _ = runner.Run(ctx, []periodic.Job{app.sessionPurgeJob(fakeSessionPurger{})}); close(done) }()
+	require.Eventually(t, func() bool { return strings.Contains(output.String(), "periodic job completed") }, time.Second, 10*time.Millisecond)
+	cancel()
+	<-done
+	require.Contains(t, output.String(), `"request_id":"`+requestid.JobPrefix)
+	require.Contains(t, output.String(), `"duration_ms":`)
+}
+
+type fakeSessionPurger struct{}
+
+func (fakeSessionPurger) PurgeExpiredSessionsAcrossTenants(context.Context) (int64, error) {
+	return 0, nil
 }

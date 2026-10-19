@@ -11,8 +11,8 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/migrations"
 )
 
-// Roll back the retention index before the agents/chat migration; both directions run on the
-// throwaway container of pgtest, never on a dev database.
+// Down rolls back the outbox traceparent column, then the retention index, then the agents/chat migration;
+// both directions run on the throwaway container of pgtest, never on a dev database.
 func TestChatMigration_DownAndUpAgain(t *testing.T) {
 	pool := pgtest.Start(t)
 	ctx := context.Background()
@@ -30,10 +30,21 @@ func TestChatMigration_DownAndUpAgain(t *testing.T) {
 		return found
 	}
 
+	traceparentColumn := func() bool {
+		var found bool
+		require.NoError(t, pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+			WHERE table_name = 'outbox' AND column_name = 'traceparent')`).Scan(&found))
+		return found
+	}
+
 	for _, table := range chatTables {
 		require.True(t, present(table), table)
 	}
 	require.True(t, capabilitiesEdited())
+	require.True(t, present("idx_conversations_updated_at"))
+	require.True(t, traceparentColumn())
+	require.NoError(t, postgres.Migrate(ctx, url, migrations.FS, postgres.Down))
+	require.False(t, traceparentColumn())
 	require.True(t, present("idx_conversations_updated_at"))
 	require.NoError(t, postgres.Migrate(ctx, url, migrations.FS, postgres.Down))
 	require.False(t, present("idx_conversations_updated_at"))

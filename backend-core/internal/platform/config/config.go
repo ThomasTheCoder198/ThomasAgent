@@ -43,6 +43,22 @@ type OutboxRelayConfig struct {
 	PollInterval time.Duration `env:"POLL_INTERVAL"`
 }
 
+type WorkerConfig struct {
+	Addr         string        `env:"ADDR"`
+	DrainTimeout time.Duration `env:"DRAIN_TIMEOUT"`
+}
+
+func (c WorkerConfig) validate() []error {
+	var errs []error
+	if c.Addr == "" {
+		errs = append(errs, errors.New("CORE_WORKER_ADDR must be set"))
+	}
+	if c.DrainTimeout <= 0 {
+		errs = append(errs, errors.New("CORE_WORKER_DRAIN_TIMEOUT must be > 0"))
+	}
+	return errs
+}
+
 type HTTPConfig struct {
 	MaxBodyBytes            int64         `env:"MAX_BODY_BYTES"`
 	RequestTimeout          time.Duration `env:"REQUEST_TIMEOUT"`
@@ -54,6 +70,24 @@ type MetricsConfig struct {
 	Addr        string    `env:"ADDR"`
 	HTTPBuckets []float64 `env:"HTTP_BUCKETS" envSeparator:","`
 	LLMBuckets  []float64 `env:"LLM_BUCKETS" envSeparator:","`
+}
+
+// LLMConfig tunes core's own model calls (M2). The Genkit cache holds one instance per provider endpoint (S1-A).
+type LLMConfig struct {
+	GenkitCacheSize int           `env:"GENKIT_CACHE_SIZE"`
+	DecisionTimeout time.Duration `env:"DECISION_TIMEOUT"`
+	ProbeTimeout    time.Duration `env:"PROBE_TIMEOUT"`
+}
+
+func (c LLMConfig) validate() []error {
+	var errs []error
+	if c.GenkitCacheSize < 1 {
+		errs = append(errs, errors.New("CORE_LLM_GENKIT_CACHE_SIZE must be >= 1"))
+	}
+	if c.DecisionTimeout <= 0 || c.ProbeTimeout <= 0 {
+		errs = append(errs, errors.New("CORE_LLM_DECISION_TIMEOUT and CORE_LLM_PROBE_TIMEOUT must be > 0"))
+	}
+	return errs
 }
 
 type LLMLogConfig struct {
@@ -306,32 +340,36 @@ func (c PasswordHashConfig) validate() []error {
 }
 
 type Config struct {
-	ProviderMaxRemoteModels  int                `env:"PROVIDER_MAX_REMOTE_MODELS"`
-	ProviderMaxBreakers      int                `env:"PROVIDER_MAX_BREAKERS"`
-	ProviderHTTPTimeout      time.Duration      `env:"PROVIDER_HTTP_TIMEOUT"`
-	ProviderBreaker          BreakerConfig      `envPrefix:"PROVIDER_BREAKER_"`
-	ProviderMaxResponseBytes int64              `env:"PROVIDER_MAX_RESPONSE_BYTES"`
-	ProviderPrivateAllowlist []string           `env:"PROVIDER_PRIVATE_ALLOWLIST" envSeparator:","`
-	Auth                     AuthConfig         `envPrefix:"AUTH_"`
-	Vault                    VaultConfig        `envPrefix:"VAULT_"`
-	App                      AppConfig          `envPrefix:"APP_"`
-	Ragx                     RagxConfig         `envPrefix:"RAGX_"`
-	Conversation             ConversationConfig `envPrefix:"CONVERSATION_"`
-	HTTP                     HTTPConfig         `envPrefix:"HTTP_"`
-	Metrics                  MetricsConfig      `envPrefix:"METRICS_"`
-	LLMLog                   LLMLogConfig       `envPrefix:"LLM_LOG_"`
-	Environment              string             `env:"ENV"`
-	ServiceName              string             `env:"SERVICE_NAME"`
-	HTTPAddr                 string             `env:"HTTP_ADDR"`
-	ShutdownTimeout          time.Duration      `env:"SHUTDOWN_TIMEOUT"`
-	ReadHeaderTimeout        time.Duration      `env:"READ_HEADER_TIMEOUT"`
-	DatabaseURL              string             `env:"DATABASE_URL,required,notEmpty"`
-	RedisURL                 string             `env:"REDIS_URL,required,notEmpty"`
-	LogsOTLPEndpoint         string             `env:"LOGS_OTLP_ENDPOINT"`
-	LogLevel                 string             `env:"LOG_LEVEL"`
-	Retry                    RetryConfig        `envPrefix:"RETRY_"`
-	Stream                   ConsumerConfig     `envPrefix:"STREAM_"`
-	OutboxRelay              OutboxRelayConfig  `envPrefix:"RELAY_"`
+	ProviderMaxRemoteModels           int                `env:"PROVIDER_MAX_REMOTE_MODELS"`
+	ProviderMaxBreakers               int                `env:"PROVIDER_MAX_BREAKERS"`
+	ProviderHTTPTimeout               time.Duration      `env:"PROVIDER_HTTP_TIMEOUT"`
+	ProviderBreaker                   BreakerConfig      `envPrefix:"PROVIDER_BREAKER_"`
+	ProviderMaxResponseBytes          int64              `env:"PROVIDER_MAX_RESPONSE_BYTES"`
+	ProviderPrivateAllowlist          []string           `env:"PROVIDER_PRIVATE_ALLOWLIST" envSeparator:","`
+	Auth                              AuthConfig         `envPrefix:"AUTH_"`
+	Vault                             VaultConfig        `envPrefix:"VAULT_"`
+	App                               AppConfig          `envPrefix:"APP_"`
+	Ragx                              RagxConfig         `envPrefix:"RAGX_"`
+	Conversation                      ConversationConfig `envPrefix:"CONVERSATION_"`
+	HTTP                              HTTPConfig         `envPrefix:"HTTP_"`
+	Metrics                           MetricsConfig      `envPrefix:"METRICS_"`
+	LLMLog                            LLMLogConfig       `envPrefix:"LLM_LOG_"`
+	LLM                               LLMConfig          `envPrefix:"LLM_"`
+	Environment                       string             `env:"ENV"`
+	ServiceName                       string             `env:"SERVICE_NAME"`
+	HTTPAddr                          string             `env:"HTTP_ADDR"`
+	ShutdownTimeout                   time.Duration      `env:"SHUTDOWN_TIMEOUT"`
+	ReadHeaderTimeout                 time.Duration      `env:"READ_HEADER_TIMEOUT"`
+	DatabaseURL                       string             `env:"DATABASE_URL,required,notEmpty"`
+	RedisURL                          string             `env:"REDIS_URL,required,notEmpty"`
+	LogsOTLPEndpoint                  string             `env:"LOGS_OTLP_ENDPOINT"`
+	LogLevel                          string             `env:"LOG_LEVEL"`
+	Retry                             RetryConfig        `envPrefix:"RETRY_"`
+	Stream                            ConsumerConfig     `envPrefix:"STREAM_"`
+	OutboxRelay                       OutboxRelayConfig  `envPrefix:"RELAY_"`
+	Worker                            WorkerConfig       `envPrefix:"WORKER_"`
+	SessionPurgeTimeout               time.Duration      `env:"SESSION_PURGE_TIMEOUT"`
+	ConversationRetentionPurgeTimeout time.Duration      `env:"CONVERSATION_RETENTION_PURGE_TIMEOUT"`
 }
 
 const envPrefix = "CORE_"
@@ -429,9 +467,17 @@ func (c Config) validate() error {
 	}
 	errs = append(errs, c.HTTP.validate()...)
 	errs = append(errs, c.Metrics.validate()...)
+	errs = append(errs, c.Worker.validate()...)
+	if c.SessionPurgeTimeout <= 0 {
+		errs = append(errs, errors.New("CORE_SESSION_PURGE_TIMEOUT must be > 0"))
+	}
+	if c.ConversationRetentionPurgeTimeout <= 0 {
+		errs = append(errs, errors.New("CORE_CONVERSATION_RETENTION_PURGE_TIMEOUT must be > 0"))
+	}
 	if c.LLMLog.ContentMaxBytes < 1 {
 		errs = append(errs, errors.New("CORE_LLM_LOG_CONTENT_MAX_BYTES must be >= 1"))
 	}
+	errs = append(errs, c.LLM.validate()...)
 	errs = append(errs, c.Auth.validate()...)
 	errs = append(errs, c.App.validate()...)
 	errs = append(errs, c.Ragx.validate()...)

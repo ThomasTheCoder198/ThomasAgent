@@ -55,3 +55,8 @@ func newConsumer(redisClient *redis.Client, maxDeliveries int) *Consumer {
 	return &Consumer{Redis: redisClient, Stream: testStream, GroupName: testGroup, ConsumerName: "w1", MaxDeliveries: maxDeliveries,
 		VisibilityTimeout: time.Millisecond, BlockTimeout: 10 * time.Millisecond, BatchSize: 10, Log: quietLog}
 }
+
+func enqueueTestOutbox(ctx context.Context, q Execer, stream string, payload any) error {
+	_, err := EnqueueOutbox(ctx, q, stream, payload)
+	return err
+}

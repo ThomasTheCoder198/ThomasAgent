@@ -6,14 +6,14 @@ recovery, acknowledgement, and dead-letter delivery.
 
 ## Entry points
 - `EnqueueOutbox`: call inside the transaction that writes the business change.
-- `OutboxRelay.Run` / `PublishBatch`: `core outbox-relay` publishes committed outbox rows.
+- `OutboxRelay.Run` / `PublishBatch`: `core worker` publishes committed outbox rows.
 - `Consumer.EnsureGroup`, `Run`, `PollOnce`: worker entry points.
 - `Handler`: application processing; its context carries the originating `request_id` and tenant.
 
 ## Dependencies
 - Logger construction returns an error for unknown levels; callers must handle it before injecting a logger.
 - Uses: pgx/Postgres, go-redis/Redis Streams, `internal/errors`, `requestid` context, slog.
-- Used by: core outbox-relay and future domain workers.
+- Used by: core worker and future domain workers.
 - Configure batch/poll limits from `config.OutboxRelayConfig`; consumer limits from
   `config.ConsumerConfig`. Callers provide clients and a structured logger.
 
@@ -21,7 +21,7 @@ recovery, acknowledgement, and dead-letter delivery.
 ```bash
 cd backend-core
 TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/platform/jobs/... -count=1 -p 2
-go run ./cmd/core outbox-relay
+go run ./cmd/core worker
 ```
 Docker Desktop must run for the pinned Postgres/Redis integration containers.
 
@@ -71,3 +71,15 @@ The replay UI comes in M4. Replay starts a fresh pending delivery count.
 - Redis or DB failures leave outbox rows unpublished for the next relay cycle.
 - DLQ publication failures leave the source message pending for recovery.
 - DLQ publish and XACK are separate operations: a crash can duplicate a DLQ entry.
+
+`EnqueueOutbox` returns the inserted id. `PublishOne` expedites that row after its transaction commits; the relay still picks it up if publication fails (a row locked by a batch is skipped by `PublishOne` and published once by that batch).
+
+## Trace context
+`EnqueueOutbox` writes the W3C `traceparent` of the context span to `outbox.traceparent` (NULL when there is no span). It uses `propagation.TraceContext{}` directly, not the global propagator, because nothing in core installs a global one. The relay copies the value to the `traceparent` stream field, the consumer exposes it as `Message.TraceParent`, and the DLQ keeps it.
+
+## Consumer concurrency and shutdown
+- `Consumer.Concurrency` pollers share one consumer name. Each poller keeps the entry ids it is running in a shared in-flight set; reclaim (`XAUTOCLAIM ... JUSTID`, then `XCLAIM`) skips those ids, so a handler that runs longer than `VisibilityTimeout` is **not** executed a second time by a sibling poller, and the skip does not count as a delivery. Entries behind a slow one in a `BatchSize>1` read are marked in flight too.
+- A crashed or other consumer's idle entries are still reclaimed after `VisibilityTimeout`; they count as a new delivery. Handlers must still be idempotent (at-least-once).
+- Set `VisibilityTimeout` above the longest expected handler run anyway: another process may reclaim the entry, and the consumer cannot see that.
+- On cancel, `Run` stops reading and waits for in-flight handlers up to `DrainTimeout` (`0` waits without limit). Handlers run with a context that is not cancelled by shutdown. When the drain expires `Run` logs a `WARN` with the `in_flight` count and returns while those handlers keep running detached; the caller must not close its pool as if they had finished.
+- `OutboxRelay.Run` finishes the batch it has started after cancellation, so XADD and the `published_at` update stay in step.

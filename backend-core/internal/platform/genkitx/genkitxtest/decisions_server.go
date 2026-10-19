@@ -60,12 +60,15 @@ func (s *DecisionsServer) serve(w http.ResponseWriter, r *http.Request) {
 	s.requests = append(s.requests, Request{Path: r.URL.Path, Header: r.Header.Clone(), Body: body})
 	status := s.status
 	var answers map[string]any
-	if len(s.answers) > 0 {
+	if status == 0 && len(s.answers) > 0 {
 		answers, s.answers = s.answers[0], s.answers[1:]
 	}
 	s.mu.Unlock()
 	if status != 0 || answers == nil {
-		writeError(w, max(status, http.StatusInternalServerError))
+		if status == 0 {
+			status = http.StatusInternalServerError
+		}
+		writeError(w, status)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

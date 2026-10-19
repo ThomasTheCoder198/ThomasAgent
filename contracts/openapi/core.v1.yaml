@@ -304,6 +304,22 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "400": { $ref: "#/components/responses/Error" }
+  /api/v1/models/{modelId}/test:
+    parameters:
+      - { name: modelId, in: path, required: true, schema: { type: string, format: uuid }, example: "{{modelId}}" }
+    post:
+      tags: [LLM models]
+      operationId: testLLMModel
+      summary: One tiny real call to a chat or decision model (Settings Test button)
+      responses:
+        "200": { $ref: "#/components/responses/ModelTestResponse" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+        "504": { $ref: "#/components/responses/Error" }
   /api/v1/model-roles:
     get:
       tags: [LLM model roles]
@@ -816,6 +832,14 @@ components:
             allOf:
               - { $ref: "#/components/schemas/SuccessResponse" }
               - { type: object, properties: { data: { $ref: "#/components/schemas/RoleAssignment" } } }
+    ModelTestResponse:
+      description: Model test result.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/SuccessResponse" }
+              - { type: object, properties: { data: { $ref: "#/components/schemas/ModelTestResult" } } }
     Error:
       description: Error response.
       content:
@@ -1044,6 +1068,12 @@ components:
           properties:
             cursor: { type: [string, "null"], description: Cursor of the next page; null on the last page }
             limit: { type: integer }
+    ModelTestResult:
+      type: object
+      required: [ok, latencyMs]
+      properties:
+        ok: { type: boolean, description: "Always true; a failed test is a catalog error" }
+        latencyMs: { type: integer, minimum: 0 }
     SuccessResponse:
       type: object
       required: [data, meta]

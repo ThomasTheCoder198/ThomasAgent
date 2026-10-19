@@ -103,13 +103,23 @@ func TestMigrate_UpAndDown(t *testing.T) {
 		VALUES ('default','thomas.ingest.requested','{}','req_m052migration-0001')`)
 	require.NoError(t, err)
 
-	// Down removes the retention index, then agents/chat tables, org version, organizations, trace columns, request IDs,
-	// AAD expansion, tenant defaults, hardening, identity/registry and platform.
+	traceparentColumn := func() bool {
+		var found bool
+		require.NoError(t, pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+			WHERE table_name = 'outbox' AND column_name = 'traceparent')`).Scan(&found))
+		return found
+	}
+	require.True(t, traceparentColumn(), "the outbox traceparent migration adds the column")
+
+	// Down removes the outbox traceparent column, then the retention index, agents/chat tables, org version,
+	// organizations, trace columns, request IDs, AAD expansion, tenant defaults, hardening, identity/registry and platform.
+	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
+	require.False(t, traceparentColumn(), "the first Down removes the outbox traceparent column")
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	var agentsExist bool
 	require.NoError(t, pool.QueryRow(ctx, `SELECT to_regclass('agents') IS NOT NULL`).Scan(&agentsExist))
-	require.False(t, agentsExist, "the first Down removes the agents/chat tables")
+	require.False(t, agentsExist, "the third Down removes the agents/chat tables")
 	var versionColumns int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM organizations`).Scan(&n), "organizations survive the agents/chat Down")
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))

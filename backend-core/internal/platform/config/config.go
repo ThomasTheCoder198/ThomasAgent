@@ -44,8 +44,9 @@ type OutboxRelayConfig struct {
 }
 
 type WorkerConfig struct {
-	Addr         string        `env:"ADDR"`
-	DrainTimeout time.Duration `env:"DRAIN_TIMEOUT"`
+	Addr            string        `env:"ADDR"`
+	DrainTimeout    time.Duration `env:"DRAIN_TIMEOUT"`
+	ChatConcurrency int           `env:"CHAT_CONCURRENCY"`
 }
 
 func (c WorkerConfig) validate() []error {
@@ -55,6 +56,52 @@ func (c WorkerConfig) validate() []error {
 	}
 	if c.DrainTimeout <= 0 {
 		errs = append(errs, errors.New("CORE_WORKER_DRAIN_TIMEOUT must be > 0"))
+	}
+	if c.ChatConcurrency < 1 {
+		errs = append(errs, errors.New("CORE_WORKER_CHAT_CONCURRENCY must be >= 1"))
+	}
+	return errs
+}
+
+// ChatConfig tunes the chat run that executes in the worker (amendment W). 2b-4 adds the loop's own CORE_CHAT_* keys here.
+type ChatConfig struct {
+	RunDeadline          time.Duration `env:"RUN_DEADLINE"`
+	FinishTimeout        time.Duration `env:"FINISH_TIMEOUT"`
+	JobVisibilityTimeout time.Duration `env:"JOB_VISIBILITY_TIMEOUT"`
+	RunLease             time.Duration `env:"RUN_LEASE"`
+	RunHeartbeatTimeout  time.Duration `env:"RUN_HEARTBEAT_TIMEOUT"`
+	RunStreamMaxEvents   int           `env:"RUN_STREAM_MAX_EVENTS"`
+	RunStreamMaxBytes    int64         `env:"RUN_STREAM_MAX_BYTES"`
+	RunStreamGrace       time.Duration `env:"RUN_STREAM_GRACE"`
+	RelayStatusCheck     time.Duration `env:"RELAY_STATUS_CHECK"`
+}
+
+// HeartbeatDivisor makes the heartbeat fire three times per lease, so one missed beat does not lose the run.
+const HeartbeatDivisor = 3
+
+func (c ChatConfig) validate() []error {
+	var errs []error
+	if c.RunDeadline <= 0 || c.FinishTimeout <= 0 {
+		errs = append(errs, errors.New("CORE_CHAT_RUN_DEADLINE and CORE_CHAT_FINISH_TIMEOUT must be > 0"))
+	}
+	if c.JobVisibilityTimeout <= 0 || c.JobVisibilityTimeout <= c.RunDeadline+c.FinishTimeout {
+		errs = append(errs, errors.New("CORE_CHAT_JOB_VISIBILITY_TIMEOUT must be > CORE_CHAT_RUN_DEADLINE + CORE_CHAT_FINISH_TIMEOUT"))
+	}
+	return append(errs, c.validateLeaseAndStream()...)
+}
+
+func (c ChatConfig) validateLeaseAndStream() []error {
+	var errs []error
+	if c.RunLease <= 0 || c.RunHeartbeatTimeout <= 0 {
+		errs = append(errs, errors.New("CORE_CHAT_RUN_LEASE and CORE_CHAT_RUN_HEARTBEAT_TIMEOUT must be > 0"))
+	} else if c.RunHeartbeatTimeout >= c.RunLease/HeartbeatDivisor {
+		errs = append(errs, errors.New("CORE_CHAT_RUN_HEARTBEAT_TIMEOUT must be shorter than a third of CORE_CHAT_RUN_LEASE"))
+	}
+	if c.RunStreamMaxEvents < 1 || c.RunStreamMaxBytes < 1 {
+		errs = append(errs, errors.New("CORE_CHAT_RUN_STREAM_MAX_EVENTS and CORE_CHAT_RUN_STREAM_MAX_BYTES must be >= 1"))
+	}
+	if c.RunStreamGrace <= 0 || c.RelayStatusCheck <= 0 {
+		errs = append(errs, errors.New("CORE_CHAT_RUN_STREAM_GRACE and CORE_CHAT_RELAY_STATUS_CHECK must be > 0"))
 	}
 	return errs
 }
@@ -355,6 +402,7 @@ type Config struct {
 	Metrics                           MetricsConfig      `envPrefix:"METRICS_"`
 	LLMLog                            LLMLogConfig       `envPrefix:"LLM_LOG_"`
 	LLM                               LLMConfig          `envPrefix:"LLM_"`
+	Chat                              ChatConfig         `envPrefix:"CHAT_"`
 	Environment                       string             `env:"ENV"`
 	ServiceName                       string             `env:"SERVICE_NAME"`
 	HTTPAddr                          string             `env:"HTTP_ADDR"`
@@ -478,6 +526,7 @@ func (c Config) validate() error {
 		errs = append(errs, errors.New("CORE_LLM_LOG_CONTENT_MAX_BYTES must be >= 1"))
 	}
 	errs = append(errs, c.LLM.validate()...)
+	errs = append(errs, c.Chat.validate()...)
 	errs = append(errs, c.Auth.validate()...)
 	errs = append(errs, c.App.validate()...)
 	errs = append(errs, c.Ragx.validate()...)

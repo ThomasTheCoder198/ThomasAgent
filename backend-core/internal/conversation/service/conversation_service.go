@@ -36,15 +36,16 @@ type ConversationServiceImpl struct {
 	pool          *pgxpool.Pool
 	conversations repository.ConversationRepo
 	messages      repository.MessageRepo
+	runs          repository.RunRepo
 	agents        agentrepository.AgentRepo
 	kbs           agentservice.KnowledgeBaseLookup
 	cfg           config.ConversationConfig
 	log           *slog.Logger
 }
 
-func NewConversationService(pool *pgxpool.Pool, conversations repository.ConversationRepo, messages repository.MessageRepo,
+func NewConversationService(pool *pgxpool.Pool, conversations repository.ConversationRepo, messages repository.MessageRepo, runs repository.RunRepo,
 	agents agentrepository.AgentRepo, kbs agentservice.KnowledgeBaseLookup, cfg config.ConversationConfig, log *slog.Logger) ConversationService {
-	return &ConversationServiceImpl{pool: pool, conversations: conversations, messages: messages, agents: agents, kbs: kbs, cfg: cfg, log: log}
+	return &ConversationServiceImpl{pool: pool, conversations: conversations, messages: messages, runs: runs, agents: agents, kbs: kbs, cfg: cfg, log: log}
 }
 
 // ParseLimit turns the query value into a limit (ruling A2-11): empty is the default, anything else 1..max.
@@ -109,7 +110,23 @@ func (s *ConversationServiceImpl) Get(ctx context.Context, id uuid.UUID) (model.
 	if !kb.Missing {
 		scope.ToolSources = append(scope.ToolSources, model.ToolSource{Line: model.LineKB, Name: kb.Name})
 	}
-	return model.ConversationDetail{ID: conversation.ID, Title: conversation.Title, AgentID: conversation.AgentID, Scope: scope, Messages: messages}, nil
+	lastRun, err := s.lastRun(ctx, id)
+	if err != nil {
+		return model.ConversationDetail{}, err
+	}
+	return model.ConversationDetail{ID: conversation.ID, Title: conversation.Title, AgentID: conversation.AgentID, Scope: scope, Messages: messages, LastRun: lastRun}, nil
+}
+
+// lastRun reads the latest run only after the conversation passed the tenant and user check, so it never leaks a run id.
+func (s *ConversationServiceImpl) lastRun(ctx context.Context, conversationID uuid.UUID) (*model.RunSummary, error) {
+	run, ok, err := s.runs.LatestRun(ctx, s.pool, conversationID)
+	if err != nil {
+		return nil, errors.Normalize(err)
+	}
+	if !ok {
+		return nil, nil
+	}
+	return &model.RunSummary{ID: run.ID, Status: run.Status, ErrorCode: run.ErrorCode, RequestID: run.RequestID}, nil
 }
 
 // lookupKB never fails a read. Index amendment 18: only KB_NOT_FOUND marks the KB missing; an outage leaves the name

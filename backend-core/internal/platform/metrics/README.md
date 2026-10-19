@@ -9,6 +9,7 @@ metrics are served (`cmd/core`) or when they are recorded (the instrumented pack
 - `New(httpBuckets, llmBuckets)` — `cmd/core` at startup, from `config.MetricsConfig`.
 - `Handler()` — the internal `/metrics` listener (OpenMetrics, so exemplars survive).
 - `RegisterJobStream(stream)` — consumer startup emits the DLQ counter at zero before failures occur.
+- `ObserveChatRunQueue` — `chat_run_queue_seconds`, the wait between a chat run's outbox insert and a worker's claim (no labels), called by `chat/worker`.
 - `ObserveHTTP`, `ObserveOutbound`, `ObserveJob`, `SetOutboxBacklog`, `ObserveLLMCall` — called through small
   interfaces declared by `httpx`, `llmprovider`, `outbound`, `jobs` and `calllog`.
 

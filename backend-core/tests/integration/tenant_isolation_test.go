@@ -45,7 +45,7 @@ func newChatAPIFixture(t *testing.T) *chatAPIFixture {
 	pool := base.llm.pool
 	userID := seedUser(t, pool, "owner@test.local")
 	paging := config.ConversationConfig{PageDefaultLimit: 2, PageMaxLimit: 5}
-	conversations := convservice.NewConversationService(pool, convrepository.NewConversationRepo(), convrepository.NewMessageRepo(),
+	conversations := convservice.NewConversationService(pool, convrepository.NewConversationRepo(), convrepository.NewMessageRepo(), convrepository.NewRunRepo(),
 		agentrepository.NewAgentRepo(), base.ragx.caller(t, base.logs), paging, logger(t, base.logs))
 	router := httpx.NewRouter(httpx.NewSlogErrorLogger(logger(t, base.logs)))
 	router.Use(func(ctx *gin.Context) {
@@ -80,9 +80,8 @@ func TestTenantIsolation_AgentsConversationsRuns(t *testing.T) {
 	conv := uuid.New()
 	_, _, err := f.store.EnsureConversation(ctxA, conv, uuid.MustParse(agentID), f.user)
 	require.NoError(t, err)
-	require.NoError(t, f.store.AppendUserMessage(ctxA, conv, userText("u1", "bí mật của A")))
-	run := convmodel.Run{ID: uuid.New(), ConversationID: conv, AssistantMessageID: "a1", Status: convmodel.RunStatusRunning, DeadlineAt: time.Now().Add(time.Minute)}
-	require.NoError(t, f.store.StartRun(ctxA, run))
+	run, _, err := f.store.BeginRun(ctxA, submitInput(conv, uuid.MustParse(agentID), "u1", "bí mật của A", "a1"))
+	require.NoError(t, err)
 
 	require.Empty(t, listOf(t, send(f.router, http.MethodGet, "/api/v1/orgs/org-b/agents", "", nil)))
 	require.Empty(t, listOf(t, send(f.router, http.MethodGet, "/api/v1/orgs/org-b/conversations", "", nil)))
@@ -116,23 +115,33 @@ func TestTenantIsolation_ChatStoreWritesNeverCrossOrgs(t *testing.T) {
 	f := newChatAPIFixture(t)
 	ctxA, ctxB := conversationContext("org-a", f.user), conversationContext("org-b", f.user)
 	conv := uuid.New()
-	_, _, err := f.store.EnsureConversation(ctxA, conv, seedAgent(t, f.llm.pool, "org-a", "A"), f.user)
+	agentA := seedAgent(t, f.llm.pool, "org-a", "A")
+	_, _, err := f.store.EnsureConversation(ctxA, conv, agentA, f.user)
 	require.NoError(t, err)
-	require.NoError(t, f.store.AppendUserMessage(ctxA, conv, userText("u1", "bí mật của A")))
-	run := convmodel.Run{ID: uuid.New(), ConversationID: conv, AssistantMessageID: "a1", Status: convmodel.RunStatusRunning, DeadlineAt: time.Now().Add(time.Minute)}
-	require.NoError(t, f.store.StartRun(ctxA, run))
+	run, _, err := f.store.BeginRun(ctxA, submitInput(conv, agentA, "u1", "bí mật của A", "a1"))
+	require.NoError(t, err)
+	lease := claim(t, f.store, ctxA, run)
 
-	foreignRun := convmodel.Run{ID: uuid.New(), ConversationID: conv, AssistantMessageID: "b1", Status: convmodel.RunStatusRunning, DeadlineAt: time.Now().Add(time.Minute)}
-	require.Equal(t, errors.CodeConversationNotFound, errors.CodeOf(f.store.AppendUserMessage(ctxB, conv, userText("u2", "chèn vào"))))
-	require.Equal(t, errors.CodeConversationNotFound, errors.CodeOf(f.store.StartRun(ctxB, foreignRun)))
-	require.Equal(t, errors.CodeRunNotActive, errors.CodeOf(f.store.RecordStep(ctxB, convmodel.RunStep{RunID: run.ID, Step: 1,
-		Kind: convmodel.StepKindModel, Outcome: convmodel.StepOutcomeSuccess, DurationMS: 1, StartedAt: time.Now()})))
+	_, _, err = f.store.BeginRun(ctxB, submitInput(conv, agentA, "u2", "chèn vào", "b1"))
+	require.Equal(t, errors.CodeConversationNotFound, errors.CodeOf(err))
+	_, _, err = f.store.BeginRun(ctxB, regenerateInput(conv, agentA, "u1", "b1"))
+	require.Equal(t, errors.CodeConversationNotFound, errors.CodeOf(err))
+	_, _, result, err := f.store.ClaimRun(ctxB, run.ID, "worker-b", time.Minute)
+	require.NoError(t, err)
+	require.Equal(t, convmodel.ClaimResultNotRunning, result, "B cannot even see A's run, let alone claim it")
+	require.ErrorIs(t, f.store.RecordStep(ctxB, lease, convmodel.RunStep{RunID: run.ID, Step: 1,
+		Kind: convmodel.StepKindModel, Outcome: convmodel.StepOutcomeSuccess, DurationMS: 1, StartedAt: time.Now()}), errors.ErrRunLeaseLost)
+	require.ErrorIs(t, f.store.RenewLease(ctxB, lease, time.Minute), errors.ErrRunLeaseLost)
 	run.Status = convmodel.RunStatusCancelled
-	require.Equal(t, errors.CodeConversationNotFound, errors.CodeOf(f.store.FinishRun(ctxB, run,
+	require.Equal(t, errors.CodeConversationNotFound, errors.CodeOf(f.store.FinishRun(ctxB, lease, run,
 		convmodel.Message{ID: "a1", Role: convmodel.RoleAssistant, Parts: []byte(`[{"type":"text","text":"x"}]`)})))
+	failed, err := f.store.FailRun(ctxB, run.ID, string(errors.CodeRunInterrupted), false)
+	require.NoError(t, err)
+	require.False(t, failed, "B cannot fail A's run")
+	_, err = f.store.RunStatus(ctxB, run.ID)
+	require.Equal(t, errors.CodeNotFound, errors.CodeOf(err))
 	require.Equal(t, errors.CodeConversationNotFound, errors.CodeOf(f.store.SaveSummary(ctxB, conv, "tóm tắt giả", 1)))
 	require.Equal(t, errors.CodeConversationNotFound, errors.CodeOf(f.store.SetTitle(ctxB, conv, "stolen")))
-	require.Equal(t, errors.CodeConversationNotFound, errors.CodeOf(f.store.DropLastAssistant(ctxB, conv, "a1")))
 
 	history, err := f.store.LoadHistory(ctxA, conv, 10)
 	require.NoError(t, err)
@@ -145,6 +154,7 @@ func TestTenantIsolation_ChatStoreWritesNeverCrossOrgs(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, convmodel.RunStatusRunning, active.Status, "B did not finish A's run")
 	var runs, steps int
+	require.Equal(t, 1, countRows(t, f.llm.pool, `SELECT count(*) FROM outbox`), "B enqueued no job")
 	require.NoError(t, f.llm.pool.QueryRow(context.Background(), `SELECT count(*) FROM runs`).Scan(&runs))
 	require.NoError(t, f.llm.pool.QueryRow(context.Background(), `SELECT count(*) FROM run_steps`).Scan(&steps))
 	require.Equal(t, 1, runs)
@@ -171,7 +181,7 @@ func requireOrgRouter(t *testing.T, f *chatAPIFixture) *gin.Engine {
 		llmservice.NewOrgRoleService(pool, llmrepository.NewLLMModelRepo(llmrepository.NewProviderRepo()), llmrepository.NewRoleRepo()), testMaxBodyBytes))
 	mountAgentsForTest(orgScoped, agentcontroller.NewAgentController(
 		agentservice.NewAgentService(pool, agentrepository.NewAgentRepo(), f.ragx.caller(t, f.logs), newResolveService(f.llm), log), testMaxBodyBytes))
-	conversations := convservice.NewConversationService(pool, convrepository.NewConversationRepo(), convrepository.NewMessageRepo(),
+	conversations := convservice.NewConversationService(pool, convrepository.NewConversationRepo(), convrepository.NewMessageRepo(), convrepository.NewRunRepo(),
 		agentrepository.NewAgentRepo(), f.ragx.caller(t, f.logs), paging, log)
 	mountConversationsForTest(orgScoped, convcontroller.NewConversationController(conversations, paging, testMaxBodyBytes))
 	return router

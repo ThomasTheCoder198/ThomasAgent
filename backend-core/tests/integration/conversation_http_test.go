@@ -20,7 +20,7 @@ func TestConversationHTTP_ListPagesGetRenameDelete(t *testing.T) {
 	for _, id := range ids {
 		_, _, err := f.store.EnsureConversation(ctx, id, agentID, f.user)
 		require.NoError(t, err)
-		require.NoError(t, f.store.AppendUserMessage(ctx, id, userText("u-"+id.String(), "hi")))
+		appendUserMessage(t, f.llm.pool, ctx, id, userText("u-"+id.String(), "hi"))
 	}
 
 	first := send(f.router, http.MethodGet, "/api/v1/orgs/org-a/conversations", "", nil)
@@ -97,7 +97,7 @@ func TestConversationHTTP_SameOrgDifferentUserCannotReadOrChange(t *testing.T) {
 	id := uuid.New()
 	_, _, err := f.store.EnsureConversation(conversationContext("org-a", f.user), id, agent, f.user)
 	require.NoError(t, err)
-	require.NoError(t, f.store.AppendUserMessage(conversationContext("org-a", f.user), id, userText("u1", "private")))
+	appendUserMessage(t, f.llm.pool, conversationContext("org-a", f.user), id, userText("u1", "private"))
 	headers := map[string]string{"X-Test-User-Id": other.String()}
 	require.Empty(t, listOf(t, send(f.router, http.MethodGet, "/api/v1/orgs/org-a/conversations", "", headers)))
 	path := "/api/v1/orgs/org-a/conversations/" + id.String()
@@ -109,4 +109,47 @@ func TestConversationHTTP_SameOrgDifferentUserCannotReadOrChange(t *testing.T) {
 		require.NotContains(t, res.Body.String(), "private")
 	}
 	require.Equal(t, http.StatusOK, send(f.router, http.MethodGet, path, "", nil).Code)
+}
+
+// TestConversationHTTP_LastRunIsNullThenFollowsTheLatestRun: the detail's lastRun is how a reopened chat learns that
+// its last answer stopped early (amendment W7), and the request id lets support find the run's logs.
+func TestConversationHTTP_LastRunIsNullThenFollowsTheLatestRun(t *testing.T) {
+	f := newChatAPIFixture(t)
+	kb := uuid.New()
+	f.ragx.setResponder(kbResponder(map[uuid.UUID]string{kb: "Hợp đồng"}))
+	agentID := uuid.MustParse(dataOf(t, send(f.router, http.MethodPost, "/api/v1/orgs/org-a/agents", `{"name":"A","kbId":"`+kb.String()+`"}`, nil))["id"].(string))
+	ctx, firstRequestID := withRequestID(conversationContext("org-a", f.user))
+	conv := uuid.New()
+	_, _, err := f.store.EnsureConversation(ctx, conv, agentID, f.user)
+	require.NoError(t, err)
+	path := "/api/v1/orgs/org-a/conversations/" + conv.String()
+	lastRun := func() any {
+		res := send(f.router, http.MethodGet, path, "", nil)
+		require.Equal(t, http.StatusOK, res.Code)
+		detail := dataOf(t, res)
+		require.Contains(t, detail, "lastRun", "the key is always present: null means no run yet")
+		return detail["lastRun"]
+	}
+
+	require.Nil(t, lastRun(), "a conversation without runs")
+
+	first, _, err := f.store.BeginRun(ctx, submitInput(conv, agentID, "u1", "hỏi", "a1"))
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"id": first.ID.String(), "status": "running", "errorCode": "", "requestId": firstRequestID}, lastRun())
+
+	flipped, err := f.store.FailRun(ctx, first.ID, "RUN_INTERRUPTED", false)
+	require.NoError(t, err)
+	require.True(t, flipped)
+	require.Equal(t, map[string]any{"id": first.ID.String(), "status": "failed", "errorCode": "RUN_INTERRUPTED", "requestId": firstRequestID}, lastRun())
+
+	secondCtx, secondRequestID := withRequestID(conversationContext("org-a", f.user))
+	second, _, err := f.store.BeginRun(secondCtx, regenerateInput(conv, agentID, "u1", "a1"))
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"id": second.ID.String(), "status": "running", "errorCode": "", "requestId": secondRequestID}, lastRun(),
+		"the latest run wins")
+
+	other := seedUser(t, f.llm.pool, "other@test.local")
+	res := send(f.router, http.MethodGet, path, "", map[string]string{"X-Test-User-Id": other.String()})
+	require.Equal(t, http.StatusNotFound, res.Code, "another user's conversation is not found")
+	require.NotContains(t, res.Body.String(), second.ID.String())
 }

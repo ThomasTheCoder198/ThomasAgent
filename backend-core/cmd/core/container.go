@@ -148,10 +148,10 @@ func (rt *coreRuntime) initServiceContainer(ctx context.Context, pool *pgxpool.P
 	organizationService := orgservice.NewOrganizationService(pool, repositories.OrganizationRepo, clients.Ragx, provisionPolicy, uuid.NewString)
 	return ServiceContainer{
 		AgentService: agentservice.NewAgentService(pool, repositories.AgentRepo, clients.Ragx, resolveService, rt.log),
-		ConversationService: convservice.NewConversationService(pool, repositories.ConversationRepo, repositories.MessageRepo,
+		ConversationService: convservice.NewConversationService(pool, repositories.ConversationRepo, repositories.MessageRepo, repositories.RunRepo,
 			repositories.AgentRepo, clients.Ragx, rt.cfg.Conversation, rt.log),
 		RetentionService:  convservice.NewRetentionService(pool, repositories.ConversationRepo, rt.cfg.Conversation, time.Now),
-		ChatStore:         convservice.NewChatStore(pool, repositories.ConversationRepo, repositories.MessageRepo, repositories.RunRepo, repositories.AgentRepo),
+		ChatStore:         convservice.NewChatStore(pool, repositories.ConversationRepo, repositories.MessageRepo, repositories.RunRepo, repositories.AgentRepo, rt.cfg.Chat.FinishTimeout),
 		AuthService:       authService,
 		ProviderService:   providerService,
 		LLMModelService:   llmservice.NewLLMModelService(pool, repositories.LLMModelRepo, repositories.RoleRepo),

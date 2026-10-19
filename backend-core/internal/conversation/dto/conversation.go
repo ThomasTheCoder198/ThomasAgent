@@ -71,12 +71,22 @@ type MessageResponse struct {
 	Metadata json.RawMessage `json:"metadata"`
 }
 
+// RunSummaryResponse is the OpenAPI RunSummary.
+type RunSummaryResponse struct {
+	ID        uuid.UUID       `json:"id"`
+	Status    model.RunStatus `json:"status"`
+	ErrorCode string          `json:"errorCode"`
+	RequestID string          `json:"requestId"`
+}
+
 type ConversationDetailResponse struct {
-	ID       uuid.UUID         `json:"id"`
-	Title    string            `json:"title"`
-	AgentID  uuid.UUID         `json:"agentId"`
-	Scope    ChatScopeResponse `json:"scope"`
-	Messages []MessageResponse `json:"messages"`
+	ID      uuid.UUID         `json:"id"`
+	Title   string            `json:"title"`
+	AgentID uuid.UUID         `json:"agentId"`
+	Scope   ChatScopeResponse `json:"scope"`
+	// LastRun has no omitempty: the schema requires the key and null means "no run yet".
+	LastRun  *RunSummaryResponse `json:"lastRun"`
+	Messages []MessageResponse   `json:"messages"`
 }
 
 func NewConversationDetailResponse(d model.ConversationDetail) ConversationDetailResponse {
@@ -84,5 +94,10 @@ func NewConversationDetailResponse(d model.ConversationDetail) ConversationDetai
 	for _, m := range d.Messages {
 		messages = append(messages, MessageResponse{ID: m.ID, Role: m.Role, Parts: m.Parts, Metadata: m.Metadata})
 	}
-	return ConversationDetailResponse{ID: d.ID, Title: d.Title, AgentID: d.AgentID, Scope: NewChatScopeResponse(d.Scope), Messages: messages}
+	var lastRun *RunSummaryResponse
+	if d.LastRun != nil {
+		summary := RunSummaryResponse(*d.LastRun)
+		lastRun = &summary
+	}
+	return ConversationDetailResponse{ID: d.ID, Title: d.Title, AgentID: d.AgentID, Scope: NewChatScopeResponse(d.Scope), LastRun: lastRun, Messages: messages}
 }

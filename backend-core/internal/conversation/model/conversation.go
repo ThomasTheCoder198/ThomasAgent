@@ -87,6 +87,8 @@ type ConversationDetail struct {
 	AgentID  uuid.UUID
 	Scope    Scope
 	Messages []Message
+	// LastRun is the conversation's latest run, nil when it has none (W7).
+	LastRun *RunSummary
 }
 
 // Page asks for one page of a list; an empty Cursor is the first page.

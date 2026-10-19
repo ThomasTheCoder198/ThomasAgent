@@ -42,7 +42,10 @@ class ErrorCode(StrEnum):
     RATE_LIMITED = "RATE_LIMITED"
     RUN_ALREADY_ACTIVE = "RUN_ALREADY_ACTIVE"
     RUN_DEADLINE_EXCEEDED = "RUN_DEADLINE_EXCEEDED"
+    RUN_INTERRUPTED = "RUN_INTERRUPTED"
     RUN_NOT_ACTIVE = "RUN_NOT_ACTIVE"
+    RUN_OUTPUT_TOO_LARGE = "RUN_OUTPUT_TOO_LARGE"
+    RUN_STREAM_INCOMPLETE = "RUN_STREAM_INCOMPLETE"
     UNAUTHENTICATED = "UNAUTHENTICATED"
     UNSUPPORTED_MEDIA_TYPE = "UNSUPPORTED_MEDIA_TYPE"
     VALIDATION_FAILED = "VALIDATION_FAILED"
@@ -94,7 +97,10 @@ ERROR_DEFINITIONS: Final[dict[ErrorCode, ErrorDefinition]] = {
     ErrorCode.RATE_LIMITED: ErrorDefinition(http_status=429, retryable=True, message_vi="Quá nhiều yêu cầu, vui lòng thử lại sau.", message_en="Too many requests, please retry later."),
     ErrorCode.RUN_ALREADY_ACTIVE: ErrorDefinition(http_status=409, retryable=True, message_vi="Hội thoại đang có lượt trả lời chạy.", message_en="A run is already in progress in this conversation."),
     ErrorCode.RUN_DEADLINE_EXCEEDED: ErrorDefinition(http_status=504, retryable=True, message_vi="Lượt trả lời quá thời gian cho phép.", message_en="The run took too long."),
+    ErrorCode.RUN_INTERRUPTED: ErrorDefinition(http_status=503, retryable=True, message_vi="Lượt trả lời bị gián đoạn. Vui lòng thử lại.", message_en="The run was interrupted. Please try again."),
     ErrorCode.RUN_NOT_ACTIVE: ErrorDefinition(http_status=409, retryable=False, message_vi="Lượt trả lời đã kết thúc.", message_en="The run has already finished."),
+    ErrorCode.RUN_OUTPUT_TOO_LARGE: ErrorDefinition(http_status=422, retryable=False, message_vi="Câu trả lời vượt quá giới hạn cho phép.", message_en="The answer exceeded the allowed size."),
+    ErrorCode.RUN_STREAM_INCOMPLETE: ErrorDefinition(http_status=503, retryable=True, message_vi="Kết nối bị gián đoạn — tải lại để xem câu trả lời", message_en="The connection was interrupted — reload to see the answer"),
     ErrorCode.UNAUTHENTICATED: ErrorDefinition(http_status=401, retryable=False, message_vi="Bạn cần đăng nhập.", message_en="You need to sign in."),
     ErrorCode.UNSUPPORTED_MEDIA_TYPE: ErrorDefinition(http_status=415, retryable=False, message_vi="Kiểu nội dung yêu cầu không được hỗ trợ.", message_en="The request content type is not supported."),
     ErrorCode.VALIDATION_FAILED: ErrorDefinition(http_status=400, retryable=False, message_vi="Dữ liệu gửi lên không hợp lệ.", message_en="The request data is invalid."),

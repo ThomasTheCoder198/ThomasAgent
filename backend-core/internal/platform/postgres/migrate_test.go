@@ -111,15 +111,27 @@ func TestMigrate_UpAndDown(t *testing.T) {
 	}
 	require.True(t, traceparentColumn(), "the outbox traceparent migration adds the column")
 
-	// Down removes the outbox traceparent column, then the retention index, agents/chat tables, org version,
-	// organizations, trace columns, request IDs, AAD expansion, tenant defaults, hardening, identity/registry and platform.
+	runLeaseColumns := func() int {
+		var count int
+		require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_name = 'runs'
+			AND column_name IN ('lease_owner', 'lease_token', 'lease_until', 'request_id')`).Scan(&count))
+		return count
+	}
+	require.Equal(t, 4, runLeaseColumns(), "the run lease migration adds the lease columns and the request id")
+
+	// Down removes the run lease columns, then the outbox traceparent column, the retention index, agents/chat tables,
+	// org version, organizations, trace columns, request IDs, AAD expansion, tenant defaults, hardening,
+	// identity/registry and platform.
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
-	require.False(t, traceparentColumn(), "the first Down removes the outbox traceparent column")
+	require.Zero(t, runLeaseColumns(), "the first Down removes the run lease columns")
+	require.True(t, traceparentColumn())
+	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
+	require.False(t, traceparentColumn(), "the second Down removes the outbox traceparent column")
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))
 	var agentsExist bool
 	require.NoError(t, pool.QueryRow(ctx, `SELECT to_regclass('agents') IS NOT NULL`).Scan(&agentsExist))
-	require.False(t, agentsExist, "the third Down removes the agents/chat tables")
+	require.False(t, agentsExist, "the fourth Down removes the agents/chat tables")
 	var versionColumns int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM organizations`).Scan(&n), "organizations survive the agents/chat Down")
 	require.NoError(t, Migrate(ctx, url, migrations.FS, Down))

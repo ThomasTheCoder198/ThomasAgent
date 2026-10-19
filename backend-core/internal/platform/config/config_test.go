@@ -404,3 +404,61 @@ func TestConfig_LLMRejectsNonPositive(t *testing.T) {
 	cfg.LLM.GenkitCacheSize = 0
 	require.ErrorContains(t, cfg.validate(), "CORE_LLM_GENKIT_CACHE_SIZE")
 }
+
+func TestLoad_ChatRunDefaults(t *testing.T) {
+	setRequired(t)
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, 8, cfg.Worker.ChatConcurrency)
+	require.Equal(t, 5*time.Minute+40*time.Second, cfg.Chat.JobVisibilityTimeout)
+	require.Equal(t, 30*time.Second, cfg.Chat.RunLease)
+	require.Equal(t, 5*time.Second, cfg.Chat.RunHeartbeatTimeout)
+	require.Equal(t, 20000, cfg.Chat.RunStreamMaxEvents)
+	require.EqualValues(t, 8388608, cfg.Chat.RunStreamMaxBytes)
+	require.Equal(t, 2*time.Minute, cfg.Chat.RunStreamGrace)
+	require.Equal(t, 5*time.Second, cfg.Chat.RelayStatusCheck)
+	require.Equal(t, 5*time.Minute, cfg.Chat.RunDeadline)
+	require.Equal(t, 10*time.Second, cfg.Chat.FinishTimeout)
+}
+
+func TestLoad_RejectsInvalidChatRunSettings(t *testing.T) {
+	for name, value := range map[string]string{
+		"CORE_WORKER_CHAT_CONCURRENCY":     "0",
+		"CORE_CHAT_RUN_LEASE":              "0s",
+		"CORE_CHAT_RUN_HEARTBEAT_TIMEOUT":  "0s",
+		"CORE_CHAT_RUN_STREAM_MAX_EVENTS":  "0",
+		"CORE_CHAT_RUN_STREAM_MAX_BYTES":   "0",
+		"CORE_CHAT_RUN_STREAM_GRACE":       "0s",
+		"CORE_CHAT_RELAY_STATUS_CHECK":     "0s",
+		"CORE_CHAT_RUN_DEADLINE":           "0s",
+		"CORE_CHAT_FINISH_TIMEOUT":         "0s",
+		"CORE_CHAT_JOB_VISIBILITY_TIMEOUT": "0s",
+	} {
+		t.Run(name, func(t *testing.T) {
+			setRequired(t)
+			t.Setenv(name, value)
+			_, err := Load()
+			require.ErrorContains(t, err, name)
+		})
+	}
+}
+
+func TestLoad_ChatVisibilityMustExceedRunDeadlinePlusFinishTimeout(t *testing.T) {
+	setRequired(t)
+	t.Setenv("CORE_CHAT_RUN_DEADLINE", "5m")
+	t.Setenv("CORE_CHAT_FINISH_TIMEOUT", "10s")
+	t.Setenv("CORE_CHAT_JOB_VISIBILITY_TIMEOUT", "5m10s")
+	_, err := Load()
+	require.ErrorContains(t, err, "CORE_CHAT_JOB_VISIBILITY_TIMEOUT")
+	t.Setenv("CORE_CHAT_JOB_VISIBILITY_TIMEOUT", "5m11s")
+	_, err = Load()
+	require.NoError(t, err)
+}
+
+func TestLoad_ChatHeartbeatTimeoutMustFitInsideTheLeaseThird(t *testing.T) {
+	setRequired(t)
+	t.Setenv("CORE_CHAT_RUN_LEASE", "9s")
+	t.Setenv("CORE_CHAT_RUN_HEARTBEAT_TIMEOUT", "4s")
+	_, err := Load()
+	require.ErrorContains(t, err, "CORE_CHAT_RUN_HEARTBEAT_TIMEOUT")
+}

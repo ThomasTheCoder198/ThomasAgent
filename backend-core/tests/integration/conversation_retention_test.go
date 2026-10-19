@@ -59,7 +59,7 @@ func TestConversationRetentionAcrossTenantsAndActiveRuns(t *testing.T) {
 	var touchedOrg string
 	var touchedUser uuid.UUID
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT tenant_id,user_id FROM conversations WHERE id=$1`, ids[1]).Scan(&touchedOrg, &touchedUser))
-	require.NoError(t, newChatStore(pool).AppendUserMessage(conversationContext(touchedOrg, touchedUser), ids[1], userText("touch", "recent activity")))
+	appendUserMessage(t, pool, conversationContext(touchedOrg, touchedUser), ids[1], userText("touch", "recent activity"))
 	service := convservice.NewRetentionService(pool, convrepo.NewConversationRepo(), config.ConversationConfig{Retention: 30 * 24 * time.Hour, RetentionPurgeBatch: 1}, func() time.Time { return now })
 	count, err := service.PurgeInactiveConversations(t.Context())
 	require.NoError(t, err)

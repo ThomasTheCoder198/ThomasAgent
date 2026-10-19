@@ -10,4 +10,5 @@ const (
 	FieldVersion    = "version"
 	FieldPath       = "path"
 	FieldState      = "state"
+	FieldRunID      = "run_id"
 )

@@ -140,7 +140,10 @@ func workerRuntime(t *testing.T, env workerEnv, addr string, drain time.Duration
 	return &coreRuntime{
 		cfg: config.Config{
 			DatabaseURL: env.databaseURL, RedisURL: env.redisURL, ShutdownTimeout: time.Second, ReadHeaderTimeout: time.Second,
-			Worker:       config.WorkerConfig{Addr: addr, DrainTimeout: drain},
+			Worker: config.WorkerConfig{Addr: addr, DrainTimeout: drain, ChatConcurrency: 2},
+			Stream: config.ConsumerConfig{MaxDeliveries: 3, BlockTimeout: 50 * time.Millisecond, BatchSize: 1},
+			Chat: config.ChatConfig{RunDeadline: time.Minute, FinishTimeout: 5 * time.Second, JobVisibilityTimeout: 2 * time.Minute, RunLease: 30 * time.Second,
+				RunHeartbeatTimeout: 5 * time.Second, RunStreamMaxEvents: 100, RunStreamMaxBytes: 1 << 20, RunStreamGrace: time.Minute, RelayStatusCheck: time.Second},
 			OutboxRelay:  config.OutboxRelayConfig{BatchSize: 10, PollInterval: 10 * time.Millisecond},
 			Auth:         config.AuthConfig{SessionPurgeInterval: 20 * time.Millisecond},
 			Conversation: config.ConversationConfig{RetentionPurgeInterval: time.Hour}, SessionPurgeTimeout: time.Minute, ConversationRetentionPurgeTimeout: time.Minute,

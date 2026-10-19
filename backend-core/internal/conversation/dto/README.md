@@ -8,6 +8,7 @@ All JSON request and response types of the Conversations API, and their conversi
 - `ConversationSummaryResponse`, `NewConversationSummaryResponses`, `NewPageInfo`: list rows and `meta.page`. An empty list is `[]`, never `null`.
 - `ChatScopeResponse`, `NewChatScopeResponse`: the index's `ChatScope`.
 - `MessageResponse`, `ConversationDetailResponse`, `NewConversationDetailResponse`: messages are AI SDK `UIMessage`s whose `parts` and `metadata` are passed through as stored.
+- `RunSummaryResponse`: `lastRun` of the detail, `{id, status, errorCode, requestId}`. The key is always present (no `omitempty`) and is `null` when the conversation has no run, as the OpenAPI schema requires.
 
 ## Dependencies
 - Uses: `conversation/model`, `platform/httpx` (`PageInfo`), `github.com/google/uuid`

@@ -91,3 +91,11 @@ func TestHandler_IncludesRuntimeCollectors(t *testing.T) {
 	require.Contains(t, body, "go_goroutines")
 	require.Contains(t, body, "process_")
 }
+
+func TestObserveChatRunQueue_RecordsTheWaitWithoutLabels(t *testing.T) {
+	m := New(testHTTPBuckets, testLLMBuckets)
+	m.ObserveChatRunQueue(250 * time.Millisecond)
+	body := scrape(t, m)
+	require.Contains(t, body, "chat_run_queue_seconds_count 1")
+	require.Contains(t, body, "chat_run_queue_seconds_sum 0.25")
+}

@@ -5,26 +5,76 @@ import (
 	stderrors "errors"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	agentrepository "github.com/thomasthecoder198/thomastheragx/backend-core/internal/agent/repository"
 	authrepository "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/repository"
 	authservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/auth/service"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/chat/control"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/chat/runstream"
+	chatworker "github.com/thomasthecoder198/thomastheragx/backend-core/internal/chat/worker"
+	convmodel "github.com/thomasthecoder198/thomastheragx/backend-core/internal/conversation/model"
 	convrepository "github.com/thomasthecoder198/thomastheragx/backend-core/internal/conversation/repository"
 	convservice "github.com/thomasthecoder198/thomastheragx/backend-core/internal/conversation/service"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/httpx"
 	platformjobs "github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/jobs"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/logging"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/periodic"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/redisx"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/tenant"
 )
 
-// workerLoopCount is the number of background loops serveWorker starts next to the probe server.
-const workerLoopCount = 2
+const (
+	// workerLoopCount is the number of background loops serveWorker starts next to the probe server: the outbox
+	// relay, the periodic jobs and the chat.runs consumer.
+	workerLoopCount = 3
+	// chatRunsGroup is the consumer group every worker replica joins on chat.runs.
+	chatRunsGroup = "chat-run-workers"
+	// chatConsumerDependency is the readiness check that the chat.runs group exists.
+	chatConsumerDependency = "chat_runs_group"
+	// chatBatchSize is one entry per poll: a poller runs its batch serially, and a run lasts minutes.
+	chatBatchSize = 1
+	// ownerSuffixLength shortens a uuid into a per-process suffix for the lease owner and consumer name.
+	ownerSuffixLength = 8
+)
+
+// workerOwner names this process in lease_owner, logs and as its consumer name; it is unique per process.
+func workerOwner() string {
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		host = "worker"
+	}
+	return fmt.Sprintf("%s-%d-%s", host, os.Getpid(), uuid.NewString()[:ownerSuffixLength])
+}
+
+// chatRunConsumer wires the chat.runs consumer to the run handler. Until 2b-4 the executor is the temporary placeholder.
+func (rt *coreRuntime) chatRunConsumer(pool *pgxpool.Pool, redisClient *redis.Client) (*platformjobs.Consumer, *chatworker.Handler) {
+	owner := workerOwner()
+	store := convservice.NewChatStore(pool, convrepository.NewConversationRepo(), convrepository.NewMessageRepo(), convrepository.NewRunRepo(), agentrepository.NewAgentRepo(), rt.cfg.Chat.FinishTimeout)
+	handler := &chatworker.Handler{
+		Store: store, Control: control.NewBus(redisClient),
+		Stream:   runstream.NewWriter(redisClient, rt.cfg.Chat.FinishTimeout, rt.cfg.Chat.RunStreamGrace),
+		Executor: chatworker.PlaceholderExecutor{Store: store, FinishTimeout: rt.cfg.Chat.FinishTimeout, Log: rt.log},
+		Cfg:      rt.cfg.Chat, Log: rt.log, Owner: owner,
+	}
+	consumer := &platformjobs.Consumer{
+		Redis: redisClient, Stream: convmodel.StreamChatRuns, GroupName: chatRunsGroup, ConsumerName: owner,
+		MaxDeliveries: rt.cfg.Stream.MaxDeliveries, VisibilityTimeout: rt.cfg.Chat.JobVisibilityTimeout, BlockTimeout: rt.cfg.Stream.BlockTimeout,
+		BatchSize: chatBatchSize, Concurrency: rt.cfg.Worker.ChatConcurrency, DrainTimeout: rt.cfg.Worker.DrainTimeout, Log: rt.log,
+	}
+	if rt.metrics != nil { // a nil *Metrics inside the interface would panic on the first call
+		handler.Metrics = rt.metrics
+		consumer.Metrics = rt.metrics
+	}
+	return consumer, handler
+}
 
 func (rt *coreRuntime) workerJobs(pool *pgxpool.Pool) []periodic.Job {
 	auth := authservice.NewAuthService(authrepository.NewUserRepo(pool), authrepository.NewSessionRepo(pool, rt.cfg.Auth.SessionTouchInterval), pool, rt.cfg.Auth, time.Now)
@@ -51,6 +101,11 @@ func (rt *coreRuntime) runWorker(ctx context.Context) error {
 // fails. Either way the background loops are stopped and drained before it returns, because the caller closes the
 // database pool right after.
 func (rt *coreRuntime) serveWorker(ctx context.Context, pool *pgxpool.Pool, redisClient *redis.Client, jobs []periodic.Job) error {
+	chatConsumer, chatHandler := rt.chatRunConsumer(pool, redisClient)
+	// The group exists before the probe server answers, so readiness means "can read chat jobs".
+	if err := chatConsumer.EnsureGroup(ctx); err != nil {
+		return err
+	}
 	relay := &platformjobs.OutboxRelay{Pool: pool, Redis: redisClient, BatchSize: rt.cfg.OutboxRelay.BatchSize, PollInterval: rt.cfg.OutboxRelay.PollInterval, Log: rt.log, Metrics: rt.metrics}
 	runner := periodic.Runner{Redis: redisClient, Log: rt.log, Metrics: rt.metrics}
 	server := &http.Server{Addr: rt.cfg.Worker.Addr, Handler: rt.workerHandler(pool, redisClient), ReadHeaderTimeout: rt.cfg.ReadHeaderTimeout}
@@ -63,6 +118,10 @@ func (rt *coreRuntime) serveWorker(ctx context.Context, pool *pgxpool.Pool, redi
 	loops.Add(workerLoopCount)
 	go func() { defer loops.Done(); reportLoopFailure(loopFailed, relay.Run(loopCtx)) }()
 	go func() { defer loops.Done(); reportLoopFailure(loopFailed, runner.Run(loopCtx, jobs)) }()
+	go func() {
+		defer loops.Done()
+		reportLoopFailure(loopFailed, chatConsumer.Run(loopCtx, chatHandler.Handle))
+	}()
 	rt.log.InfoContext(ctx, "worker started", logging.FieldAddr, rt.cfg.Worker.Addr)
 	var runErr error
 	select {
@@ -108,7 +167,9 @@ func (rt *coreRuntime) stopWorker(ctx context.Context, server *http.Server, loop
 func (rt *coreRuntime) workerHandler(pool *pgxpool.Pool, redisClient *redis.Client) http.Handler {
 	gin.SetMode(gin.ReleaseMode)
 	router := httpx.NewRouter(httpx.NewSlogErrorLogger(rt.log), httpx.LogAccess(rt.log), httpx.RecordMetrics(rt.metrics))
-	httpx.MountHealth(router, rt.readinessChecks(pool, redisClient))
+	checks := rt.readinessChecks(pool, redisClient)
+	checks[chatConsumerDependency] = redisx.GroupProbe{Client: redisClient, Stream: convmodel.StreamChatRuns, Group: chatRunsGroup}
+	httpx.MountHealth(router, checks)
 	router.GET("/metrics", gin.WrapH(rt.metrics.Handler()))
 	return router
 }

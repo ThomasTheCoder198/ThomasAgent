@@ -7,7 +7,8 @@ The system-only `PurgeInactiveAcrossTenants` deletes a bounded batch of inactive
 ## Entry points
 - `ConversationRepo` (`conversation_repository.go`): `ListPage` returns up to `limit+1` rows so the caller can tell a next page exists.
 - `MessageRepo` (`message_repository.go`): `ListLatest`, `ListAll` and `ListRange` return oldest first.
-- `RunRepo` (`run_repository.go`): `ExpireStale` fails this conversation's overdue `running` rows (R6); `PeakInputTokens` is the largest `input_tokens` of a `model` step in the conversation's latest finished run (0 when none), the input of M2b's compaction trigger.
+- `RunRepo` (`run_repository.go`): `ExpireStale` fails a `running` row after its deadline plus the configured finish window (`RUN_DEADLINE_EXCEEDED`), or earlier when its lease lapses (`RUN_INTERRUPTED`); a live lease remains valid through the finish window. `PeakInputTokens` is the largest `input_tokens` of a `model` step in the conversation's latest finished run (0 when none), the input of M2b's compaction trigger; `LatestRun` is the newest run of a conversation (for `lastRun`).
+- Lease-fenced run writes (amendment W5), all compared with the database `now()`: `ClaimRun` (fresh token per attempt, tenant and conversation owner checked), `ClaimState` (explains a refused claim), `RenewLease`, `InsertFencedStep` (holds the run row `FOR UPDATE` for the statement), `FinishFencedRun` (also clears the lease) and `FailRun` (the interrupted / queued-past-deadline transition; `onlyIfExpired` also needs a lapsed lease). They return `ok=false` when no row matched; the service turns that into `RUN_LEASE_LOST`.
 
 ## Dependencies
 - Uses: `conversation/model`, `platform/postgres`, `platform/tenant`, `auth/middleware`
@@ -16,7 +17,7 @@ The system-only `PurgeInactiveAcrossTenants` deletes a bounded batch of inactive
 ## Run & test
 ```bash
 cd backend-core
-TESTCONTAINERS_RYUK_DISABLED=true go test ./tests/integration -run "TestChatRepositories|TestChatMigration" -p 1 -count=1
+TESTCONTAINERS_RYUK_DISABLED=true go test ./tests/integration -run "TestChatRepositories|TestChatMigration|TestRunLease_" -p 1 -count=1
 ```
 
 ## Conventions

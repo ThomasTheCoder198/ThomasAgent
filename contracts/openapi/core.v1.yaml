@@ -1046,13 +1046,27 @@ components:
     ConversationDetail:
       type: object
       additionalProperties: false
-      required: [id, title, agentId, scope, messages]
+      required: [id, title, agentId, scope, messages, lastRun]
       properties:
         id: { type: string, format: uuid }
         title: { type: string }
         agentId: { type: string, format: uuid }
         scope: { $ref: "#/components/schemas/ChatScope" }
         messages: { type: array, items: { $ref: "#/components/schemas/UIMessage" } }
+        lastRun:
+          description: The conversation's latest run; null when it has none. A frontend uses it to offer a retry after a run that stopped early.
+          oneOf:
+            - $ref: "#/components/schemas/RunSummary"
+            - type: "null"
+    RunSummary:
+      type: object
+      additionalProperties: false
+      required: [id, status, errorCode, requestId]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [running, completed, failed, cancelled] }
+        errorCode: { type: string, description: Catalog code of a failed run; empty otherwise }
+        requestId: { type: string, description: The X-Request-Id of the chat request that started the run; empty for runs created before it was stored }
     Meta:
       type: object
       required: [requestId]

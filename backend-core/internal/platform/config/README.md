@@ -35,6 +35,8 @@ Metric buckets must be nonempty, finite, positive and strictly ascending. The me
 `ConversationConfig` (`CORE_CONVERSATION_*`) bounds the conversation list page: `PAGE_DEFAULT_LIMIT` (30) must be >= 1 and not above `PAGE_MAX_LIMIT` (100).
 It also sets inactive conversation retention (720h), purge interval (1h), and batch size (500). All three must be positive.
 
+`WorkerConfig.ChatConcurrency` (`CORE_WORKER_CHAT_CONCURRENCY`, 8) is how many chat runs one worker executes at once. `ChatConfig` (`CORE_CHAT_*`) tunes the chat run in the worker (amendment W): `RUN_DEADLINE` (5m) and `FINISH_TIMEOUT` (10s) bound a run and its partial save; `JOB_VISIBILITY_TIMEOUT` (5m40s) must be greater than their sum, or startup fails; `RUN_LEASE` (30s) and `RUN_HEARTBEAT_TIMEOUT` (5s, must be shorter than a third of the lease, because the heartbeat beats three times per lease); `RUN_STREAM_MAX_EVENTS` (20000), `RUN_STREAM_MAX_BYTES` (8388608) and `RUN_STREAM_GRACE` (2m) bound and expire a run stream; `RELAY_STATUS_CHECK` (5s) is how often the SSE relay consults the run row. 2b-4 adds the run loop's own `CORE_CHAT_*` keys to the same struct.
+
 Log levels are validated through `logging.ParseLevel`, the same parser used to construct loggers; unknown names fail startup.
 
 The logger's field contract is defined in the [logging README](../logging/README.md#log-field-contract). `Config.Environment` supplies every logger's deployment environment.

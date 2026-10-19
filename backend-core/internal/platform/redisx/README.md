@@ -7,6 +7,8 @@ Stream operations belong to the jobs module.
 ## Entry points
 - `Open(ctx, url)`: create and ping a go-redis client.
 - `ReadinessProbe.Ping(ctx)`: adapt Redis to the HTTP readiness interface.
+- `GroupProbe.Ping(ctx)`: ready only when a consumer group exists on a stream; `core worker` uses it so it is not ready before it can read `chat.runs`.
+- `redistest.Start(t)`: a disposable Redis container for tests (see its README).
 
 ## Dependencies
 - Uses: go-redis v9, `internal/errors`, OpenTelemetry.

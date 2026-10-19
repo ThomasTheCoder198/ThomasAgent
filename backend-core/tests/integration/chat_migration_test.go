@@ -11,7 +11,7 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/migrations"
 )
 
-// Down rolls back the outbox traceparent column, then the retention index, then the agents/chat migration;
+// Down rolls back the run lease columns, then the outbox traceparent column, the retention index, and the agents/chat migration;
 // both directions run on the throwaway container of pgtest, never on a dev database.
 func TestChatMigration_DownAndUpAgain(t *testing.T) {
 	pool := pgtest.Start(t)
@@ -37,11 +37,22 @@ func TestChatMigration_DownAndUpAgain(t *testing.T) {
 		return found
 	}
 
+	runLeaseColumns := func() int {
+		var count int
+		require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_name = 'runs'
+			AND column_name IN ('lease_owner', 'lease_token', 'lease_until', 'request_id')`).Scan(&count))
+		return count
+	}
+
 	for _, table := range chatTables {
 		require.True(t, present(table), table)
 	}
 	require.True(t, capabilitiesEdited())
 	require.True(t, present("idx_conversations_updated_at"))
+	require.True(t, traceparentColumn())
+	require.True(t, runLeaseColumns() == 4)
+	require.NoError(t, postgres.Migrate(ctx, url, migrations.FS, postgres.Down))
+	require.Zero(t, runLeaseColumns(), "the run lease migration is the latest")
 	require.True(t, traceparentColumn())
 	require.NoError(t, postgres.Migrate(ctx, url, migrations.FS, postgres.Down))
 	require.False(t, traceparentColumn())
@@ -62,4 +73,5 @@ func TestChatMigration_DownAndUpAgain(t *testing.T) {
 	require.True(t, capabilitiesEdited())
 	require.NoError(t, postgres.Migrate(ctx, url, migrations.FS, postgres.Up))
 	require.True(t, present("idx_conversations_updated_at"))
+	require.Equal(t, 4, runLeaseColumns(), "Up again restores the run lease columns")
 }

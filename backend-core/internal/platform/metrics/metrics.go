@@ -50,6 +50,7 @@ const (
 	llmCostName          = "llm_cost_usd_total"
 	llmDurationName      = "llm_call_duration_seconds"
 	llmTTFTName          = "llm_ttft_seconds"
+	chatRunQueueName     = "chat_run_queue_seconds"
 )
 
 // Unknown client verbs share one label so arbitrary text cannot add series.
@@ -86,6 +87,7 @@ type Metrics struct {
 	llmCost          *prometheus.CounterVec
 	llmDuration      *prometheus.HistogramVec
 	llmTTFT          *prometheus.HistogramVec
+	chatRunQueue     prometheus.Histogram
 }
 
 func New(httpBuckets, llmBuckets []float64) *Metrics {
@@ -93,6 +95,7 @@ func New(httpBuckets, llmBuckets []float64) *Metrics {
 	collector.addHTTP(httpBuckets)
 	collector.addJobs()
 	collector.addLLM(llmBuckets)
+	collector.addChat(httpBuckets)
 	collector.registry.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	return collector
 }
@@ -145,6 +148,14 @@ func (m *Metrics) addLLM(buckets []float64) {
 		Name: llmTTFTName, Help: "Time to first token in seconds.", Buckets: buckets,
 	}, model)
 	m.registry.MustRegister(m.llmCalls, m.llmTokens, m.llmCost, m.llmDuration, m.llmTTFT)
+}
+
+// addChat registers the worker-side chat run metrics; the queue wait is small when healthy, so it shares the HTTP buckets.
+func (m *Metrics) addChat(buckets []float64) {
+	m.chatRunQueue = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name: chatRunQueueName, Help: "Seconds a chat run waited between its outbox insert and a worker claim.", Buckets: buckets,
+	})
+	m.registry.MustRegister(m.chatRunQueue)
 }
 
 // Handler serves OpenMetrics so Prometheus receives the request_id exemplars.
@@ -205,4 +216,9 @@ func observe(observer prometheus.Observer, value float64, requestID string) {
 		return
 	}
 	observer.Observe(value)
+}
+
+// ObserveChatRunQueue records how long a run waited for a worker (amendment W9).
+func (m *Metrics) ObserveChatRunQueue(waited time.Duration) {
+	m.chatRunQueue.Observe(waited.Seconds())
 }

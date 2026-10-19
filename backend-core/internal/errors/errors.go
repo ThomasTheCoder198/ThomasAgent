@@ -42,7 +42,10 @@ const (
 	CodeRateLimited                Code = "RATE_LIMITED"
 	CodeRunAlreadyActive           Code = "RUN_ALREADY_ACTIVE"
 	CodeRunDeadlineExceeded        Code = "RUN_DEADLINE_EXCEEDED"
+	CodeRunInterrupted             Code = "RUN_INTERRUPTED"
 	CodeRunNotActive               Code = "RUN_NOT_ACTIVE"
+	CodeRunOutputTooLarge          Code = "RUN_OUTPUT_TOO_LARGE"
+	CodeRunStreamIncomplete        Code = "RUN_STREAM_INCOMPLETE"
 	CodeUnauthenticated            Code = "UNAUTHENTICATED"
 	CodeUnsupportedMediaType       Code = "UNSUPPORTED_MEDIA_TYPE"
 	CodeValidationFailed           Code = "VALIDATION_FAILED"
@@ -86,7 +89,10 @@ const (
 	ErrRateLimited                NamedError = NamedError(CodeRateLimited)
 	ErrRunAlreadyActive           NamedError = NamedError(CodeRunAlreadyActive)
 	ErrRunDeadlineExceeded        NamedError = NamedError(CodeRunDeadlineExceeded)
+	ErrRunInterrupted             NamedError = NamedError(CodeRunInterrupted)
 	ErrRunNotActive               NamedError = NamedError(CodeRunNotActive)
+	ErrRunOutputTooLarge          NamedError = NamedError(CodeRunOutputTooLarge)
+	ErrRunStreamIncomplete        NamedError = NamedError(CodeRunStreamIncomplete)
 	ErrUnauthenticated            NamedError = NamedError(CodeUnauthenticated)
 	ErrUnsupportedMediaType       NamedError = NamedError(CodeUnsupportedMediaType)
 	ErrValidationFailed           NamedError = NamedError(CodeValidationFailed)
@@ -168,8 +174,14 @@ func LookupDefinition(code Code) ErrorDefinition {
 		return ErrorDefinition{HTTPStatus: 409, Retryable: true, MessageVI: "Hội thoại đang có lượt trả lời chạy.", MessageEN: "A run is already in progress in this conversation."}
 	case CodeRunDeadlineExceeded:
 		return ErrorDefinition{HTTPStatus: 504, Retryable: true, MessageVI: "Lượt trả lời quá thời gian cho phép.", MessageEN: "The run took too long."}
+	case CodeRunInterrupted:
+		return ErrorDefinition{HTTPStatus: 503, Retryable: true, MessageVI: "Lượt trả lời bị gián đoạn. Vui lòng thử lại.", MessageEN: "The run was interrupted. Please try again."}
 	case CodeRunNotActive:
 		return ErrorDefinition{HTTPStatus: 409, Retryable: false, MessageVI: "Lượt trả lời đã kết thúc.", MessageEN: "The run has already finished."}
+	case CodeRunOutputTooLarge:
+		return ErrorDefinition{HTTPStatus: 422, Retryable: false, MessageVI: "Câu trả lời vượt quá giới hạn cho phép.", MessageEN: "The answer exceeded the allowed size."}
+	case CodeRunStreamIncomplete:
+		return ErrorDefinition{HTTPStatus: 503, Retryable: true, MessageVI: "Kết nối bị gián đoạn — tải lại để xem câu trả lời", MessageEN: "The connection was interrupted — reload to see the answer"}
 	case CodeUnauthenticated:
 		return ErrorDefinition{HTTPStatus: 401, Retryable: false, MessageVI: "Bạn cần đăng nhập.", MessageEN: "You need to sign in."}
 	case CodeUnsupportedMediaType:

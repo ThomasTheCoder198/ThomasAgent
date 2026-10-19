@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -12,25 +13,34 @@ import (
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/conversation/model"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/conversation/repository"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/errors"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/jobs"
 	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/postgres"
+	"github.com/thomasthecoder198/thomastheragx/backend-core/internal/platform/requestid"
 )
 
 const (
 	// messagesPerTurn: one user and one assistant message make a turn (ruling A2-15).
 	messagesPerTurn = 2
 	fieldAgentID    = "agentId"
+	fieldMessage    = "message"
+	fieldAssistant  = "assistantMessageId"
+	fieldStatus     = "status"
 )
 
-// ChatStore is the persistence port of the M2 run loop (index interface, verbatim). Every method scopes by the
-// tenant and authenticated user in ctx; writers of one conversation are serialized by its row lock.
+// ChatStore is the persistence port of the M2 run (amendment W; the index interface, updated). Every method scopes by
+// the tenant in ctx, and by the authenticated user where it names a conversation; writers of one conversation are
+// serialized by its row lock. BeginRun is the API side; ClaimRun to FailRun are the worker side, fenced by the lease.
 type ChatStore interface {
 	EnsureConversation(ctx context.Context, id, agentID uuid.UUID, userID uuid.UUID) (model.Conversation, bool, error)
 	LoadHistory(ctx context.Context, conversationID uuid.UUID, turns int) (model.History, error)
-	AppendUserMessage(ctx context.Context, conversationID uuid.UUID, msg model.Message) error
-	StartRun(ctx context.Context, run model.Run) error
-	DropLastAssistant(ctx context.Context, conversationID uuid.UUID, messageID string) error
-	RecordStep(ctx context.Context, step model.RunStep) error
-	FinishRun(ctx context.Context, run model.Run, assistant model.Message) error
+	// BeginRun applies the message mutation, inserts the run and enqueues its chat.runs job in one transaction.
+	BeginRun(ctx context.Context, in model.BeginRunInput) (model.Run, string, error)
+	ClaimRun(ctx context.Context, runID uuid.UUID, owner string, lease time.Duration) (model.Run, model.Lease, model.ClaimResult, error)
+	RenewLease(ctx context.Context, lease model.Lease, d time.Duration) error
+	RecordStep(ctx context.Context, lease model.Lease, step model.RunStep) error
+	FinishRun(ctx context.Context, lease model.Lease, run model.Run, assistant model.Message) error
+	FailRun(ctx context.Context, runID uuid.UUID, code string, onlyIfExpired bool) (bool, error)
+	RunStatus(ctx context.Context, runID uuid.UUID) (model.Run, error)
 	SaveSummary(ctx context.Context, conversationID uuid.UUID, summary string, throughSeq int64) error
 	ListMessagesRange(ctx context.Context, conversationID uuid.UUID, afterSeq, throughSeq int64, limit int) ([]model.Message, error)
 	SetTitle(ctx context.Context, conversationID uuid.UUID, title string) error
@@ -43,11 +53,12 @@ type ChatStoreImpl struct {
 	messages      repository.MessageRepo
 	runs          repository.RunRepo
 	agents        agentrepository.AgentRepo
+	finishTimeout time.Duration
 }
 
 func NewChatStore(pool *pgxpool.Pool, conversations repository.ConversationRepo, messages repository.MessageRepo,
-	runs repository.RunRepo, agents agentrepository.AgentRepo) ChatStore {
-	return &ChatStoreImpl{pool: pool, conversations: conversations, messages: messages, runs: runs, agents: agents}
+	runs repository.RunRepo, agents agentrepository.AgentRepo, finishTimeout time.Duration) ChatStore {
+	return &ChatStoreImpl{pool: pool, conversations: conversations, messages: messages, runs: runs, agents: agents, finishTimeout: finishTimeout}
 }
 
 // EnsureConversation follows ruling A2-14.
@@ -133,63 +144,183 @@ func (s *ChatStoreImpl) LoadHistory(ctx context.Context, conversationID uuid.UUI
 	return model.History{Conversation: conversation, Messages: kept, PeakInputTokens: peak}, nil
 }
 
-func (s *ChatStoreImpl) AppendUserMessage(ctx context.Context, conversationID uuid.UUID, msg model.Message) error {
-	msg.Role = model.RoleUser
-	return s.locked(ctx, conversationID, func(tx pgx.Tx) error {
-		if err := s.messages.InsertMessage(ctx, tx, conversationID, msg); err != nil {
+// BeginRun is the only way to start a run, so no run exists without its job. It expires this conversation's dead
+// runs first, so a crashed replica never locks it (R6). The request id of the call is the run's id everywhere (W9).
+func (s *ChatStoreImpl) BeginRun(ctx context.Context, in model.BeginRunInput) (model.Run, string, error) {
+	if err := validateBeginRun(in); err != nil {
+		return model.Run{}, "", err
+	}
+	user, ok := authmiddleware.UserFromContext(ctx)
+	if !ok || user.ID == uuid.Nil {
+		return model.Run{}, "", errors.ErrConversationNotFound
+	}
+	// The outbox row and the run row must agree, so a missing id is settled here rather than in each of them.
+	if !requestid.IsValid(requestid.FromContext(ctx)) {
+		ctx = requestid.NewContext(ctx, requestid.NewJob())
+	}
+	run := model.Run{ID: uuid.New(), ConversationID: in.ConversationID, AssistantMessageID: in.AssistantMessageID,
+		Status: model.RunStatusRunning, DeadlineAt: in.Deadline, RequestID: requestid.FromContext(ctx)}
+	var outboxID string
+	err := s.locked(ctx, in.ConversationID, func(tx pgx.Tx, conversation model.Conversation) error {
+		if err := checkConversationAgent(conversation, in.AgentID); err != nil {
 			return err
 		}
-		return s.conversations.Touch(ctx, tx, conversationID)
-	})
-}
-
-// StartRun expires this conversation's dead runs first, so a crashed replica never locks it (R6).
-func (s *ChatStoreImpl) StartRun(ctx context.Context, run model.Run) error {
-	return s.locked(ctx, run.ConversationID, func(tx pgx.Tx) error {
-		if _, err := s.runs.ExpireStale(ctx, tx, run.ConversationID); err != nil {
+		if _, err := s.runs.ExpireStale(ctx, tx, in.ConversationID, s.finishTimeout); err != nil {
 			return err
 		}
-		return s.runs.InsertRun(ctx, tx, run)
-	})
-}
-
-func (s *ChatStoreImpl) DropLastAssistant(ctx context.Context, conversationID uuid.UUID, messageID string) error {
-	return s.locked(ctx, conversationID, func(tx pgx.Tx) error {
-		last, ok, err := s.messages.Last(ctx, tx, conversationID)
-		if err != nil {
+		if err := s.mutateMessages(ctx, tx, in); err != nil {
 			return err
 		}
-		if !ok || last.ID != messageID || last.Role != model.RoleAssistant {
-			return errors.ErrNotFound
+		if err := s.runs.InsertRun(ctx, tx, run); err != nil {
+			return err
 		}
-		return s.messages.DeleteMessage(ctx, tx, conversationID, messageID)
+		id, err := jobs.EnqueueOutbox(ctx, tx, model.StreamChatRuns, model.ChatRunJob{RunID: run.ID, ConversationID: in.ConversationID, UserID: user.ID})
+		outboxID = id
+		return err
 	})
+	if err != nil {
+		return model.Run{}, "", err
+	}
+	return run, outboxID, nil
 }
 
-func (s *ChatStoreImpl) RecordStep(ctx context.Context, step model.RunStep) error {
-	run, err := s.runs.GetRun(ctx, s.pool, step.RunID)
+func validateBeginRun(in model.BeginRunInput) error {
+	if in.UserMessage == nil && in.RegenerateMessageID == "" {
+		return errors.FieldError(fieldMessage, errors.FieldCodeRequired)
+	}
+	if in.AssistantMessageID == "" {
+		return errors.FieldError(fieldAssistant, errors.FieldCodeRequired)
+	}
+	return nil
+}
+
+// mutateMessages applies the message half of BeginRun. Regenerate takes the last assistant message (dropped, R6) or
+// the last user message when no answer was saved (kept, W7); any other id is NOT_FOUND.
+func (s *ChatStoreImpl) mutateMessages(ctx context.Context, tx pgx.Tx, in model.BeginRunInput) error {
+	if in.UserMessage != nil {
+		msg := *in.UserMessage
+		msg.Role = model.RoleUser
+		if err := s.messages.InsertMessage(ctx, tx, in.ConversationID, msg); err != nil {
+			return err
+		}
+		return s.conversations.Touch(ctx, tx, in.ConversationID)
+	}
+	last, ok, err := s.messages.Last(ctx, tx, in.ConversationID)
+	if err != nil {
+		return err
+	}
+	if !ok || last.ID != in.RegenerateMessageID {
+		return errors.ErrNotFound
+	}
+	if last.Role == model.RoleAssistant {
+		return s.messages.DeleteMessage(ctx, tx, in.ConversationID, last.ID)
+	}
+	return nil
+}
+
+// ClaimRun makes one executor of a run. A refused claim is explained by one read (amendment W5): the caller acks and
+// drops it, or marks the run interrupted or past its deadline.
+func (s *ChatStoreImpl) ClaimRun(ctx context.Context, runID uuid.UUID, owner string, lease time.Duration) (model.Run, model.Lease, model.ClaimResult, error) {
+	attempt := model.Lease{RunID: runID, Token: uuid.New(), Owner: owner}
+	run, claimed, err := s.runs.ClaimRun(ctx, s.pool, runID, attempt, lease)
+	if err != nil {
+		return model.Run{}, model.Lease{}, "", errors.Normalize(err)
+	}
+	if claimed {
+		return run, attempt, model.ClaimResultClaimed, nil
+	}
+	state, err := s.runs.ClaimState(ctx, s.pool, runID)
+	if err != nil {
+		return model.Run{}, model.Lease{}, "", errors.Normalize(err)
+	}
+	// The refused run carries what the caller needs to finish the story (its id and deadline for the stream expiry).
+	return model.Run{ID: runID, Status: state.Status, DeadlineAt: state.DeadlineAt}, model.Lease{}, classifyRefusedClaim(state), nil
+}
+
+func classifyRefusedClaim(state repository.ClaimState) model.ClaimResult {
+	switch {
+	case !state.Found || state.Status != model.RunStatusRunning:
+		return model.ClaimResultNotRunning
+	case !state.LeaseHeld && state.PastDeadline:
+		return model.ClaimResultQueuedPastDeadline
+	case state.LeaseHeld && state.LeaseLapsed:
+		return model.ClaimResultExpired
+	default:
+		return model.ClaimResultHeldElsewhere
+	}
+}
+
+func (s *ChatStoreImpl) RenewLease(ctx context.Context, lease model.Lease, d time.Duration) error {
+	renewed, err := s.runs.RenewLease(ctx, s.pool, lease, d)
 	if err != nil {
 		return errors.Normalize(err)
 	}
-	if _, err := s.conversations.GetConversation(ctx, s.pool, run.ConversationID); err != nil {
-		return errors.ErrRunNotActive
+	if !renewed {
+		return errors.ErrRunLeaseLost
 	}
-	return errors.Normalize(s.runs.InsertStep(ctx, s.pool, step))
+	return nil
 }
 
-func (s *ChatStoreImpl) FinishRun(ctx context.Context, run model.Run, assistant model.Message) error {
-	return s.locked(ctx, run.ConversationID, func(tx pgx.Tx) error {
+// RecordStep writes only while the lease is live; the statement holds the run row, so it never races the expiry.
+func (s *ChatStoreImpl) RecordStep(ctx context.Context, lease model.Lease, step model.RunStep) error {
+	written, err := s.runs.InsertFencedStep(ctx, s.pool, lease, step)
+	if err != nil {
+		return errors.Normalize(err)
+	}
+	if !written {
+		return errors.ErrRunLeaseLost
+	}
+	return nil
+}
+
+// FinishRun locks the conversation first (for seq), then the fenced run update is the first run statement: a lost
+// lease rolls the whole transaction back and nothing is stored.
+func (s *ChatStoreImpl) FinishRun(ctx context.Context, lease model.Lease, run model.Run, assistant model.Message) error {
+	if run.Status == model.RunStatusRunning {
+		return errors.FieldError(fieldStatus, errors.FieldCodeInvalid)
+	}
+	return s.locked(ctx, run.ConversationID, func(tx pgx.Tx, _ model.Conversation) error {
+		finished, err := s.runs.FinishFencedRun(ctx, tx, lease, run)
+		if err != nil {
+			return err
+		}
+		if !finished {
+			return errors.ErrRunLeaseLost
+		}
 		if len(assistant.Parts) > 0 {
 			assistant.Role = model.RoleAssistant
 			if err := s.messages.InsertMessage(ctx, tx, run.ConversationID, assistant); err != nil {
 				return err
 			}
 		}
-		if err := s.runs.FinishRun(ctx, tx, run); err != nil {
-			return err
-		}
 		return s.conversations.Touch(ctx, tx, run.ConversationID)
 	})
+}
+
+// FailRun is the interrupted and queued-past-deadline transition; false means the row was not the caller's to change.
+func (s *ChatStoreImpl) FailRun(ctx context.Context, runID uuid.UUID, code string, onlyIfExpired bool) (bool, error) {
+	flipped, err := s.runs.FailRun(ctx, s.pool, runID, code, onlyIfExpired)
+	return flipped, errors.Normalize(err)
+}
+
+// RunStatus answers NOT_FOUND for a run the user cannot see, whether it is missing, another org's or another user's.
+func (s *ChatStoreImpl) RunStatus(ctx context.Context, runID uuid.UUID) (model.Run, error) {
+	run, err := s.runs.GetRun(ctx, s.pool, runID)
+	if err != nil {
+		return model.Run{}, notFoundOrFailure(err, errors.CodeRunNotActive)
+	}
+	if _, err := s.conversations.GetConversation(ctx, s.pool, run.ConversationID); err != nil {
+		return model.Run{}, notFoundOrFailure(err, errors.CodeConversationNotFound)
+	}
+	return run, nil
+}
+
+// notFoundOrFailure hides what the user cannot see behind NOT_FOUND, but an outage stays an outage (never a 404).
+func notFoundOrFailure(err error, hidden errors.Code) error {
+	if errors.CodeOf(errors.Normalize(err)) == hidden {
+		return errors.ErrNotFound
+	}
+	return errors.Normalize(err)
 }
 
 func (s *ChatStoreImpl) SaveSummary(ctx context.Context, conversationID uuid.UUID, summary string, throughSeq int64) error {
@@ -223,12 +354,14 @@ func (s *ChatStoreImpl) ActiveRun(ctx context.Context, runID uuid.UUID) (model.R
 	return run, nil
 }
 
-// locked runs fn in one transaction that holds the conversation row, so seq, runs and regenerate never race.
-func (s *ChatStoreImpl) locked(ctx context.Context, conversationID uuid.UUID, fn func(tx pgx.Tx) error) error {
+// locked runs fn in one transaction that holds the conversation row, so seq, runs and regenerate never race. The
+// lock order is always conversation, then run.
+func (s *ChatStoreImpl) locked(ctx context.Context, conversationID uuid.UUID, fn func(tx pgx.Tx, conversation model.Conversation) error) error {
 	return postgres.WithTransaction(ctx, s.pool, func(tx pgx.Tx) error {
-		if _, err := s.conversations.GetConversationForUpdate(ctx, tx, conversationID); err != nil {
+		conversation, err := s.conversations.GetConversationForUpdate(ctx, tx, conversationID)
+		if err != nil {
 			return err
 		}
-		return fn(tx)
+		return fn(tx, conversation)
 	})
 }
